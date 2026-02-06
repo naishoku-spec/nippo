@@ -76,6 +76,7 @@ function init() {
     flatpickr(datePicker, {
         locale: "ja",
         defaultValue: currentDate,
+        disableMobile: true, // Force consistent UI on mobile
         onChange: function (selectedDates, dateStr) {
             currentDate = dateStr;
             ensureDayRecords(currentDate);

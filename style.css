@@ -563,6 +563,23 @@ span.flatpickr-weekday:nth-child(7n) {
     color: #3b82f6;
 }
 
+
+
+/* Date Selector Polish */
+.date-selector input {
+    background: var(--bg-card) !important;
+    border: 1px solid var(--primary) !important;
+    color: var(--text-main) !important;
+    font-weight: 600 !important;
+    text-align: center !important;
+    cursor: pointer;
+    min-width: 140px;
+    height: 40px;
+    -webkit-appearance: none;
+    appearance: none;
+    /* Reset for iOS */
+}
+
 .flatpickr-calendar {
     box-shadow: var(--shadow) !important;
     border-radius: var(--radius) !important;
