@@ -20,16 +20,63 @@ if (firebaseConfig.apiKey !== "YOUR_API_KEY") {
 // State Management
 let records = JSON.parse(localStorage.getItem('nippo_records')) || [];
 let currentDate = new Date().toLocaleDateString('sv-SE'); // YYYY-MM-DD format
+let isFirstLoad = true;
 
 // Real-time synchronization from Firebase
 if (database) {
     database.ref('nippo_records').on('value', (snapshot) => {
-        const data = snapshot.val();
-        if (data) {
-            records = data;
-            localStorage.setItem('nippo_records', JSON.stringify(records));
-            renderRecords();
-            if (monthViewContainer.style.display === 'block') renderMonthlyRecords();
+        const firebaseData = snapshot.val();
+
+        // Convert Firebase object to array if needed
+        let firebaseRecords = [];
+        if (firebaseData) {
+            if (Array.isArray(firebaseData)) {
+                firebaseRecords = firebaseData;
+            } else {
+                // Firebase sometimes converts arrays to objects
+                firebaseRecords = Object.values(firebaseData);
+            }
+        }
+
+        if (isFirstLoad) {
+            isFirstLoad = false;
+
+            // On first load: merge local and Firebase data
+            if (firebaseRecords.length > 0 && records.length === 0) {
+                // Firebase has data, local is empty - use Firebase
+                records = firebaseRecords;
+                localStorage.setItem('nippo_records', JSON.stringify(records));
+            } else if (firebaseRecords.length === 0 && records.length > 0) {
+                // Local has data, Firebase is empty - push local to Firebase
+                database.ref('nippo_records').set(records);
+            } else if (firebaseRecords.length > 0 && records.length > 0) {
+                // Both have data - merge by using the one with more records or more recent data
+                // Prefer Firebase if it has more or equal records (likely more up-to-date)
+                if (firebaseRecords.length >= records.length) {
+                    records = firebaseRecords;
+                    localStorage.setItem('nippo_records', JSON.stringify(records));
+                } else {
+                    // Local has more - sync to Firebase
+                    database.ref('nippo_records').set(records);
+                }
+            }
+
+            // Render after initial sync
+            if (typeof renderRecords === 'function') {
+                renderRecords();
+            }
+        } else {
+            // Subsequent updates - only accept if Firebase has data
+            if (firebaseRecords.length > 0) {
+                records = firebaseRecords;
+                localStorage.setItem('nippo_records', JSON.stringify(records));
+                if (typeof renderRecords === 'function') {
+                    renderRecords();
+                    if (monthViewContainer && monthViewContainer.style.display === 'block') {
+                        renderMonthlyRecords();
+                    }
+                }
+            }
         }
     });
 }
@@ -377,11 +424,22 @@ function calculateDuration(start, end) {
     return { h, m, totalMinutes: diff };
 }
 
-// Save to LocalStorage and Firebase
+// Save to LocalStorage and Firebase (with enhanced reliability)
 function saveRecords() {
-    localStorage.setItem('nippo_records', JSON.stringify(records));
+    // Always save to localStorage first (immediate backup)
+    try {
+        localStorage.setItem('nippo_records', JSON.stringify(records));
+    } catch (e) {
+        console.error('LocalStorage save failed:', e);
+    }
+
+    // Then sync to Firebase
     if (database) {
-        database.ref('nippo_records').set(records);
+        database.ref('nippo_records').set(records)
+            .catch((error) => {
+                console.error('Firebase save failed:', error);
+                // Data is still safe in localStorage
+            });
     }
 }
 
