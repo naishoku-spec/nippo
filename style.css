@@ -228,6 +228,22 @@ tr:last-child td {
     text-align: right;
     font-family: 'Outfit', monospace;
     font-weight: 700;
+    /* Permanent blue border for PC version */
+    border: 1px solid var(--primary);
+    background: var(--bg-card);
+    padding: 4px 8px;
+}
+
+/* Hide spin buttons (up/down arrows) on PC */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
 }
 
 .inline-input[type="time"] {
@@ -380,6 +396,15 @@ tr:last-child td {
 
     .logo-section h1 {
         font-size: 1.4rem;
+    }
+
+    .view-toggle {
+        flex-shrink: 0;
+    }
+
+    .toggle-btn {
+        white-space: nowrap;
+        padding: 0.5rem 0.75rem;
     }
 
     /* Table to Card Transformation */
