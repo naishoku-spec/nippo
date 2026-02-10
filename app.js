@@ -17,14 +17,22 @@ if (firebaseConfig.apiKey !== "YOUR_API_KEY") {
     database = firebase.database();
 }
 
+// Environment Detection (Production vs Development)
+// URLが自分のGitHub Pagesのものであれば本番データ、それ以外（自分のPCなど）はテスト用データを使用します
+const isProduction = window.location.hostname === 'naishoku-spec.github.io';
+const DB_PATH = isProduction ? 'nippo_records' : 'nippo_records_dev';
+const LS_KEY = isProduction ? 'nippo_records' : 'nippo_records_dev';
+
+console.log(`Running in ${isProduction ? 'PRODUCTION' : 'DEVELOPMENT'} mode. Data path: ${DB_PATH}, LocalStorage: ${LS_KEY}`);
+
 // State Management
-let records = JSON.parse(localStorage.getItem('nippo_records')) || [];
+let records = JSON.parse(localStorage.getItem(LS_KEY)) || [];
 let currentDate = new Date().toLocaleDateString('sv-SE'); // YYYY-MM-DD format
 let isFirstLoad = true;
 
 // Real-time synchronization from Firebase
 if (database) {
-    database.ref('nippo_records').on('value', (snapshot) => {
+    database.ref(DB_PATH).on('value', (snapshot) => {
         const firebaseData = snapshot.val();
 
         // Convert Firebase object to array if needed
@@ -45,19 +53,19 @@ if (database) {
             if (firebaseRecords.length > 0 && records.length === 0) {
                 // Firebase has data, local is empty - use Firebase
                 records = firebaseRecords;
-                localStorage.setItem('nippo_records', JSON.stringify(records));
+                localStorage.setItem(LS_KEY, JSON.stringify(records));
             } else if (firebaseRecords.length === 0 && records.length > 0) {
                 // Local has data, Firebase is empty - push local to Firebase
-                database.ref('nippo_records').set(records);
+                database.ref(DB_PATH).set(records);
             } else if (firebaseRecords.length > 0 && records.length > 0) {
                 // Both have data - merge by using the one with more records or more recent data
                 // Prefer Firebase if it has more or equal records (likely more up-to-date)
                 if (firebaseRecords.length >= records.length) {
                     records = firebaseRecords;
-                    localStorage.setItem('nippo_records', JSON.stringify(records));
+                    localStorage.setItem(LS_KEY, JSON.stringify(records));
                 } else {
                     // Local has more - sync to Firebase
-                    database.ref('nippo_records').set(records);
+                    database.ref(DB_PATH).set(records);
                 }
             }
 
@@ -69,7 +77,7 @@ if (database) {
             // Subsequent updates - only accept if Firebase has data
             if (firebaseRecords.length > 0) {
                 records = firebaseRecords;
-                localStorage.setItem('nippo_records', JSON.stringify(records));
+                localStorage.setItem(LS_KEY, JSON.stringify(records));
                 if (typeof renderRecords === 'function') {
                     renderRecords();
                     if (monthViewContainer && monthViewContainer.style.display === 'block') {
@@ -428,14 +436,14 @@ function calculateDuration(start, end) {
 function saveRecords() {
     // Always save to localStorage first (immediate backup)
     try {
-        localStorage.setItem('nippo_records', JSON.stringify(records));
+        localStorage.setItem(LS_KEY, JSON.stringify(records));
     } catch (e) {
         console.error('LocalStorage save failed:', e);
     }
 
     // Then sync to Firebase
     if (database) {
-        database.ref('nippo_records').set(records)
+        database.ref(DB_PATH).set(records)
             .catch((error) => {
                 console.error('Firebase save failed:', error);
                 // Data is still safe in localStorage
@@ -473,7 +481,7 @@ function renderRecords() {
                 <span class="duration-text">${h}時間 ${m}分</span>
             </td>
             <td class="count-cell">
-                <input type="number" class="inline-input" value="${record.count}" 
+                <input type="number" class="inline-input" value="${record.count == 0 ? '' : record.count}" 
                        onblur="updateRecord(${record.id}, 'count', this.value)">
             </td>
             <td class="actions-cell" style="text-align: center;">
