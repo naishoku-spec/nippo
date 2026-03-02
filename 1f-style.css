@@ -1,0 +1,207 @@
+/* 1F Press Machine - Additional Styles */
+
+/* Machine badge colors for R1-R4 */
+.machine-badge-r1 {
+    background: rgba(239, 68, 68, 0.1) !important;
+    color: #ef4444 !important;
+}
+
+.machine-badge-r2 {
+    background: rgba(59, 130, 246, 0.1) !important;
+    color: #3b82f6 !important;
+}
+
+.machine-badge-r3 {
+    background: rgba(16, 185, 129, 0.1) !important;
+    color: #10b981 !important;
+}
+
+.machine-badge-r4 {
+    background: rgba(245, 158, 11, 0.1) !important;
+    color: #f59e0b !important;
+}
+
+/* Notes input styling */
+.inline-notes {
+    font-size: 0.85rem;
+    min-width: 151px;
+    border: 1px solid var(--primary) !important;
+    background: var(--bg-card) !important;
+    padding: 4px 8px !important;
+}
+
+/* Ensure duration is on one line */
+.duration-cell {
+    white-space: nowrap;
+    min-width: 100px;
+}
+
+/* Center align TOTAL column header and content */
+#records-table-1f th:nth-child(6),
+.total-cell {
+    text-align: center !important;
+}
+
+/* Prevent header wrapping */
+#records-table-1f th {
+    white-space: nowrap;
+}
+
+/* Floor navigation link */
+.floor-link {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    background: rgba(var(--primary-rgb), 0.05);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--primary);
+    font-weight: 600;
+    font-size: 0.85rem;
+    text-decoration: none;
+    transition: all 0.2s;
+}
+
+.floor-link:hover {
+    background: rgba(var(--primary-rgb), 0.1);
+    border-color: var(--primary);
+}
+
+/* Total cell styling */
+.total-cell {
+    white-space: nowrap;
+    font-family: 'Outfit', monospace;
+}
+
+/* Carryover section styling */
+#carryover-section .carryover-input {
+    font-family: 'Outfit', monospace;
+    font-weight: 700;
+    text-align: right;
+}
+
+/* Mobile adjustments for 1F */
+@media (max-width: 600px) {
+    #records-table-1f thead {
+        display: none;
+    }
+
+    #records-table-1f tr {
+        display: grid;
+        grid-template-columns: 50px 1fr 1fr;
+        grid-template-areas:
+            "m s e"
+            "m d d"
+            "c c t"
+            "n n a";
+        gap: 8px 8px;
+        padding: 1.25rem 0.75rem;
+        border-bottom: 2px solid var(--border);
+        background: var(--bg-card);
+        align-items: center;
+    }
+
+    #records-table-1f td {
+        display: block;
+        padding: 0;
+        border: none;
+        width: auto !important;
+    }
+
+    #records-table-1f .machine-cell {
+        grid-area: m;
+        align-self: center;
+    }
+
+    #records-table-1f .time-cell:nth-child(2) {
+        grid-area: s;
+    }
+
+    #records-table-1f .time-cell:nth-child(3) {
+        grid-area: e;
+    }
+
+    #records-table-1f .duration-cell {
+        grid-area: d;
+        font-size: 0.75rem;
+        padding-top: 2px !important;
+    }
+
+    #records-table-1f .count-cell {
+        grid-area: c;
+    }
+
+    #records-table-1f .total-cell {
+        grid-area: t;
+        text-align: right;
+    }
+
+    #records-table-1f .notes-cell {
+        grid-area: n;
+    }
+
+    #records-table-1f .actions-cell {
+        grid-area: a;
+        align-self: center;
+    }
+
+    /* Touch-friendly inputs */
+    #records-table-1f .inline-input {
+        background: var(--bg-main) !important;
+        padding: 10px 8px !important;
+        border: 1px solid var(--border) !important;
+        border-radius: 8px;
+        height: 44px;
+        font-size: 0.95rem;
+    }
+
+    /* Labels */
+    #records-table-1f .time-cell:nth-child(2)::before {
+        content: "開始";
+        font-size: 0.6rem;
+        font-weight: 700;
+        color: var(--text-muted);
+        display: block;
+        margin-bottom: 2px;
+    }
+
+    #records-table-1f .time-cell:nth-child(3)::before {
+        content: "終了";
+        font-size: 0.6rem;
+        font-weight: 700;
+        color: var(--text-muted);
+        display: block;
+        margin-bottom: 2px;
+    }
+
+    #records-table-1f .count-cell::before {
+        content: "カウント/日";
+        font-size: 0.6rem;
+        font-weight: 700;
+        color: var(--text-muted);
+        display: block;
+        margin-bottom: 2px;
+    }
+
+    #records-table-1f .total-cell::before {
+        content: "累計";
+        font-size: 0.6rem;
+        font-weight: 700;
+        color: var(--text-muted);
+        display: block;
+        margin-bottom: 2px;
+    }
+
+    #records-table-1f .notes-cell::before {
+        content: "備考";
+        font-size: 0.6rem;
+        font-weight: 700;
+        color: var(--text-muted);
+        display: block;
+        margin-bottom: 2px;
+    }
+
+    /* Carryover on mobile */
+    #carryover-inputs {
+        grid-template-columns: 1fr 1fr !important;
+    }
+}

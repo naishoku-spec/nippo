@@ -18,9 +18,9 @@ if (firebaseConfig.apiKey !== "YOUR_API_KEY") {
 }
 
 // Environment Detection (Production vs Development)
-// URLが自分のGitHub Pagesのものであれば本番データ、それ以外（自分のPCなど）はテスト用データを使用します
 const isProduction = window.location.hostname === 'naishoku-spec.github.io';
-const DB_PATH = isProduction ? 'nippo_records' : 'nippo_records_dev';
+const SECRET_KEY = 'nippo-report-secure-key-2026';
+const DB_PATH = `${SECRET_KEY}/${isProduction ? 'nippo_records' : 'nippo_records_dev'}`;
 const LS_KEY = isProduction ? 'nippo_records' : 'nippo_records_dev';
 
 console.log(`Running in ${isProduction ? 'PRODUCTION' : 'DEVELOPMENT'} mode. Data path: ${DB_PATH}, LocalStorage: ${LS_KEY}`);
@@ -34,6 +34,7 @@ let isFirstLoad = true;
 if (database) {
     database.ref(DB_PATH).on('value', (snapshot) => {
         const firebaseData = snapshot.val();
+        // ... (rest of the logic inside startApp)
 
         // Convert Firebase object to array if needed
         let firebaseRecords = [];
@@ -444,10 +445,41 @@ function saveRecords() {
     // Then sync to Firebase
     if (database) {
         database.ref(DB_PATH).set(records)
+            .then(() => {
+                // After Firebase success, sync to Google Sheets
+                syncToGoogleSheets(records);
+            })
             .catch((error) => {
                 console.error('Firebase save failed:', error);
                 // Data is still safe in localStorage
             });
+    }
+}
+
+// Google Sheets Synchronization
+async function syncToGoogleSheets(recordsToSync) {
+    const GAS_URL = 'https://script.google.com/macros/s/AKfycbyf3x1Ze2Qv9t4FXUsvVvEZdNAn9-Z1uqWrBV9Y6e8FlU_IrjOmm6BF8cz-HOS3gjHG/exec';
+
+    // Only send data that has content
+    const activeRecords = recordsToSync.filter(r => r.count > 0 || (r.product && r.product !== ''));
+
+    if (activeRecords.length === 0) return;
+
+    try {
+        await fetch(GAS_URL, {
+            method: 'POST',
+            mode: 'no-cors', // Important for GAS
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                floor: '2F',
+                records: activeRecords
+            }),
+        });
+        console.log('Synced to Google Sheets (2F)');
+    } catch (e) {
+        console.error('Google Sheets sync failed:', e);
     }
 }
 
