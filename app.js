@@ -154,7 +154,9 @@ function init() {
 
     datePicker.value = currentDate;
     ensureDayRecords(currentDate);
-    renderRecords();
+
+    // Default to stock view as requested for inventory management
+    switchView('stock');
 
     // Event Listeners
     viewDayBtn?.addEventListener('click', () => switchView('day'));
@@ -165,12 +167,6 @@ function init() {
 
     // Initialize Roll Stock Management
     initRollStock();
-
-    // Check for stock view parameter
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('view') === 'stock') {
-        switchView('stock');
-    }
 }
 
 function switchView(view) {
