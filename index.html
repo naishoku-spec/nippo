@@ -21,289 +21,449 @@
 </head>
 
 <body>
-    <div class="container">
-        <header>
-            <div class="logo-section">
-                <h1>2階日報 <span style="font-weight:300; opacity:0.7">Production Log</span></h1>
-            </div>
-            <div style="display: flex; gap: 1rem; align-items: center;">
-                <div class="view-toggle">
-                    <button id="view-day" class="toggle-btn active">日別</button>
-                    <button id="view-month" class="toggle-btn">月別集計</button>
-                </div>
-                <div class="date-selector">
-                    <input type="date" id="current-date-picker">
+    <div class="app-wrapper">
+        <!-- Sidebar Menu -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo-section">
+                    <h1 style="font-size: 1.5rem;">日報システム</h1>
                 </div>
             </div>
-        </header>
 
-        <div id="day-view-container">
-            <!-- Navigation Link -->
-            <div style="margin-bottom: 1rem; text-align: right;">
-                <a href="1f.html" class="floor-link"
-                    style="display: inline-block; padding: 0.5rem 1rem; background: rgba(99,102,241,0.05); border: 1px solid var(--border); border-radius: 8px; color: var(--primary); font-weight: 600; font-size: 0.85rem; text-decoration: none;">1階日報へ
-                    →</a>
-            </div>
-            <div class="dashboard-grid" style="display: block;">
-                <!-- Main Display List (Direct Editing) -->
-                <main>
-                    <div class="card">
-                        <div
-                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
-                            <div>
-                                <h2 style="font-size: 1.5rem; letter-spacing: -0.01em;">本日の詳細記録</h2>
-                                <p style="font-size: 0.875rem; color: var(--text-muted); margin-top: 0.25rem;">
-                                    各項目を直接クリックして編集できます。変更は自動的に保存されます。</p>
+            <div class="sidebar-title">メニュー</div>
+            <nav class="sidebar-nav">
+                <a href="1f.html" class="nav-item">
+                    <span class="nav-icon">🏭</span>
+                    一階日報
+                </a>
+                <button id="sidebar-day" class="nav-item active" onclick="switchView('day')">
+                    <span class="nav-icon">📋</span>
+                    2階日報
+                </button>
+                <button id="sidebar-stock" class="nav-item" onclick="switchView('stock')">
+                    <span class="nav-icon">📦</span>
+                    ロール在庫表
+                </button>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <div class="main-container">
+            <header>
+                <div class="logo-section">
+                </div>
+                <div style="display: flex; gap: 1rem; align-items: center;">
+
+                    <div class="date-selector">
+                        <input type="date" id="current-date-picker">
+                    </div>
+                </div>
+            </header>
+
+            <div id="day-view-container">
+                <div class="dashboard-grid" style="display: block;">
+                    <!-- Main Display List (Direct Editing) -->
+                    <main>
+                        <div class="card">
+                            <div
+                                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+                                <div>
+                                    <h2 style="font-size: 1.5rem; letter-spacing: -0.01em;">本日の詳細記録</h2>
+                                    <p style="font-size: 0.875rem; color: var(--text-muted); margin-top: 0.25rem;">
+                                        各項目を直接クリックして編集できます。変更は自動的に保存されます。</p>
+                                </div>
+                            </div>
+                            <div class="table-container">
+                                <table id="records-table">
+                                    <thead>
+                                        <tr>
+                                            <th style="width: 80px;">機械</th>
+                                            <th>製品名 / 稼働内容</th>
+                                            <th style="width: 140px;">開始</th>
+                                            <th style="width: 140px;">終了</th>
+                                            <th style="width: 140px;">稼働時間</th>
+                                            <th style="width: 140px; text-align: right;">カウント</th>
+                                            <th style="width: 100px; text-align: center;">操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="records-list">
+                                        <!-- Records A-J will be pre-populated here -->
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
-                        <div class="table-container">
-                            <table id="records-table">
-                                <thead>
-                                    <tr>
-                                        <th style="width: 80px;">機械</th>
-                                        <th>製品名 / 稼働内容</th>
-                                        <th style="width: 140px;">開始</th>
-                                        <th style="width: 140px;">終了</th>
-                                        <th style="width: 140px;">稼働時間</th>
-                                        <th style="width: 140px; text-align: right;">カウント</th>
-                                        <th style="width: 100px; text-align: center;">操作</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="records-list">
-                                    <!-- Records A-J will be pre-populated here -->
-                                </tbody>
-                            </table>
+                    </main>
+                </div>
+
+                <!-- Horizontal New Entry Form & Stats (At the bottom as requested) -->
+                <div class="card quick-entry-container">
+                    <div class="quick-entry-header">
+                        <div>
+                            <h2 style="font-size: 1.5rem; letter-spacing: -0.01em;">新規登録</h2>
+                            <p style="font-size: 0.875rem; color: var(--text-muted);">新しい機械稼働記録を追加します。</p>
+                        </div>
+
+                        <div class="quick-entry-stats">
+                            <div style="text-align: right; min-width: 80px;">
+                                <div
+                                    style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">
+                                    No.6 合計</div>
+                                <div id="no6-total-count"
+                                    style="font-size: 1.5rem; font-weight: 800; color: var(--accent);">
+                                    0</div>
+                            </div>
+                            <div style="text-align: right; min-width: 80px;">
+                                <div
+                                    style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">
+                                    鼻ぽん小 合計</div>
+                                <div id="hanapon-s-total-count"
+                                    style="font-size: 1.5rem; font-weight: 800; color: var(--accent);">0</div>
+                            </div>
+                            <div style="text-align: right; min-width: 100px;">
+                                <div
+                                    style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">
+                                    本日の合計</div>
+                                <div id="day-total-count"
+                                    style="font-size: 1.75rem; font-weight: 800; color: var(--primary);">
+                                    0</div>
+                            </div>
+                            <div style="text-align: right; min-width: 100px;">
+                                <div
+                                    style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">
+                                    平均時間</div>
+                                <div id="avg-duration"
+                                    style="font-size: 1.75rem; font-weight: 800; color: var(--primary);">
+                                    0h 00m</div>
+                            </div>
                         </div>
                     </div>
-                </main>
+
+                    <form id="entry-form" class="quick-entry-form">
+                        <div class="form-group small">
+                            <label>機械</label>
+                            <select id="machine" required>
+                                <option value="A">A</option>
+                                <option value="B">B</option>
+                                <option value="C">C</option>
+                                <option value="D">D</option>
+                                <option value="E">E</option>
+                                <option value="F">F</option>
+                                <option value="G">G</option>
+                                <option value="H">H</option>
+                                <option value="I">I</option>
+                                <option value="J">J</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>製品名</label>
+                            <select id="product" required>
+                                <option value="">選択してください...</option>
+                                <optgroup label="No.シリーズ">
+                                    <option value="No.4">No.4</option>
+                                    <option value="No.6">No.6</option>
+                                    <option value="No.10">No.10</option>
+                                    <option value="No.30フラット">No.30フラット</option>
+                                    <option value="No.30スイック">No.30スイック</option>
+                                    <option value="No.30タブレット">No.30タブレット</option>
+                                </optgroup>
+                                <optgroup label="鼻ぽんシリーズ">
+                                    <option value="鼻ぽん大">鼻ぽん大</option>
+                                    <option value="鼻ぽん小">鼻ぽん小</option>
+                                    <option value="穴あき鼻ぽん小さめ">穴あき鼻ぽん小さめ</option>
+                                    <option value="穴あき鼻ぽん普通">穴あき鼻ぽん普通</option>
+                                    <option value="鼻ぽん特注">鼻ぽん特注</option>
+                                </optgroup>
+                                <optgroup label="定型/特殊製品">
+                                    <option value="コア">コア</option>
+                                    <option value="楕円型タブレット">楕円型タブレット</option>
+                                    <option value="SH">SH</option>
+                                    <option value="MSH">MSH</option>
+                                    <option value="ソフト">ソフト</option>
+                                    <option value="インジェクション">インジェクション</option>
+                                </optgroup>
+                                <optgroup label="綿球/その他">
+                                    <option value="ガーゼボール">ガーゼボール</option>
+                                    <option value="固巻円柱綿">固巻円柱綿</option>
+                                    <option value="ぼぼ小">ぼぼ小</option>
+                                    <option value="ぼぼ大">ぼぼ大</option>
+                                    <option value="ウォータージェット綿球">ウォータージェット綿球</option>
+                                    <option value="美顔器 小">美顔器 小</option>
+                                    <option value="美顔器 大">美顔器 大</option>
+                                    <option value="歯科用綿球">歯科用綿球</option>
+                                    <option value="円柱状脱脂綿">円柱状脱脂綿</option>
+                                    <option value="俵綿球">俵綿球</option>
+                                    <option value="ふた">ふた</option>
+                                    <option value="コットンボール">コットンボール</option>
+                                    <option value="消臭ボール">消臭ボール</option>
+                                    <option value="高圧縮">高圧縮</option>
+                                    <option value="円錐型綿">円錐型綿</option>
+                                    <option value="エアロマビーズ">エアロマビーズ</option>
+                                </optgroup>
+                                <optgroup label="ツッペル/特殊綿球">
+                                    <option value="ツッペル極小 #6片">ツッペル極小 #6片</option>
+                                    <option value="ツッペル小 #10片">ツッペル小 #10片</option>
+                                    <option value="ツッペル中 #12片">ツッペル中 #12片</option>
+                                    <option value="ツッペル大 #14片">ツッペル大 #14片</option>
+                                    <option value="開頭綿球#40">開頭綿球#40</option>
+                                    <option value="むし綿球">むし綿球</option>
+                                </optgroup>
+                                <optgroup label="両穴コットン玉シリーズ">
+                                    <option value="両穴コットン玉#4両">両穴コットン玉#4両</option>
+                                    <option value="両穴コットン玉#6両">両穴コットン玉#6両</option>
+                                    <option value="両穴コットン玉#7両">両穴コットン玉#7両</option>
+                                    <option value="両穴コットン玉#8両">両穴コットン玉#8両</option>
+                                    <option value="両穴コットン玉#10両">両穴コットン玉#10両</option>
+                                    <option value="両穴コットン玉#12両">両穴コットン玉#12両</option>
+                                    <option value="両穴コットン玉#14両">両穴コットン玉#14両</option>
+                                    <option value="両穴コットン玉#16両">両穴コットン玉#16両</option>
+                                    <option value="両穴コットン玉#18両">両穴コットン玉#18両</option>
+                                    <option value="両穴コットン玉#20両">両穴コットン玉#20両</option>
+                                    <option value="両穴コットン玉#22両">両穴コットン玉#22両</option>
+                                    <option value="両穴コットン玉#25両">両穴コットン玉#25両</option>
+                                    <option value="両穴コットン玉#30両">両穴コットン玉#30両</option>
+                                    <option value="両穴コットン玉#35両">両穴コットン玉#35両</option>
+                                    <option value="両穴コットン玉#40両">両穴コットン玉#40両</option>
+                                </optgroup>
+                                <optgroup label="片穴コットン玉シリーズ">
+                                    <option value="片穴コットン玉#6片">片穴コットン玉#6片</option>
+                                    <option value="片穴コットン玉#8片">片穴コットン玉#8片</option>
+                                    <option value="片穴コットン玉#10片">片穴コットン玉#10片</option>
+                                    <option value="片穴コットン玉#12片">片穴コットン玉#12片</option>
+                                    <option value="片穴コットン玉#14片">片穴コットン玉#14片</option>
+                                    <option value="片穴コットン玉#16片">片穴コットン玉#16片</option>
+                                    <option value="片穴コットン玉#18片">片穴コットン玉#18片</option>
+                                    <option value="片穴コットン玉#20片">片穴コットン玉#20片</option>
+                                    <option value="片穴コットン玉#22片">片穴コットン玉#22片</option>
+                                    <option value="片穴コットン玉#25片">片穴コットン玉#25片</option>
+                                    <option value="片穴コットン玉#30片">片穴コットン玉#30片</option>
+                                    <option value="片穴コットン玉#35片">片穴コットン玉#35片</option>
+                                    <option value="片穴コットン玉#40片">片穴コットン玉#40片</option>
+                                    <option value="片穴コットン玉#10太片">片穴コットン玉#10太片</option>
+                                    <option value="片穴コットン玉#12太片">片穴コットン玉#12太片</option>
+                                    <option value="片穴コットン玉#14太片">片穴コットン玉#14太片</option>
+                                    <option value="片穴コットン玉#16太片">片穴コットン玉#16太片</option>
+                                    <option value="片穴コットン玉 半丸φ15">片穴コットン玉 半丸φ15</option>
+                                    <option value="片穴コットン玉 半丸φ20">片穴コットン玉 半丸φ20</option>
+                                    <option value="片穴コットン玉 半丸φ25">片穴コットン玉 半丸φ25</option>
+                                </optgroup>
+                                <optgroup label="その他">
+                                    <option value="サンプル">サンプル</option>
+                                </optgroup>
+                            </select>
+                        </div>
+                        <div class="form-group small">
+                            <label>開始時間</label>
+                            <input type="time" id="start-time" value="08:45" required>
+                        </div>
+                        <div class="form-group small">
+                            <label>終了時間</label>
+                            <input type="time" id="end-time" value="16:30">
+                        </div>
+                        <div class="form-group">
+                            <label>カウント</label>
+                            <input type="number" id="count" placeholder="">
+                        </div>
+                        <button type="submit" class="btn btn-primary" style="margin-top: 1.25rem;">追加</button>
+                    </form>
+                </div>
             </div>
 
-            <!-- Horizontal New Entry Form & Stats (At the bottom as requested) -->
-            <div class="card quick-entry-container">
-                <div class="quick-entry-header">
+            <!-- Monthly View Section -->
+            <div id="month-view-container">
+                <div class="month-summary-grid">
+                    <div class="card">
+                        <h3 style="margin-bottom: 1rem;">製品別月間合計</h3>
+                        <div id="monthly-product-totals">
+                            <!-- Stats injected here -->
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h3 style="margin-bottom: 1rem;">月間統計</h3>
+                        <div id="monthly-stats-overview">
+                            <!-- General month stats -->
+                        </div>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3 style="margin-bottom: 1.5rem;">日別生産記録</h3>
+                    <div class="table-container">
+                        <table class="month-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 120px;">日付</th>
+                                    <th style="text-align: right;">合計カウント</th>
+                                    <th style="text-align: right;">No.6</th>
+                                    <th style="text-align: right;">鼻ぽん小</th>
+                                    <th>主な使用機械</th>
+                                </tr>
+                            </thead>
+                            <tbody id="monthly-daily-list">
+                                <!-- Daily breakdown injected here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="card" style="margin-top: 2rem;">
+                    <h3 style="margin-bottom: 1.5rem;">月間詳細ログ (すべての記録)</h3>
+                    <div class="table-container">
+                        <table class="month-table" style="width: 100%; border-collapse: collapse;">
+                            <thead>
+                                <tr>
+                                    <th style="width: 80px;">日付</th>
+                                    <th style="width: 60px;">機械</th>
+                                    <th style="min-width: 200px;">製品名 / 稼働内容</th>
+                                    <th style="width: 120px;">開始</th>
+                                    <th style="width: 120px;">終了</th>
+                                    <th style="width: 140px;">稼働時間</th>
+                                    <th style="width: 140px; text-align: right;">カウント</th>
+                                </tr>
+                            </thead>
+                            <tbody id="monthly-full-detailed-list">
+                                <!-- Every single record for the month injected here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Inventory View Section -->
+            <div id="stock-view-container" style="display: none;">
+                <!-- Header for Inventory (Internal) -->
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
                     <div>
-                        <h2 style="font-size: 1.5rem; letter-spacing: -0.01em;">新規登録</h2>
-                        <p style="font-size: 0.875rem; color: var(--text-muted);">新しい機械稼働記録を追加します。</p>
-                    </div>
+                        <h2 style="font-size: 1.5rem; letter-spacing: -0.01em;">滅菌紙ロール在庫表</h2>
 
-                    <div class="quick-entry-stats">
-                        <div style="text-align: right; min-width: 80px;">
-                            <div
-                                style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">
-                                No.6 合計</div>
-                            <div id="no6-total-count"
-                                style="font-size: 1.5rem; font-weight: 800; color: var(--accent);">
-                                0</div>
+                    </div>
+                    <div class="month-selector-stock" id="monthSelectorStock">
+                        <button class="nav-btn-stock" id="prevMonthStock" title="前月">←</button>
+                        <div class="month-display-stock">
+                            <select id="yearSelectStock" class="year-select-stock"></select>
+                            <span class="month-separator-stock">年</span>
+                            <select id="monthSelectStock" class="month-select-stock"></select>
+                            <span class="month-separator-stock">月</span>
                         </div>
-                        <div style="text-align: right; min-width: 80px;">
-                            <div
-                                style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">
-                                鼻ぽん小 合計</div>
-                            <div id="hanapon-s-total-count"
-                                style="font-size: 1.5rem; font-weight: 800; color: var(--accent);">0</div>
-                        </div>
-                        <div style="text-align: right; min-width: 100px;">
-                            <div
-                                style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">
-                                本日の合計</div>
-                            <div id="day-total-count"
-                                style="font-size: 1.75rem; font-weight: 800; color: var(--primary);">
-                                0</div>
-                        </div>
-                        <div style="text-align: right; min-width: 100px;">
-                            <div
-                                style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">
-                                平均時間</div>
-                            <div id="avg-duration" style="font-size: 1.75rem; font-weight: 800; color: var(--primary);">
-                                0h 00m</div>
-                        </div>
+                        <button class="nav-btn-stock" id="nextMonthStock" title="次月">→</button>
                     </div>
                 </div>
 
-                <form id="entry-form" class="quick-entry-form">
-                    <div class="form-group small">
-                        <label>機械</label>
-                        <select id="machine" required>
-                            <option value="A">A</option>
-                            <option value="B">B</option>
-                            <option value="C">C</option>
-                            <option value="D">D</option>
-                            <option value="E">E</option>
-                            <option value="F">F</option>
-                            <option value="G">G</option>
-                            <option value="H">H</option>
-                            <option value="I">I</option>
-                            <option value="J">J</option>
-                        </select>
+                <!-- Inventory Table -->
+                <div class="card" style="margin-bottom: 2rem;">
+                    <div class="table-container">
+                        <table class="inventory-table-stock" id="inventoryTableStock">
+                            <thead>
+                                <tr class="header-main-stock">
+                                    <th rowspan="2" class="date-col-stock">日付</th>
+                                    <th colspan="3" class="group-film-stock">フィルム</th>
+                                    <th colspan="3" class="group-plain-stock">無地</th>
+                                    <th colspan="3" class="group-eog-stock">EOG</th>
+                                </tr>
+                                <tr class="header-sub-stock">
+                                    <th class="sub-film-stock">配達</th>
+                                    <th class="sub-film-stock">製造</th>
+                                    <th class="sub-film-stock remaining-stock">残</th>
+                                    <th class="sub-plain-stock">配達</th>
+                                    <th class="sub-plain-stock">製造</th>
+                                    <th class="sub-plain-stock remaining-stock">残</th>
+                                    <th class="sub-eog-stock">配達</th>
+                                    <th class="sub-eog-stock">製造</th>
+                                    <th class="sub-eog-stock remaining-stock">残</th>
+                                </tr>
+                            </thead>
+                            <tbody id="inventoryBodyStock">
+                                <!-- Dynamic rows -->
+                            </tbody>
+                            <tfoot id="inventoryFootStock">
+                                <!-- Totals row -->
+                            </tfoot>
+                        </table>
                     </div>
-                    <div class="form-group">
-                        <label>製品名</label>
-                        <select id="product" required>
-                            <option value="">選択してください...</option>
-                            <optgroup label="No.シリーズ">
-                                <option value="No.4">No.4</option>
-                                <option value="No.6">No.6</option>
-                                <option value="No.10">No.10</option>
-                                <option value="No.30フラット">No.30フラット</option>
-                                <option value="No.30スイック">No.30スイック</option>
-                                <option value="No.30タブレット">No.30タブレット</option>
-                            </optgroup>
-                            <optgroup label="鼻ぽんシリーズ">
-                                <option value="鼻ぽん大">鼻ぽん大</option>
-                                <option value="鼻ぽん小">鼻ぽん小</option>
-                                <option value="穴あき鼻ぽん小さめ">穴あき鼻ぽん小さめ</option>
-                                <option value="穴あき鼻ぽん普通">穴あき鼻ぽん普通</option>
-                                <option value="鼻ぽん特注">鼻ぽん特注</option>
-                            </optgroup>
-                            <optgroup label="定型/特殊製品">
-                                <option value="コア">コア</option>
-                                <option value="楕円型タブレット">楕円型タブレット</option>
-                                <option value="SH">SH</option>
-                                <option value="MSH">MSH</option>
-                                <option value="ソフト">ソフト</option>
-                                <option value="インジェクション">インジェクション</option>
-                            </optgroup>
-                            <optgroup label="綿球/その他">
-                                <option value="ガーゼボール">ガーゼボール</option>
-                                <option value="固巻円柱綿">固巻円柱綿</option>
-                                <option value="ぼぼ小">ぼぼ小</option>
-                                <option value="ぼぼ大">ぼぼ大</option>
-                                <option value="ウォータージェット綿球">ウォータージェット綿球</option>
-                                <option value="美顔器 小">美顔器 小</option>
-                                <option value="美顔器 大">美顔器 大</option>
-                                <option value="歯科用綿球">歯科用綿球</option>
-                                <option value="円柱状脱脂綿">円柱状脱脂綿</option>
-                                <option value="俵綿球">俵綿球</option>
-                                <option value="ふた">ふた</option>
-                                <option value="コットンボール">コットンボール</option>
-                                <option value="消臭ボール">消臭ボール</option>
-                                <option value="高圧縮">高圧縮</option>
-                                <option value="円錐型綿">円錐型綿</option>
-                                <option value="エアロマビーズ">エアロマビーズ</option>
-                            </optgroup>
-                            <optgroup label="ツッペル/特殊綿球">
-                                <option value="ツッペル極小 #6片">ツッペル極小 #6片</option>
-                                <option value="ツッペル小 #10片">ツッペル小 #10片</option>
-                                <option value="ツッペル中 #12片">ツッペル中 #12片</option>
-                                <option value="ツッペル大 #14片">ツッペル大 #14片</option>
-                                <option value="開頭綿球#40">開頭綿球#40</option>
-                                <option value="むし綿球">むし綿球</option>
-                            </optgroup>
-                            <optgroup label="両穴コットン玉シリーズ">
-                                <option value="両穴コットン玉#4両">両穴コットン玉#4両</option>
-                                <option value="両穴コットン玉#6両">両穴コットン玉#6両</option>
-                                <option value="両穴コットン玉#7両">両穴コットン玉#7両</option>
-                                <option value="両穴コットン玉#8両">両穴コットン玉#8両</option>
-                                <option value="両穴コットン玉#10両">両穴コットン玉#10両</option>
-                                <option value="両穴コットン玉#12両">両穴コットン玉#12両</option>
-                                <option value="両穴コットン玉#14両">両穴コットン玉#14両</option>
-                                <option value="両穴コットン玉#16両">両穴コットン玉#16両</option>
-                                <option value="両穴コットン玉#18両">両穴コットン玉#18両</option>
-                                <option value="両穴コットン玉#20両">両穴コットン玉#20両</option>
-                                <option value="両穴コットン玉#22両">両穴コットン玉#22両</option>
-                                <option value="両穴コットン玉#25両">両穴コットン玉#25両</option>
-                                <option value="両穴コットン玉#30両">両穴コットン玉#30両</option>
-                                <option value="両穴コットン玉#35両">両穴コットン玉#35両</option>
-                                <option value="両穴コットン玉#40両">両穴コットン玉#40両</option>
-                            </optgroup>
-                            <optgroup label="片穴コットン玉シリーズ">
-                                <option value="片穴コットン玉#6片">片穴コットン玉#6片</option>
-                                <option value="片穴コットン玉#8片">片穴コットン玉#8片</option>
-                                <option value="片穴コットン玉#10片">片穴コットン玉#10片</option>
-                                <option value="片穴コットン玉#12片">片穴コットン玉#12片</option>
-                                <option value="片穴コットン玉#14片">片穴コットン玉#14片</option>
-                                <option value="片穴コットン玉#16片">片穴コットン玉#16片</option>
-                                <option value="片穴コットン玉#18片">片穴コットン玉#18片</option>
-                                <option value="片穴コットン玉#20片">片穴コットン玉#20片</option>
-                                <option value="片穴コットン玉#22片">片穴コットン玉#22片</option>
-                                <option value="片穴コットン玉#25片">片穴コットン玉#25片</option>
-                                <option value="片穴コットン玉#30片">片穴コットン玉#30片</option>
-                                <option value="片穴コットン玉#35片">片穴コットン玉#35片</option>
-                                <option value="片穴コットン玉#40片">片穴コットン玉#40片</option>
-                                <option value="片穴コットン玉#10太片">片穴コットン玉#10太片</option>
-                                <option value="片穴コットン玉#12太片">片穴コットン玉#12太片</option>
-                                <option value="片穴コットン玉#14太片">片穴コットン玉#14太片</option>
-                                <option value="片穴コットン玉#16太片">片穴コットン玉#16太片</option>
-                                <option value="片穴コットン玉 半丸φ15">片穴コットン玉 半丸φ15</option>
-                                <option value="片穴コットン玉 半丸φ20">片穴コットン玉 半丸φ20</option>
-                                <option value="片穴コットン玉 半丸φ25">片穴コットン玉 半丸φ25</option>
-                            </optgroup>
-                            <optgroup label="その他">
-                                <option value="サンプル">サンプル</option>
-                            </optgroup>
-                        </select>
-                    </div>
-                    <div class="form-group small">
-                        <label>開始時間</label>
-                        <input type="time" id="start-time" value="08:45" required>
-                    </div>
-                    <div class="form-group small">
-                        <label>終了時間</label>
-                        <input type="time" id="end-time" value="16:30">
-                    </div>
-                    <div class="form-group">
-                        <label>カウント</label>
-                        <input type="number" id="count" placeholder="">
-                    </div>
-                    <button type="submit" class="btn btn-primary" style="margin-top: 1.25rem;">追加</button>
-                </form>
-            </div>
-        </div>
+                </div>
 
-        <!-- Monthly View Section -->
-        <div id="month-view-container">
-            <div class="month-summary-grid">
-                <div class="card">
-                    <h3 style="margin-bottom: 1rem;">製品別月間合計</h3>
-                    <div id="monthly-product-totals">
-                        <!-- Stats injected here -->
+                <!-- Summary Cards (Moved below table as requested) -->
+                <div class="summary-section-stock" id="summarySectionStock">
+                    <div class="summary-card-stock film-card-stock" id="filmCardStock">
+                        <div class="card-header-stock">
+                            <div class="card-icon-stock film-icon-stock">F</div>
+                            <h3>フィルム</h3>
+                        </div>
+                        <div class="card-body-stock">
+                            <div class="stat-stock">
+                                <span class="stat-label-stock">繰越</span>
+                                <span class="stat-value-stock" id="filmCarryoverStock">0</span>
+                            </div>
+                            <div class="stat-stock">
+                                <span class="stat-label-stock">配達計</span>
+                                <span class="stat-value-stock" id="filmDeliveryTotalStock"
+                                    style="color:#10b981">0</span>
+                            </div>
+                            <div class="stat-stock">
+                                <span class="stat-label-stock">製造計</span>
+                                <span class="stat-value-stock" id="filmProductionTotalStock"
+                                    style="color:#f59e0b">0</span>
+                            </div>
+                            <div class="stat-stock">
+                                <span class="stat-label-stock">現在庫</span>
+                                <span class="stat-value-stock highlight-stock" id="filmCurrentStock">0</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="summary-card-stock plain-card-stock" id="plainCardStock">
+                        <div class="card-header-stock">
+                            <div class="card-icon-stock plain-icon-stock">P</div>
+                            <h3>無地</h3>
+                        </div>
+                        <div class="card-body-stock">
+                            <div class="stat-stock">
+                                <span class="stat-label-stock">繰越</span>
+                                <span class="stat-value-stock" id="plainCarryoverStock">0</span>
+                            </div>
+                            <div class="stat-stock">
+                                <span class="stat-label-stock">配達計</span>
+                                <span class="stat-value-stock" id="plainDeliveryTotalStock"
+                                    style="color:#10b981">0</span>
+                            </div>
+                            <div class="stat-stock">
+                                <span class="stat-label-stock">製造計</span>
+                                <span class="stat-value-stock" id="plainProductionTotalStock"
+                                    style="color:#f59e0b">0</span>
+                            </div>
+                            <div class="stat-stock">
+                                <span class="stat-label-stock">現在庫</span>
+                                <span class="stat-value-stock highlight-stock" id="plainCurrentStock">0</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="summary-card-stock eog-card-stock" id="eogCardStock">
+                        <div class="card-header-stock">
+                            <div class="card-icon-stock eog-icon-stock">E</div>
+                            <h3>EOG</h3>
+                        </div>
+                        <div class="card-body-stock">
+                            <div class="stat-stock">
+                                <span class="stat-label-stock">繰越</span>
+                                <span class="stat-value-stock" id="eogCarryoverStock">0</span>
+                            </div>
+                            <div class="stat-stock">
+                                <span class="stat-label-stock">配達計</span>
+                                <span class="stat-value-stock" id="eogDeliveryTotalStock" style="color:#10b981">0</span>
+                            </div>
+                            <div class="stat-stock">
+                                <span class="stat-label-stock">製造計</span>
+                                <span class="stat-value-stock" id="eogProductionTotalStock"
+                                    style="color:#f59e0b">0</span>
+                            </div>
+                            <div class="stat-stock">
+                                <span class="stat-label-stock">現在庫</span>
+                                <span class="stat-value-stock highlight-stock" id="eogCurrentStock">0</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
-                <div class="card">
-                    <h3 style="margin-bottom: 1rem;">月間統計</h3>
-                    <div id="monthly-stats-overview">
-                        <!-- General month stats -->
-                    </div>
-                </div>
-            </div>
-            <div class="card">
-                <h3 style="margin-bottom: 1.5rem;">日別生産記録</h3>
-                <div class="table-container">
-                    <table class="month-table">
-                        <thead>
-                            <tr>
-                                <th style="width: 120px;">日付</th>
-                                <th style="text-align: right;">合計カウント</th>
-                                <th style="text-align: right;">No.6</th>
-                                <th style="text-align: right;">鼻ぽん小</th>
-                                <th>主な使用機械</th>
-                            </tr>
-                        </thead>
-                        <tbody id="monthly-daily-list">
-                            <!-- Daily breakdown injected here -->
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-            <div class="card" style="margin-top: 2rem;">
-                <h3 style="margin-bottom: 1.5rem;">月間詳細ログ (すべての記録)</h3>
-                <div class="table-container">
-                    <table class="month-table" style="width: 100%; border-collapse: collapse;">
-                        <thead>
-                            <tr>
-                                <th style="width: 80px;">日付</th>
-                                <th style="width: 60px;">機械</th>
-                                <th style="min-width: 200px;">製品名 / 稼働内容</th>
-                                <th style="width: 120px;">開始</th>
-                                <th style="width: 120px;">終了</th>
-                                <th style="width: 140px;">稼働時間</th>
-                                <th style="width: 140px; text-align: right;">カウント</th>
-                            </tr>
-                        </thead>
-                        <tbody id="monthly-full-detailed-list">
-                            <!-- Every single record for the month injected here -->
-                        </tbody>
-                    </table>
+
+                <!-- Action Bar -->
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+
+                    <div id="saveStatusStock" style="font-size: 0.85rem; color: var(--text-muted);"></div>
                 </div>
             </div>
         </div>

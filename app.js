@@ -125,6 +125,8 @@ const viewDayBtn = document.getElementById('view-day');
 const viewMonthBtn = document.getElementById('view-month');
 const dayViewContainer = document.getElementById('day-view-container');
 const monthViewContainer = document.getElementById('month-view-container');
+const stockViewContainer = document.getElementById('stock-view-container');
+const viewStockBtn = document.getElementById('view-stock');
 
 // Initialize
 function init() {
@@ -155,26 +157,41 @@ function init() {
     renderRecords();
 
     // Event Listeners
-    viewDayBtn.addEventListener('click', () => switchView('day'));
-    viewMonthBtn.addEventListener('click', () => switchView('month'));
+    viewDayBtn?.addEventListener('click', () => switchView('day'));
+    viewMonthBtn?.addEventListener('click', () => switchView('month'));
+    viewStockBtn?.addEventListener('click', () => switchView('stock'));
 
-    document.getElementById('entry-form').addEventListener('submit', handleAddRecord);
+    document.getElementById('entry-form')?.addEventListener('submit', handleAddRecord);
+
+    // Initialize Roll Stock Management
+    initRollStock();
+
+    // Check for stock view parameter
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('view') === 'stock') {
+        switchView('stock');
+    }
 }
 
 function switchView(view) {
-    if (view === 'day') {
-        viewDayBtn.classList.add('active');
-        viewMonthBtn.classList.remove('active');
-        dayViewContainer.style.display = 'block';
-        monthViewContainer.style.display = 'none';
-        renderRecords();
-    } else {
-        viewDayBtn.classList.remove('active');
-        viewMonthBtn.classList.add('active');
-        dayViewContainer.style.display = 'none';
-        monthViewContainer.style.display = 'block';
-        renderMonthlyRecords();
-    }
+    // Header toggle buttons
+    if (viewDayBtn) viewDayBtn.classList.toggle('active', view === 'day');
+    if (viewMonthBtn) viewMonthBtn.classList.toggle('active', view === 'month');
+    if (viewStockBtn) viewStockBtn.classList.toggle('active', view === 'stock');
+
+    // Sidebar items
+    const sidebarDay = document.getElementById('sidebar-day');
+    const sidebarStock = document.getElementById('sidebar-stock');
+    if (sidebarDay) sidebarDay.classList.toggle('active', view === 'day' || view === 'month');
+    if (sidebarStock) sidebarStock.classList.toggle('active', view === 'stock');
+
+    dayViewContainer.style.display = view === 'day' ? 'block' : 'none';
+    monthViewContainer.style.display = view === 'month' ? 'block' : 'none';
+    stockViewContainer.style.display = view === 'stock' ? 'block' : 'none';
+
+    if (view === 'day') renderRecords();
+    if (view === 'month') renderMonthlyRecords();
+    if (view === 'stock') renderRollStock();
 }
 
 function renderMonthlyRecords() {
@@ -610,5 +627,474 @@ window.updateRecord = updateRecord;
 window.deleteRecord = deleteRecord;
 window.clearRow = clearRow;
 window.getDurationLabel = getDurationLabel;
+window.switchView = switchView;
 
+// ==========================================
+// ========== Roll Stock Management ==========
+// ==========================================
+
+const ROLL_STORAGE_KEY = 'rollInventoryData';
+const ROLL_TYPES = ['film', 'plain', 'eog'];
+const ROLL_LABELS = { film: 'フィルム', plain: '無地', eog: 'EOG' };
+const ROLL_DAY_NAMES = ['日', '月', '火', '水', '木', '金', '土'];
+const STOCK_LOW_THRESHOLD = 5;
+
+// Holiday list from Excel (serial dates converted)
+const ROLL_HOLIDAYS_SERIAL = [
+    45658, 45659, 45660, 45661, 45670, 45699, 45711, 45712, 45736, 45776,
+    45780, 45781, 45782, 45783, 45859, 45880, 45881, 45882, 45883, 45884,
+    45915, 45923, 45943, 45964, 45984, 45985, 46020, 46021, 46022,
+    46023, 46024, 46025, 46026, 46035, 46064, 46076, 46100
+];
+
+function serialToDateStr(serial) {
+    const epoch = new Date(1899, 11, 30);
+    const d = new Date(epoch.getTime() + serial * 86400000);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+const ROLL_HOLIDAY_SET = new Set(ROLL_HOLIDAYS_SERIAL.map(serialToDateStr));
+
+function isRollHoliday(year, month, day) {
+    const key = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    return ROLL_HOLIDAY_SET.has(key);
+}
+
+// Full initial data from Excel (16 months: Dec 2024 - Mar 2026)
+const ROLL_INITIAL_DATA = {
+    '2024-12': {
+        film: { carryover: 47, days: { 1: { production: 1 }, 2: { production: 1 }, 3: { production: 1 }, 4: { production: 1 }, 5: { production: 1 }, 8: { production: 1 }, 10: { production: 1 }, 11: { production: 1 }, 15: { production: 1 }, 16: { production: 1 }, 17: { production: 1 }, 18: { production: 1 }, 19: { delivery: 12, production: 1 }, 22: { production: 1 }, 23: { production: 1 }, 24: { production: 1 }, 25: { production: 1 } } },
+        plain: { carryover: 26, days: { 2: { production: 1 }, 5: { delivery: 12 }, 8: { production: 1 }, 9: { production: 1 }, 10: { production: 1 }, 11: { production: 1 }, 15: { production: 1 }, 16: { production: 1 }, 17: { production: 1 }, 18: { production: 1 }, 22: { production: 1 }, 23: { production: 1 } } },
+        eog: { carryover: 8, days: { 2: { production: 1 }, 5: { production: 1 }, 9: { delivery: 12 }, 12: { production: 1 }, 16: { production: 1 }, 19: { production: 1 }, 23: { production: 1 }, 25: { production: 1 } } }
+    },
+    '2025-1': {
+        film: { carryover: 43, days: { 6: { production: 1 }, 7: { production: 1 }, 8: { production: 1 }, 9: { production: 1 }, 10: { production: 1 }, 14: { production: 1 }, 15: { production: 1 }, 16: { production: 1 }, 17: { production: 1 }, 20: { production: 1 }, 21: { production: 1 }, 22: { production: 1 }, 23: { production: 1 }, 24: { production: 1 }, 27: { production: 1 }, 28: { production: 1 }, 29: { production: 1 }, 30: { production: 1 } } },
+        plain: { carryover: 21, days: { 6: { production: 1 }, 7: { production: 1 }, 8: { production: 1 }, 9: { production: 1 }, 14: { production: 1 }, 15: { production: 1 }, 16: { production: 1 }, 20: { production: 1 }, 21: { production: 1 }, 22: { production: 1 }, 23: { production: 1 }, 24: { production: 1 }, 27: { production: 1 }, 28: { production: 1 }, 29: { production: 1 }, 30: { production: 1 } } },
+        eog: { carryover: 7, days: { 6: { production: 1 }, 7: { production: 1 }, 8: { production: 1 }, 9: { production: 1 }, 10: { production: 1 } } }
+    },
+    '2025-2': {
+        film: { carryover: 37, days: { 3: { production: 1 }, 4: { production: 1 }, 5: { production: 1 }, 6: { production: 1 }, 7: { production: 1 }, 10: { production: 1 }, 12: { production: 1 }, 13: { production: 1 }, 17: { production: 1 }, 18: { production: 1 }, 19: { production: 1 }, 20: { production: 1 }, 21: { production: 1 }, 25: { production: 1 }, 26: { production: 1 }, 27: { production: 1 } } },
+        plain: { carryover: 31, days: { 3: { production: 1 }, 4: { production: 1 }, 5: { production: 1 }, 6: { production: 1 }, 7: { production: 1 }, 10: { production: 1 }, 12: { production: 1 }, 13: { production: 1 }, 17: { production: 1 }, 18: { production: 1 }, 19: { production: 1 }, 20: { production: 1 }, 21: { production: 1 }, 25: { production: 1 }, 26: { production: 1 }, 27: { production: 1 } } },
+        eog: { carryover: 14, days: { 3: { production: 1 }, 4: { production: 1 }, 5: { production: 1 }, 10: { production: 1 }, 17: { production: 1 }, 18: { production: 1 }, 19: { production: 1 }, 20: { production: 1 } } }
+    },
+    '2025-3': {
+        film: { carryover: 43, days: { 3: { production: 1 }, 4: { production: 1 }, 5: { production: 1 }, 6: { production: 1 }, 7: { production: 1 }, 10: { production: 1 }, 11: { production: 1 }, 12: { production: 1 }, 13: { production: 1 }, 14: { production: 1 }, 17: { production: 1 }, 18: { production: 1 }, 19: { production: 1 }, 24: { production: 1 }, 25: { production: 1 }, 26: { production: 1 }, 27: { production: 1 } } },
+        plain: { carryover: 28, days: { 3: { production: 1 }, 4: { production: 1 }, 5: { production: 1 }, 6: { production: 1 }, 7: { production: 1 }, 10: { production: 1 }, 11: { production: 1 }, 12: { production: 1 }, 13: { production: 1 }, 14: { production: 1 }, 17: { production: 1 }, 18: { production: 1 }, 19: { production: 1 }, 24: { production: 1 }, 25: { production: 1 }, 26: { production: 1 }, 27: { production: 1 } } },
+        eog: { carryover: 22, days: { 3: { production: 1 }, 10: { production: 1 }, 11: { production: 1 }, 12: { production: 1 }, 13: { production: 1 }, 14: { production: 1 } } }
+    },
+    '2025-4': {
+        film: { carryover: 26, days: { 1: { production: 1 }, 2: { production: 1 }, 3: { production: 1 }, 4: { production: 1 }, 7: { production: 1 }, 8: { production: 1 }, 9: { production: 1 }, 10: { production: 1 }, 11: { production: 1 }, 14: { production: 1 }, 15: { production: 1 }, 16: { production: 1 }, 17: { production: 1 }, 18: { production: 1 }, 21: { production: 1 }, 22: { production: 1 }, 23: { production: 1 }, 24: { production: 1 }, 25: { production: 1 } } },
+        plain: { carryover: 11, days: { 1: { production: 1 }, 2: { production: 1 }, 3: { production: 1 }, 4: { production: 1 }, 7: { production: 1 }, 8: { production: 1 }, 9: { production: 1 }, 10: { production: 1 }, 14: { production: 1 }, 15: { production: 1 }, 16: { production: 1 }, 17: { production: 1 }, 21: { production: 1 }, 22: { production: 1 }, 23: { production: 1 }, 24: { production: 1 }, 25: { production: 1 } } },
+        eog: { carryover: 16, days: { 1: { production: 1 }, 7: { production: 1 }, 8: { production: 1 }, 9: { production: 1 }, 10: { production: 1 }, 14: { production: 1 }, 15: { production: 1 }, 16: { production: 1 }, 17: { production: 1 }, 21: { production: 1 }, 22: { production: 1 } } }
+    },
+    '2025-5': {
+        film: { carryover: 7, days: { 1: { production: 1 }, 2: { production: 1 }, 7: { production: 1 }, 8: { production: 1 }, 9: { production: 1 }, 12: { delivery: 12, production: 1 }, 13: { production: 1 }, 14: { production: 1 }, 15: { production: 1 }, 16: { production: 1 }, 19: { production: 1 }, 20: { production: 1 }, 21: { production: 1 }, 22: { production: 1 }, 23: { production: 1 }, 26: { production: 1 }, 27: { production: 1 }, 28: { production: 1 }, 29: { production: 1 }, 30: { production: 1 } } },
+        plain: { carryover: -6, days: { 1: { delivery: 12 }, 2: { production: 1 }, 7: { production: 1 }, 8: { production: 1 }, 9: { production: 1 }, 12: { production: 1 }, 13: { production: 1 }, 14: { production: 1 }, 15: { production: 1 }, 19: { production: 1 }, 20: { production: 1 }, 21: { production: 1 }, 22: { production: 1 }, 26: { production: 1 }, 27: { production: 1 }, 28: { production: 1 }, 29: { production: 1 } } },
+        eog: { carryover: 5, days: { 1: { production: 1 }, 2: { production: 1 }, 7: { production: 1 }, 8: { production: 1 }, 9: { production: 1 }, 12: { production: 1 }, 16: { delivery: 12 } } }
+    },
+    '2025-6': {
+        film: { carryover: -1, days: { 2: { delivery: 12, production: 1 }, 3: { production: 1 }, 4: { production: 1 }, 5: { production: 1 }, 6: { production: 1 }, 9: { production: 1 }, 10: { production: 1 }, 11: { production: 1 }, 12: { production: 1 }, 13: { production: 1 }, 16: { production: 1 }, 17: { production: 1 }, 18: { production: 1 }, 19: { production: 1 }, 20: { production: 1 }, 23: { production: 1 }, 24: { production: 1 }, 25: { production: 1 }, 26: { production: 1 }, 27: { production: 1 }, 30: { production: 1 } } },
+        plain: { carryover: -12, days: { 2: { production: 1 }, 3: { production: 1 }, 4: { production: 1 }, 5: { production: 1 }, 6: { production: 1 }, 9: { delivery: 24, production: 1 }, 10: { production: 1 }, 16: { production: 1 }, 17: { production: 1 }, 18: { production: 1 }, 19: { production: 1 }, 23: { production: 1 }, 24: { production: 1 }, 25: { production: 1 }, 26: { production: 1 }, 30: { production: 1 } } },
+        eog: { carryover: 8, days: { 2: { production: 1 }, 3: { production: 1 }, 4: { production: 1 }, 5: { production: 1 }, 9: { production: 1 }, 10: { production: 1 }, 11: { production: 1 }, 12: { production: 1 }, 16: { production: 1 }, 17: { production: 1 } } }
+    },
+    '2025-7': {
+        film: { carryover: -10, days: { 1: { production: 1 }, 2: { production: 1 }, 3: { production: 1 }, 4: { production: 1 }, 7: { delivery: 12, production: 1 }, 8: { production: 1 }, 9: { production: 1 }, 10: { production: 1 }, 11: { production: 1 }, 14: { production: 1 }, 15: { production: 1 }, 16: { production: 1 }, 17: { production: 1 }, 18: { production: 1 }, 22: { production: 1 }, 23: { production: 1 }, 24: { production: 1 }, 25: { production: 1 }, 28: { production: 1 }, 29: { production: 1 }, 30: { production: 1 }, 31: { production: 1 } } },
+        plain: { carryover: -5, days: { 1: { production: 1 }, 2: { production: 1 }, 3: { production: 1 }, 4: { production: 1 }, 7: { production: 1 }, 8: { production: 1 }, 9: { production: 1 }, 10: { production: 1 }, 11: { production: 1 }, 14: { delivery: 12 }, 15: { production: 1 }, 16: { production: 1 }, 17: { production: 1 }, 22: { production: 1 }, 23: { production: 1 }, 24: { production: 1 }, 25: { production: 1 }, 28: { production: 1 }, 29: { production: 1 } } },
+        eog: { carryover: -2, days: { 1: { production: 1 }, 2: { production: 1 }, 7: { delivery: 12 }, 8: { production: 1 }, 9: { production: 1 }, 14: { production: 1 }, 15: { production: 1 }, 22: { production: 1 }, 23: { production: 1 }, 24: { production: 1 } } }
+    },
+    '2025-8': {
+        film: { carryover: -20, days: { 1: { delivery: 12 }, 4: { production: 1 }, 5: { production: 1 }, 6: { production: 1 }, 7: { production: 1 }, 8: { production: 1 }, 18: { production: 1 }, 19: { production: 1 }, 20: { production: 1 }, 21: { production: 1 }, 22: { production: 1 }, 25: { production: 1 }, 26: { production: 1 }, 27: { production: 1 }, 28: { production: 1 }, 29: { production: 1 } } },
+        plain: { carryover: -12, days: { 1: { delivery: 12, production: 1 }, 4: { production: 1 }, 5: { production: 1 }, 7: { production: 1 }, 8: { production: 1 }, 18: { production: 1 }, 19: { production: 1 }, 20: { production: 1 }, 21: { production: 1 }, 25: { production: 1 }, 26: { production: 1 }, 27: { production: 1 }, 28: { production: 1 }, 29: { production: 1 } } },
+        eog: { carryover: -2, days: { 1: { production: 1 }, 4: { production: 1 } } }
+    },
+    '2025-9': {
+        film: { carryover: -24, days: { 1: { production: 1 }, 2: { production: 1 }, 3: { production: 1 }, 4: { production: 1 }, 5: { production: 1 }, 8: { production: 1 }, 9: { production: 1 }, 10: { production: 1 }, 11: { production: 1 }, 12: { production: 1 }, 16: { production: 1 }, 17: { production: 1 }, 18: { production: 1 }, 19: { production: 1 }, 24: { production: 1 }, 25: { delivery: 12, production: 1 }, 26: { production: 1 }, 29: { production: 1 }, 30: { production: 1 } } },
+        plain: { carryover: -15, days: { 1: { production: 1 }, 2: { production: 1 }, 3: { production: 1 }, 4: { production: 1 }, 5: { delivery: 12 }, 8: { production: 1 }, 9: { production: 1 }, 10: { production: 1 }, 11: { production: 1 }, 16: { production: 1 }, 17: { production: 1 }, 18: { production: 1 }, 19: { production: 1 }, 24: { production: 1 }, 25: { production: 1 }, 29: { production: 1 }, 30: { production: 1 } } },
+        eog: { carryover: -4, days: { 1: { production: 1 }, 2: { production: 1 }, 3: { production: 1 }, 8: { production: 1 }, 9: { production: 1 }, 10: { production: 1 }, 11: { production: 1 }, 16: { delivery: 12 } } }
+    },
+    '2025-10': {
+        film: { carryover: -31, days: { 1: { production: 1 }, 2: { production: 1 }, 3: { production: 1 }, 6: { production: 1 }, 7: { production: 1 }, 8: { production: 1 }, 9: { production: 1 }, 10: { production: 1 }, 14: { production: 1 }, 15: { production: 1 }, 16: { production: 1 }, 17: { production: 1 }, 20: { production: 1 }, 21: { production: 1 }, 22: { production: 1 }, 23: { production: 1 }, 24: { production: 1 }, 27: { production: 1 }, 28: { delivery: 24, production: 1 }, 29: { production: 1 }, 30: { production: 1 }, 31: { production: 1 } } },
+        plain: { carryover: -20, days: { 1: { production: 1 }, 2: { production: 1 }, 3: { production: 1 }, 6: { production: 1 }, 7: { production: 1 }, 8: { production: 1 }, 10: { production: 1 }, 14: { delivery: 12 }, 16: { production: 1 }, 17: { production: 1 }, 20: { production: 1 }, 21: { production: 1 }, 22: { production: 1 }, 23: { production: 1 }, 24: { production: 1 }, 27: { production: 1 }, 28: { production: 1 }, 29: { production: 1 } } },
+        eog: { carryover: -1, days: { 1: { production: 1 }, 2: { production: 1 }, 6: { production: 1 }, 7: { production: 1 }, 8: { production: 1 }, 9: { production: 1 }, 14: { production: 1 }, 15: { production: 1 }, 16: { production: 1 }, 20: { production: 1 }, 21: { production: 1 }, 22: { production: 1 } } }
+    },
+    '2025-11': {
+        film: { carryover: -29, days: { 4: { production: 1 }, 5: { production: 1 }, 6: { production: 1 }, 7: { production: 1 }, 10: { production: 1 }, 11: { production: 1 }, 12: { production: 1 }, 13: { production: 1 }, 14: { production: 1 }, 17: { production: 1 }, 18: { production: 1 }, 19: { production: 1 }, 20: { production: 1 }, 21: { production: 1 }, 25: { production: 1 }, 26: { production: 1 }, 27: { production: 1 }, 28: { production: 1 } } },
+        plain: { carryover: 15, days: { 5: { production: 1 }, 11: { production: 1 }, 12: { production: 1 }, 13: { production: 1 }, 18: { production: 1 }, 19: { production: 1 }, 20: { production: 1 }, 25: { production: 1 }, 26: { production: 1 }, 27: { production: 1 }, 28: { production: 1 } } },
+        eog: { carryover: 6, days: { 4: { production: 1 }, 5: { delivery: 12 }, 7: { production: 1 }, 10: { production: 1 }, 14: { production: 1 }, 17: { production: 1 }, 21: { production: 1 } } }
+    },
+    '2025-12': {
+        film: { carryover: 24, days: { 1: { production: 1 }, 3: { production: 1 }, 4: { production: 1 }, 8: { production: 1 }, 10: { production: 1 }, 11: { production: 1 }, 12: { production: 1 }, 16: { production: 1 }, 17: { production: 1 }, 18: { production: 1 }, 19: { delivery: 12, production: 1 }, 22: { production: 1 }, 23: { production: 1 }, 24: { production: 1 }, 25: { production: 1 } } },
+        plain: { carryover: 4, days: { 2: { production: 1 }, 3: { production: 1 }, 8: { delivery: 12 }, 9: { production: 1 }, 10: { production: 1 }, 15: { production: 1 }, 17: { production: 1 }, 18: { production: 1 }, 19: { production: 1 }, 24: { production: 2 }, 25: { delivery: 12, production: 1 } } },
+        eog: { carryover: 12, days: { 1: { production: 1 }, 4: { production: 1 }, 5: { production: 1 }, 8: { delivery: 12, production: 1 }, 12: { production: 1 }, 15: { production: 1 }, 19: { production: 1 }, 23: { production: 1 } } }
+    },
+    '2026-1': {
+        film: { carryover: 21, days: { 7: { production: 1 }, 8: { production: 1 }, 9: { production: 1 }, 13: { production: 1 }, 14: { production: 1 }, 16: { production: 1 }, 19: { production: 1 }, 20: { production: 1 }, 21: { production: 1 }, 22: { production: 1 }, 26: { production: 1 }, 27: { delivery: 12 }, 28: { production: 1 }, 29: { production: 1 } } },
+        plain: { carryover: 17, days: { 6: { production: 1 }, 8: { production: 1 }, 9: { production: 1 }, 13: { production: 1 }, 14: { production: 1 }, 15: { production: 1 }, 16: { production: 1 }, 19: { production: 1 }, 20: { production: 1 }, 26: { production: 1 }, 29: { production: 1 }, 30: { production: 1 } } },
+        eog: { carryover: 16, days: { 7: { production: 1 }, 21: { production: 1 }, 22: { production: 1 }, 23: { production: 1 }, 27: { delivery: 4 }, 28: { production: 1 } } }
+    },
+    '2026-2': {
+        film: { carryover: 20, days: { 2: { production: 1 }, 3: { production: 1 }, 4: { production: 1 }, 5: { delivery: 24, production: 1 }, 6: { production: 1 }, 10: { production: 1 }, 13: { production: 1 }, 16: { production: 1 }, 17: { production: 1 }, 18: { production: 1 }, 20: { production: 1 }, 25: { production: 1 }, 26: { production: 1 }, 27: { production: 1 } } },
+        plain: { carryover: 5, days: { 5: { production: 1 }, 6: { production: 1 }, 10: { production: 1 }, 13: { production: 1 }, 16: { production: 1 }, 25: { delivery: 12 }, 26: { delivery: 12, production: 2 } } },
+        eog: { carryover: 15, days: { 2: { production: 1 }, 3: { production: 1 }, 4: { production: 1 }, 6: { delivery: 12 }, 9: { production: 1 }, 17: { production: 1 }, 18: { production: 1 }, 19: { production: 1 }, 20: { production: 1 }, 24: { production: 1 }, 25: { production: 1 } } }
+    },
+    '2026-3': {
+        film: { carryover: 30, days: {} },
+        plain: { carryover: 22, days: { 2: { production: 1 }, 3: { production: 1 }, 4: { production: 1 }, 5: { production: 1 }, 6: { production: 1 }, 9: { production: 1 }, 10: { production: 1 }, 11: { production: 1 }, 12: { production: 1 }, 13: { production: 1 } } },
+        eog: { carryover: 17, days: { 16: { production: 1 }, 17: { production: 1 }, 18: { production: 1 }, 19: { production: 1 } } }
+    }
+};
+
+let rollCurrentYear = new Date().getFullYear();
+let rollCurrentMonth = new Date().getMonth() + 1;
+let rollAllData = {};
+
+function initRollStock() {
+    loadRollData();
+    setupRollSelectors();
+    setupRollEventListeners();
+}
+
+function loadRollData() {
+    const stored = localStorage.getItem(ROLL_STORAGE_KEY);
+    if (stored) {
+        try {
+            rollAllData = JSON.parse(stored);
+        } catch (e) {
+            rollAllData = {};
+        }
+    }
+    // Merge initial data (don't overwrite user edits)
+    Object.keys(ROLL_INITIAL_DATA).forEach(key => {
+        if (!rollAllData[key]) {
+            rollAllData[key] = JSON.parse(JSON.stringify(ROLL_INITIAL_DATA[key]));
+        }
+    });
+    // Ensure days objects exist
+    Object.keys(rollAllData).forEach(key => {
+        ROLL_TYPES.forEach(type => {
+            if (!rollAllData[key][type]) rollAllData[key][type] = { carryover: 0, days: {} };
+            if (!rollAllData[key][type].days) rollAllData[key][type].days = {};
+        });
+    });
+}
+
+function setupRollSelectors() {
+    const yearSel = document.getElementById('yearSelectStock');
+    const monthSel = document.getElementById('monthSelectStock');
+    if (!yearSel || !monthSel) return;
+
+    for (let y = 2024; y <= 2100; y++) {
+        const opt = document.createElement('option');
+        opt.value = y; opt.textContent = y;
+        yearSel.appendChild(opt);
+    }
+    yearSel.value = rollCurrentYear;
+
+    for (let m = 1; m <= 12; m++) {
+        const opt = document.createElement('option');
+        opt.value = m; opt.textContent = m;
+        monthSel.appendChild(opt);
+    }
+    monthSel.value = rollCurrentMonth;
+}
+
+function setupRollEventListeners() {
+    document.getElementById('yearSelectStock')?.addEventListener('change', (e) => {
+        rollCurrentYear = parseInt(e.target.value);
+        renderRollStock();
+    });
+    document.getElementById('monthSelectStock')?.addEventListener('change', (e) => {
+        rollCurrentMonth = parseInt(e.target.value);
+        renderRollStock();
+    });
+    document.getElementById('prevMonthStock')?.addEventListener('click', () => {
+        rollCurrentMonth--;
+        if (rollCurrentMonth < 1) { rollCurrentMonth = 12; rollCurrentYear--; }
+        updateRollSelectors();
+        renderRollStock();
+    });
+    document.getElementById('nextMonthStock')?.addEventListener('click', () => {
+        rollCurrentMonth++;
+        if (rollCurrentMonth > 12) { rollCurrentMonth = 1; rollCurrentYear++; }
+        updateRollSelectors();
+        renderRollStock();
+    });
+    document.getElementById('saveBtnStock')?.addEventListener('click', () => {
+        saveRollData();
+        alert('保存しました');
+    });
+    document.getElementById('resetBtnStock')?.addEventListener('click', () => {
+        if (confirm('この月のデータをリセットしますか？（Excelの初期データに戻ります）')) {
+            const key = `${rollCurrentYear}-${rollCurrentMonth}`;
+            if (ROLL_INITIAL_DATA[key]) {
+                rollAllData[key] = JSON.parse(JSON.stringify(ROLL_INITIAL_DATA[key]));
+            } else {
+                delete rollAllData[key];
+            }
+            saveRollData();
+            renderRollStock();
+        }
+    });
+}
+
+function updateRollSelectors() {
+    document.getElementById('yearSelectStock').value = rollCurrentYear;
+    document.getElementById('monthSelectStock').value = rollCurrentMonth;
+}
+
+function saveRollData() {
+    localStorage.setItem(ROLL_STORAGE_KEY, JSON.stringify(rollAllData));
+    const status = document.getElementById('saveStatusStock');
+    if (status) {
+        const now = new Date();
+        status.textContent = `最終保存: ${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}`;
+    }
+}
+
+function getRollMonthData(year, month) {
+    const key = `${year}-${month}`;
+    if (!rollAllData[key]) {
+        // Try to find carryover from previous month automatically
+        const prevMonth = month === 1 ? 12 : month - 1;
+        const prevYear = month === 1 ? year - 1 : year;
+        const prevKey = `${prevYear}-${prevMonth}`;
+
+        let initialCarry = { film: 0, plain: 0, eog: 0 };
+
+        if (rollAllData[prevKey]) {
+            const pData = rollAllData[prevKey];
+            const pDays = new Date(prevYear, prevMonth, 0).getDate();
+            ROLL_TYPES.forEach(type => {
+                let bal = pData[type].carryover || 0;
+                for (let d = 1; d <= pDays; d++) {
+                    const dData = (pData[type].days && pData[type].days[d]) || {};
+                    bal = bal + (dData.delivery || 0) - (dData.production || 0);
+                }
+                initialCarry[type] = bal;
+            });
+        }
+
+        rollAllData[key] = {
+            film: { carryover: initialCarry.film, days: {} },
+            plain: { carryover: initialCarry.plain, days: {} },
+            eog: { carryover: initialCarry.eog, days: {} }
+        };
+    }
+    ROLL_TYPES.forEach(type => {
+        if (!rollAllData[key][type]) rollAllData[key][type] = { carryover: 0, days: {} };
+        if (!rollAllData[key][type].days) rollAllData[key][type].days = {};
+    });
+    return rollAllData[key];
+}
+
+function renderRollStock() {
+    const data = getRollMonthData(rollCurrentYear, rollCurrentMonth);
+    const daysInMonth = new Date(rollCurrentYear, rollCurrentMonth, 0).getDate();
+    const body = document.getElementById('inventoryBodyStock');
+    if (!body) return;
+
+    body.innerHTML = '';
+
+    // Carryover Row
+    const carryRow = document.createElement('tr');
+    carryRow.style.background = 'var(--bg-main)';
+    carryRow.style.borderBottom = '2px solid var(--border)';
+    let carryHtml = '<td style="font-weight:700; padding:0.75rem;">繰越</td>';
+    ROLL_TYPES.forEach(type => {
+        carryHtml += `<td></td><td></td><td><input type="number" class="carry-input" data-type="${type}" value="${data[type].carryover || 0}" style="font-weight:700; color:var(--primary)"></td>`;
+    });
+    carryRow.innerHTML = carryHtml;
+    body.appendChild(carryRow);
+
+    carryRow.querySelectorAll('.carry-input').forEach(input => {
+        input.addEventListener('change', (e) => {
+            const type = e.target.dataset.type;
+            data[type].carryover = parseInt(e.target.value) || 0;
+            recalculateRollStock();
+            autoSaveRoll();
+        });
+        input.addEventListener('focus', (e) => e.target.select());
+    });
+
+    // Daily Rows
+    for (let day = 1; day <= daysInMonth; day++) {
+        const date = new Date(rollCurrentYear, rollCurrentMonth - 1, day);
+        const w = date.getDay();
+        const holiday = isRollHoliday(rollCurrentYear, rollCurrentMonth, day);
+        const tr = document.createElement('tr');
+
+        if (w === 0) tr.className = 'row-sunday-stock';
+        else if (holiday) tr.className = 'row-holiday-stock';
+        else if (w === 6) tr.className = 'row-saturday-stock';
+
+        let dayLabel = `${rollCurrentMonth}/${day}`;
+        let dayTag = `<span style="margin-left:4px; font-size:0.75rem; color:var(--text-muted);">${ROLL_DAY_NAMES[w]}</span>`;
+        if (w === 0) dayTag = `<span style="margin-left:4px; font-size:0.75rem; color:var(--danger);">${ROLL_DAY_NAMES[w]}</span>`;
+        if (w === 6) dayTag = `<span style="margin-left:4px; font-size:0.75rem; color:var(--primary);">${ROLL_DAY_NAMES[w]}</span>`;
+        if (holiday) dayTag = `<span style="margin-left:4px; font-size:0.7rem; padding:1px 4px; border-radius:3px; background:rgba(245,158,11,0.1); color:#f59e0b;">祝</span>`;
+
+        let rowHtml = `<td style="padding:0.5rem; white-space:nowrap;">${dayLabel}${dayTag}</td>`;
+        ROLL_TYPES.forEach(type => {
+            const dData = (data[type].days && data[type].days[day]) || {};
+            rowHtml += `<td><input type="number" min="0" data-type="${type}" data-day="${day}" data-field="delivery" value="${dData.delivery || ''}" placeholder="–"></td>`;
+            rowHtml += `<td><input type="number" min="0" data-type="${type}" data-day="${day}" data-field="production" value="${dData.production || ''}" placeholder="–"></td>`;
+            rowHtml += `<td id="rem-${type}-${day}" class="remaining-cell-stock">0</td>`;
+        });
+        tr.innerHTML = rowHtml;
+        body.appendChild(tr);
+
+        tr.querySelectorAll('input').forEach(input => {
+            input.addEventListener('change', (e) => {
+                const type = e.target.dataset.type;
+                const d = e.target.dataset.day;
+                const field = e.target.dataset.field;
+                const val = parseInt(e.target.value) || 0;
+
+                if (!data[type].days) data[type].days = {};
+                if (!data[type].days[d]) data[type].days[d] = {};
+                if (val > 0) data[type].days[d][field] = val;
+                else {
+                    delete data[type].days[d][field];
+                    if (Object.keys(data[type].days[d]).length === 0) delete data[type].days[d];
+                }
+
+                recalculateRollStock();
+                autoSaveRoll();
+            });
+            input.addEventListener('focus', (e) => e.target.select());
+        });
+    }
+
+    recalculateRollStock();
+}
+
+let rollAutoSaveTimer = null;
+function autoSaveRoll() {
+    clearTimeout(rollAutoSaveTimer);
+    rollAutoSaveTimer = setTimeout(() => {
+        localStorage.setItem(ROLL_STORAGE_KEY, JSON.stringify(rollAllData));
+        const status = document.getElementById('saveStatusStock');
+        if (status) {
+            const now = new Date();
+            status.textContent = `自動保存: ${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}`;
+        }
+    }, 1000);
+}
+
+function recalculateRollStock() {
+    const data = getRollMonthData(rollCurrentYear, rollCurrentMonth);
+    const daysInMonth = new Date(rollCurrentYear, rollCurrentMonth, 0).getDate();
+
+    ROLL_TYPES.forEach(type => {
+        let current = data[type].carryover || 0;
+        let totalDelivery = 0;
+        let totalProduction = 0;
+
+        for (let d = 1; d <= daysInMonth; d++) {
+            const dData = (data[type].days && data[type].days[d]) || {};
+            const del = dData.delivery || 0;
+            const prod = dData.production || 0;
+            current = current + del - prod;
+            totalDelivery += del;
+            totalProduction += prod;
+
+            const cell = document.getElementById(`rem-${type}-${d}`);
+            if (cell) {
+                cell.textContent = current;
+                cell.classList.toggle('low-stock-stock', current <= STOCK_LOW_THRESHOLD && current >= 0);
+                cell.style.color = current < 0 ? 'var(--danger)' : '';
+            }
+        }
+
+        // Update summary cards
+        const carryEl = document.getElementById(`${type}CarryoverStock`);
+        const curEl = document.getElementById(`${type}CurrentStock`);
+        const delEl = document.getElementById(`${type}DeliveryTotalStock`);
+        const prodEl = document.getElementById(`${type}ProductionTotalStock`);
+
+        if (carryEl) carryEl.textContent = data[type].carryover || 0;
+        if (curEl) {
+            curEl.textContent = current;
+            curEl.classList.toggle('low-stock-stock', current <= STOCK_LOW_THRESHOLD && current >= 0);
+            curEl.style.color = current < 0 ? 'var(--danger)' : '';
+        }
+        if (delEl) delEl.textContent = totalDelivery;
+        if (prodEl) prodEl.textContent = totalProduction;
+    });
+
+    renderRollFooter(data, daysInMonth);
+
+    // Auto-propagate to future months
+    propagateCarryover(rollCurrentYear, rollCurrentMonth);
+}
+
+function propagateCarryover(year, month) {
+    let currentYear = year;
+    let currentMonth = month;
+
+    // Propagate up to 24 months ahead
+    for (let i = 0; i < 24; i++) {
+        const currentKey = `${currentYear}-${currentMonth}`;
+        const currentData = rollAllData[currentKey];
+        if (!currentData) break;
+
+        const nextMonth = currentMonth === 12 ? 1 : currentMonth + 1;
+        const nextYear = currentMonth === 12 ? currentYear + 1 : currentYear;
+        const nextKey = `${nextYear}-${nextMonth}`;
+
+        const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
+        const balances = {};
+        ROLL_TYPES.forEach(type => {
+            let bal = currentData[type].carryover || 0;
+            const days = currentData[type].days || {};
+            for (let d = 1; d <= daysInMonth; d++) {
+                const dData = days[d] || {};
+                bal = bal + (dData.delivery || 0) - (dData.production || 0);
+            }
+            balances[type] = bal;
+        });
+
+        if (rollAllData[nextKey]) {
+            let changed = false;
+            ROLL_TYPES.forEach(type => {
+                if (rollAllData[nextKey][type].carryover !== balances[type]) {
+                    rollAllData[nextKey][type].carryover = balances[type];
+                    changed = true;
+                }
+            });
+            if (!changed) break;
+            currentYear = nextYear;
+            currentMonth = nextMonth;
+        } else {
+            break;
+        }
+    }
+    localStorage.setItem(ROLL_STORAGE_KEY, JSON.stringify(rollAllData));
+}
+
+function renderRollFooter(data, daysInMonth) {
+    const foot = document.getElementById('inventoryFootStock');
+    if (!foot) return;
+    foot.innerHTML = '';
+    const tr = document.createElement('tr');
+    tr.style.background = 'var(--bg-main)';
+    tr.style.borderTop = '2px solid var(--border)';
+    let html = '<td style="font-weight:700; padding:0.75rem;">次月繰越</td>';
+
+    ROLL_TYPES.forEach(type => {
+        let delTotal = 0, prodTotal = 0;
+        let rem = data[type].carryover || 0;
+        for (let d = 1; d <= daysInMonth; d++) {
+            const dData = (data[type].days && data[type].days[d]) || {};
+            delTotal += (dData.delivery || 0);
+            prodTotal += (dData.production || 0);
+            rem = rem + (dData.delivery || 0) - (dData.production || 0);
+        }
+        html += `<td style="font-weight:700">${delTotal}</td><td style="font-weight:700">${prodTotal}</td><td style="font-weight:800; color:var(--primary)">${rem}</td>`;
+    });
+    tr.innerHTML = html;
+    foot.appendChild(tr);
+}
+
+// Start the app after all declarations
 init();
