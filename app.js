@@ -2563,7 +2563,8 @@ function renderRollStock() {
     carryRow.querySelectorAll('.carry-input').forEach(input => {
         input.addEventListener('change', (e) => {
             const type = e.target.dataset.type;
-            data[type].carryover = parseInt(e.target.value) || 0;
+            const currentData = getRollMonthData(rollCurrentYear, rollCurrentMonth);
+            currentData[type].carryover = parseInt(e.target.value) || 0;
             propagateCarryover(rollCurrentYear, rollCurrentMonth); // Added
             recalculateRollStock();
             autoSaveRoll();
@@ -2611,15 +2612,17 @@ function renderRollStock() {
                 const field = e.target.dataset.field;
                 const val = parseInt(e.target.value) || 0;
 
+                const currentData = getRollMonthData(rollCurrentYear, rollCurrentMonth);
+
                 if (val > 0) {
-                    if (!data[type].days) data[type].days = {};
-                    if (!data[type].days[d]) data[type].days[d] = {};
-                    data[type].days[d][field] = val;
+                    if (!currentData[type].days) currentData[type].days = {};
+                    if (!currentData[type].days[d]) currentData[type].days[d] = {};
+                    currentData[type].days[d][field] = val;
                 } else {
-                    if (data[type].days && data[type].days[d]) {
-                        delete data[type].days[d][field];
-                        if (Object.keys(data[type].days[d]).length === 0) {
-                            delete data[type].days[d];
+                    if (currentData[type].days && currentData[type].days[d]) {
+                        delete currentData[type].days[d][field];
+                        if (Object.keys(currentData[type].days[d]).length === 0) {
+                            delete currentData[type].days[d];
                         }
                     }
                 }
