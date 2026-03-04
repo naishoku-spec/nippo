@@ -129,6 +129,42 @@ function init() {
     ensureDayRecords(currentDate);
     renderRecords();
     renderCarryoverInputs();
+
+    // Mobile Menu Setup
+    setupMobileMenu();
+}
+
+function setupMobileMenu() {
+    const sidebar = document.getElementById('sidebar');
+    const sidebarOverlay = document.getElementById('sidebar-overlay');
+    const hamburgerBtn = document.getElementById('hamburger-btn');
+    const sidebarCloseBtn = document.getElementById('sidebar-close-btn');
+
+    if (!hamburgerBtn || !sidebar || !sidebarOverlay) return;
+
+    const toggleMenu = (show) => {
+        sidebar.classList.toggle('open', show);
+        sidebarOverlay.classList.toggle('active', show);
+        if (show) {
+            sidebarOverlay.style.display = 'block';
+        } else {
+            setTimeout(() => {
+                if (!sidebar.classList.contains('open')) {
+                    sidebarOverlay.style.display = 'none';
+                }
+            }, 300);
+        }
+    };
+
+    hamburgerBtn.addEventListener('click', () => toggleMenu(true));
+    sidebarCloseBtn?.addEventListener('click', () => toggleMenu(false));
+    sidebarOverlay.addEventListener('click', () => toggleMenu(false));
+
+    // Close menu when navigation item is clicked
+    const navItems = sidebar.querySelectorAll('.nav-item');
+    navItems.forEach(item => {
+        item.addEventListener('click', () => toggleMenu(false));
+    });
 }
 
 // View switching
@@ -352,7 +388,7 @@ function saveRecords() {
 
 // Google Sheets Synchronization for 1F
 async function syncToGoogleSheets(recordsToSync) {
-    const GAS_URL = 'https://script.google.com/macros/s/AKfycbyf3x1Ze2Qv9t4FXUsvVvEZdNAn9-Z1uqWrBV9Y6e8FlU_IrjOmm6BF8cz-HOS3gjHG/exec';
+    const GAS_URL = 'https://script.google.com/macros/s/AKfycbysvbSXcpBlSuiNxkpWsiaz4fcNv_Lyz0w9XTKZDWvv8ZlL1gNnHdVVDVpHnzYGIODY/exec';
 
     // Filter out empty records
     const activeRecords = recordsToSync.filter(r => r.count > 0 || r.notes);

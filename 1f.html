@@ -22,7 +22,8 @@
 <body>
     <div class="app-wrapper">
         <!-- Sidebar Menu -->
-        <aside class="sidebar">
+        <aside class="sidebar" id="sidebar">
+            <button class="sidebar-close-btn" id="sidebar-close-btn" aria-label="メニューを閉じる">✕</button>
             <div class="sidebar-header">
                 <div class="logo-section">
                     <h1 style="font-size: 1.5rem;">日報システム</h1>
@@ -46,11 +47,17 @@
             </nav>
         </aside>
 
+        <!-- Sidebar Overlay -->
+        <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
         <!-- Main Content -->
         <div class="main-container">
             <header>
-                <div class="logo-section">
-                    <h1>1階日報 <span style="font-weight:300; opacity:0.7">Press Machine Log</span></h1>
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <button class="hamburger-btn" id="hamburger-btn" aria-label="メニューを開く">☰</button>
+                    <div class="logo-section">
+                        <h1>1階日報 <span style="font-weight:300; opacity:0.7">Press Machine Log</span></h1>
+                    </div>
                 </div>
                 <div style="display: flex; gap: 1rem; align-items: center;">
                     <div class="view-toggle">

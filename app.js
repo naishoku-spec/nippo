@@ -1,3 +1,1604 @@
+const ROLL_INITIAL_DATA = {
+    "2024-12": {
+        "film": {
+            "carryover": 47,
+            "days": {
+                "17": {
+                    "production": 1
+                },
+                "18": {
+                    "production": 1
+                },
+                "23": {
+                    "production": 1
+                },
+                "24": {
+                    "production": 1
+                }
+            }
+        },
+        "plain": {
+            "carryover": 26,
+            "days": {
+                "16": {
+                    "production": 1
+                },
+                "18": {
+                    "production": 1
+                },
+                "23": {
+                    "production": 1
+                },
+                "24": {
+                    "production": 1
+                },
+                "25": {
+                    "production": 1
+                }
+            }
+        },
+        "eog": {
+            "carryover": 8,
+            "days": {
+                "16": {
+                    "production": 1
+                }
+            }
+        }
+    },
+    "2025-1": {
+        "film": {
+            "carryover": 43,
+            "days": {
+                "7": {
+                    "production": 1
+                },
+                "14": {
+                    "production": 1
+                },
+                "16": {
+                    "production": 1
+                },
+                "21": {
+                    "production": 1
+                },
+                "27": {
+                    "production": 1
+                },
+                "28": {
+                    "production": 1
+                }
+            }
+        },
+        "plain": {
+            "carryover": 21,
+            "days": {
+                "8": {
+                    "delivery": 12
+                },
+                "23": {
+                    "production": 1
+                },
+                "28": {
+                    "production": 1
+                }
+            }
+        },
+        "eog": {
+            "carryover": 7,
+            "days": {
+                "7": {
+                    "production": 1
+                },
+                "8": {
+                    "delivery": 12,
+                    "production": 1
+                },
+                "14": {
+                    "production": 1
+                },
+                "16": {
+                    "production": 1
+                },
+                "27": {
+                    "production": 1
+                }
+            }
+        }
+    },
+    "2025-10": {
+        "film": {
+            "carryover": 42,
+            "days": {
+                "1": {
+                    "production": 1
+                },
+                "3": {
+                    "production": 1
+                },
+                "6": {
+                    "production": 1
+                },
+                "7": {
+                    "production": 1
+                },
+                "8": {
+                    "production": 1
+                },
+                "9": {
+                    "production": 1
+                },
+                "14": {
+                    "production": 1
+                },
+                "15": {
+                    "production": 1
+                },
+                "16": {
+                    "production": 1
+                },
+                "20": {
+                    "production": 1
+                },
+                "22": {
+                    "delivery": 12,
+                    "production": 1
+                },
+                "24": {
+                    "production": 1
+                },
+                "27": {
+                    "production": 1
+                },
+                "29": {
+                    "production": 1
+                },
+                "30": {
+                    "production": 1
+                },
+                "31": {
+                    "production": 1
+                }
+            }
+        },
+        "plain": {
+            "carryover": 28,
+            "days": {
+                "1": {
+                    "production": 1
+                },
+                "6": {
+                    "production": 1
+                },
+                "7": {
+                    "production": 1
+                },
+                "8": {
+                    "production": 1
+                },
+                "9": {
+                    "production": 1
+                },
+                "15": {
+                    "production": 1
+                },
+                "16": {
+                    "production": 1
+                },
+                "21": {
+                    "production": 1
+                },
+                "23": {
+                    "production": 1
+                },
+                "24": {
+                    "production": 1
+                },
+                "28": {
+                    "production": 1
+                },
+                "30": {
+                    "production": 1
+                },
+                "31": {
+                    "production": 1
+                }
+            }
+        },
+        "eog": {
+            "carryover": 14,
+            "days": {
+                "1": {
+                    "production": 1
+                },
+                "3": {
+                    "production": 1
+                },
+                "7": {
+                    "production": 1
+                },
+                "17": {
+                    "production": 1
+                },
+                "20": {
+                    "production": 1
+                },
+                "22": {
+                    "production": 1
+                },
+                "27": {
+                    "production": 1
+                },
+                "28": {
+                    "production": 1
+                }
+            }
+        }
+    },
+    "2025-11": {
+        "film": {
+            "carryover": 38,
+            "days": {
+                "4": {
+                    "production": 1
+                },
+                "7": {
+                    "production": 1
+                },
+                "10": {
+                    "production": 1
+                },
+                "11": {
+                    "production": 1
+                },
+                "12": {
+                    "production": 1
+                },
+                "13": {
+                    "production": 1
+                },
+                "14": {
+                    "production": 1
+                },
+                "17": {
+                    "production": 1
+                },
+                "19": {
+                    "production": 1
+                },
+                "20": {
+                    "production": 1
+                },
+                "21": {
+                    "production": 1
+                },
+                "26": {
+                    "production": 1
+                },
+                "27": {
+                    "production": 1
+                },
+                "28": {
+                    "production": 1
+                }
+            }
+        },
+        "plain": {
+            "carryover": 15,
+            "days": {
+                "5": {
+                    "production": 1
+                },
+                "11": {
+                    "production": 1
+                },
+                "12": {
+                    "production": 1
+                },
+                "13": {
+                    "production": 1
+                },
+                "18": {
+                    "production": 1
+                },
+                "19": {
+                    "production": 1
+                },
+                "20": {
+                    "production": 1
+                },
+                "25": {
+                    "production": 1
+                },
+                "26": {
+                    "production": 1
+                },
+                "27": {
+                    "production": 1
+                },
+                "28": {
+                    "production": 1
+                }
+            }
+        },
+        "eog": {
+            "carryover": 6,
+            "days": {
+                "4": {
+                    "production": 1
+                },
+                "5": {
+                    "delivery": 12
+                },
+                "7": {
+                    "production": 1
+                },
+                "10": {
+                    "production": 1
+                },
+                "14": {
+                    "production": 1
+                },
+                "17": {
+                    "production": 1
+                },
+                "21": {
+                    "production": 1
+                }
+            }
+        }
+    },
+    "2025-12": {
+        "film": {
+            "carryover": 24,
+            "days": {
+                "1": {
+                    "production": 1
+                },
+                "3": {
+                    "production": 1
+                },
+                "4": {
+                    "production": 1
+                },
+                "8": {
+                    "production": 1
+                },
+                "10": {
+                    "production": 1
+                },
+                "11": {
+                    "production": 1
+                },
+                "12": {
+                    "production": 1
+                },
+                "16": {
+                    "production": 1
+                },
+                "17": {
+                    "production": 1
+                },
+                "18": {
+                    "production": 1
+                },
+                "19": {
+                    "delivery": 12,
+                    "production": 1
+                },
+                "22": {
+                    "production": 1
+                },
+                "23": {
+                    "production": 1
+                },
+                "24": {
+                    "production": 1
+                },
+                "25": {
+                    "production": 1
+                }
+            }
+        },
+        "plain": {
+            "carryover": 4,
+            "days": {
+                "2": {
+                    "production": 1
+                },
+                "3": {
+                    "production": 1
+                },
+                "8": {
+                    "delivery": 12
+                },
+                "9": {
+                    "production": 1
+                },
+                "10": {
+                    "production": 1
+                },
+                "15": {
+                    "production": 1
+                },
+                "17": {
+                    "production": 1
+                },
+                "18": {
+                    "production": 1
+                },
+                "19": {
+                    "production": 1
+                },
+                "24": {
+                    "production": 2
+                },
+                "25": {
+                    "delivery": 12,
+                    "production": 1
+                }
+            }
+        },
+        "eog": {
+            "carryover": 12,
+            "days": {
+                "1": {
+                    "production": 1
+                },
+                "4": {
+                    "production": 1
+                },
+                "5": {
+                    "production": 1
+                },
+                "8": {
+                    "delivery": 12,
+                    "production": 1
+                },
+                "12": {
+                    "production": 1
+                },
+                "15": {
+                    "production": 1
+                },
+                "19": {
+                    "production": 1
+                },
+                "23": {
+                    "production": 1
+                }
+            }
+        }
+    },
+    "2025-2": {
+        "film": {
+            "carryover": 37,
+            "days": {
+                "3": {
+                    "production": 1
+                },
+                "6": {
+                    "delivery": 12,
+                    "production": 1
+                },
+                "10": {
+                    "production": 1
+                },
+                "18": {
+                    "production": 1
+                },
+                "25": {
+                    "production": 1
+                },
+                "28": {
+                    "production": 1
+                }
+            }
+        },
+        "plain": {
+            "carryover": 31,
+            "days": {
+                "4": {
+                    "production": 1
+                },
+                "19": {
+                    "production": 1
+                },
+                "25": {
+                    "production": 1
+                }
+            }
+        },
+        "eog": {
+            "carryover": 14,
+            "days": {
+                "5": {
+                    "delivery": 12
+                },
+                "6": {
+                    "production": 1
+                },
+                "10": {
+                    "production": 1
+                },
+                "13": {
+                    "production": 1
+                },
+                "27": {
+                    "production": 1
+                }
+            }
+        }
+    },
+    "2025-3": {
+        "film": {
+            "carryover": 43,
+            "days": {
+                "4": {
+                    "production": 1
+                },
+                "10": {
+                    "production": 1
+                },
+                "12": {
+                    "production": 1
+                },
+                "13": {
+                    "production": 1
+                },
+                "18": {
+                    "production": 1
+                },
+                "25": {
+                    "production": 1
+                },
+                "26": {
+                    "delivery": 12
+                },
+                "27": {
+                    "production": 1
+                },
+                "28": {
+                    "production": 1
+                }
+            }
+        },
+        "plain": {
+            "carryover": 28,
+            "days": {
+                "13": {
+                    "production": 1
+                },
+                "26": {
+                    "production": 1
+                },
+                "27": {
+                    "production": 1
+                },
+                "28": {
+                    "production": 1
+                }
+            }
+        },
+        "eog": {
+            "carryover": 22,
+            "days": {
+                "3": {
+                    "production": 1
+                },
+                "4": {
+                    "production": 1
+                },
+                "10": {
+                    "production": 1
+                },
+                "12": {
+                    "production": 1
+                },
+                "18": {
+                    "production": 1
+                },
+                "24": {
+                    "production": 1
+                }
+            }
+        }
+    },
+    "2025-4": {
+        "film": {
+            "carryover": 47,
+            "days": {
+                "1": {
+                    "production": 1
+                },
+                "2": {
+                    "production": 1
+                },
+                "4": {
+                    "production": 1
+                },
+                "7": {
+                    "production": 1
+                },
+                "9": {
+                    "production": 1
+                },
+                "11": {
+                    "production": 1
+                },
+                "15": {
+                    "delivery": 12,
+                    "production": 1
+                },
+                "16": {
+                    "production": 1
+                },
+                "18": {
+                    "production": 1
+                },
+                "22": {
+                    "production": 1
+                },
+                "23": {
+                    "production": 1
+                },
+                "25": {
+                    "production": 1
+                },
+                "26": {
+                    "production": 1
+                },
+                "30": {
+                    "production": 1
+                }
+            }
+        },
+        "plain": {
+            "carryover": 24,
+            "days": {
+                "1": {
+                    "production": 1
+                },
+                "3": {
+                    "production": 1
+                },
+                "7": {
+                    "production": 1
+                },
+                "8": {
+                    "production": 1
+                },
+                "10": {
+                    "production": 1
+                },
+                "14": {
+                    "production": 1
+                },
+                "15": {
+                    "production": 1
+                },
+                "16": {
+                    "production": 1
+                },
+                "17": {
+                    "delivery": 12
+                },
+                "18": {
+                    "production": 1
+                },
+                "22": {
+                    "production": 1
+                },
+                "30": {
+                    "production": 1
+                }
+            }
+        },
+        "eog": {
+            "carryover": 16,
+            "days": {
+                "2": {
+                    "production": 1
+                },
+                "11": {
+                    "production": 1
+                },
+                "23": {
+                    "production": 1
+                },
+                "25": {
+                    "production": 1
+                },
+                "30": {
+                    "production": 1
+                }
+            }
+        }
+    },
+    "2025-5": {
+        "film": {
+            "carryover": 46,
+            "days": {
+                "1": {
+                    "production": 1
+                },
+                "7": {
+                    "production": 1
+                },
+                "8": {
+                    "production": 1
+                },
+                "12": {
+                    "production": 1
+                },
+                "14": {
+                    "production": 1
+                },
+                "15": {
+                    "delivery": 6,
+                    "production": 1
+                },
+                "16": {
+                    "production": 1
+                },
+                "20": {
+                    "production": 1
+                },
+                "21": {
+                    "production": 1
+                },
+                "23": {
+                    "production": 1
+                },
+                "26": {
+                    "production": 1
+                },
+                "27": {
+                    "production": 1
+                },
+                "29": {
+                    "production": 1
+                },
+                "30": {
+                    "production": 1
+                }
+            }
+        },
+        "plain": {
+            "carryover": 25,
+            "days": {
+                "2": {
+                    "production": 1
+                },
+                "12": {
+                    "production": 1
+                },
+                "13": {
+                    "production": 1
+                },
+                "14": {
+                    "production": 1
+                },
+                "16": {
+                    "production": 1
+                },
+                "20": {
+                    "production": 1
+                },
+                "21": {
+                    "production": 1
+                },
+                "27": {
+                    "production": 1
+                },
+                "28": {
+                    "production": 1
+                },
+                "29": {
+                    "production": 1
+                }
+            }
+        },
+        "eog": {
+            "carryover": 11,
+            "days": {
+                "8": {
+                    "production": 1
+                },
+                "9": {
+                    "production": 1
+                },
+                "15": {
+                    "production": 1
+                },
+                "16": {
+                    "delivery": 12
+                },
+                "21": {
+                    "production": 1
+                },
+                "22": {
+                    "production": 1
+                },
+                "23": {
+                    "production": 1
+                }
+            }
+        }
+    },
+    "2025-6": {
+        "film": {
+            "carryover": 38,
+            "days": {
+                "2": {
+                    "production": 1
+                },
+                "4": {
+                    "production": 1
+                },
+                "5": {
+                    "production": 1
+                },
+                "6": {
+                    "production": 1
+                },
+                "10": {
+                    "production": 1
+                },
+                "11": {
+                    "production": 1
+                },
+                "12": {
+                    "production": 1
+                },
+                "16": {
+                    "production": 1
+                },
+                "17": {
+                    "production": 1
+                },
+                "18": {
+                    "production": 1
+                },
+                "19": {
+                    "production": 1
+                },
+                "23": {
+                    "production": 1
+                },
+                "24": {
+                    "production": 1
+                },
+                "25": {
+                    "production": 1
+                },
+                "26": {
+                    "delivery": 12
+                },
+                "27": {
+                    "production": 1
+                },
+                "30": {
+                    "production": 1
+                }
+            }
+        },
+        "plain": {
+            "carryover": 15,
+            "days": {
+                "2": {
+                    "production": 1
+                },
+                "3": {
+                    "production": 1
+                },
+                "5": {
+                    "production": 1
+                },
+                "6": {
+                    "production": 1
+                },
+                "9": {
+                    "production": 1
+                },
+                "10": {
+                    "production": 1
+                },
+                "12": {
+                    "production": 1
+                },
+                "17": {
+                    "production": 1
+                },
+                "18": {
+                    "production": 1
+                },
+                "19": {
+                    "production": 1
+                },
+                "20": {
+                    "production": 1
+                },
+                "24": {
+                    "production": 1
+                },
+                "25": {
+                    "production": 1
+                },
+                "26": {
+                    "production": 1
+                },
+                "27": {
+                    "production": 1
+                }
+            }
+        },
+        "eog": {
+            "carryover": 17,
+            "days": {
+                "2": {
+                    "production": 1
+                },
+                "10": {
+                    "production": 1
+                },
+                "13": {
+                    "production": 1
+                },
+                "16": {
+                    "production": 1
+                },
+                "23": {
+                    "production": 1
+                },
+                "24": {
+                    "delivery": 12
+                },
+                "30": {
+                    "production": 1
+                }
+            }
+        }
+    },
+    "2025-7": {
+        "film": {
+            "carryover": 34,
+            "days": {
+                "1": {
+                    "production": 1
+                },
+                "3": {
+                    "production": 1
+                },
+                "7": {
+                    "production": 1
+                },
+                "9": {
+                    "production": 1
+                },
+                "10": {
+                    "production": 1
+                },
+                "14": {
+                    "production": 1
+                },
+                "15": {
+                    "production": 1
+                },
+                "16": {
+                    "production": 1
+                },
+                "17": {
+                    "production": 1
+                },
+                "18": {
+                    "delivery": 12
+                },
+                "22": {
+                    "production": 1
+                },
+                "23": {
+                    "production": 1
+                },
+                "24": {
+                    "delivery": 1
+                },
+                "28": {
+                    "production": 1
+                },
+                "29": {
+                    "production": 1
+                },
+                "30": {
+                    "production": 1
+                },
+                "31": {
+                    "production": 1
+                }
+            }
+        },
+        "plain": {
+            "carryover": 12,
+            "days": {
+                "3": {
+                    "production": 1
+                },
+                "4": {
+                    "production": 1
+                },
+                "8": {
+                    "production": 1
+                },
+                "9": {
+                    "production": 1
+                },
+                "10": {
+                    "production": 1
+                },
+                "16": {
+                    "production": 1
+                },
+                "22": {
+                    "production": 1
+                },
+                "23": {
+                    "delivery": 12,
+                    "production": 1
+                },
+                "24": {
+                    "production": 1
+                },
+                "25": {
+                    "production": 1
+                },
+                "28": {
+                    "production": 1
+                },
+                "29": {
+                    "production": 1
+                },
+                "30": {
+                    "production": 1
+                },
+                "31": {
+                    "production": 1
+                }
+            }
+        },
+        "eog": {
+            "carryover": 23,
+            "days": {
+                "2": {
+                    "production": 1
+                },
+                "7": {
+                    "production": 1
+                },
+                "11": {
+                    "production": 1
+                },
+                "14": {
+                    "production": 1
+                },
+                "17": {
+                    "production": 1
+                },
+                "18": {
+                    "production": 1
+                }
+            }
+        }
+    },
+    "2025-8": {
+        "film": {
+            "carryover": 32,
+            "days": {
+                "4": {
+                    "production": 1
+                },
+                "5": {
+                    "production": 1
+                },
+                "7": {
+                    "production": 1
+                },
+                "8": {
+                    "delivery": 12
+                },
+                "19": {
+                    "production": 1
+                },
+                "20": {
+                    "production": 1
+                },
+                "22": {
+                    "production": 1
+                },
+                "24": {
+                    "production": 1
+                },
+                "25": {
+                    "production": 1
+                },
+                "26": {
+                    "production": 1
+                },
+                "27": {
+                    "production": 1
+                },
+                "28": {
+                    "production": 1
+                }
+            }
+        },
+        "plain": {
+            "carryover": 10,
+            "days": {
+                "5": {
+                    "production": 1
+                },
+                "7": {
+                    "production": 1
+                },
+                "18": {
+                    "production": 1
+                },
+                "19": {
+                    "production": 1
+                },
+                "20": {
+                    "production": 1
+                },
+                "21": {
+                    "production": 1
+                },
+                "27": {
+                    "delivery": 12,
+                    "production": 1
+                },
+                "28": {
+                    "production": 1
+                },
+                "29": {
+                    "production": 1
+                }
+            }
+        },
+        "eog": {
+            "carryover": 17,
+            "days": {
+                "1": {
+                    "production": 1
+                },
+                "4": {
+                    "production": 1
+                },
+                "19": {
+                    "production": 4
+                },
+                "21": {
+                    "production": 1
+                },
+                "22": {
+                    "production": 1
+                },
+                "25": {
+                    "production": 1
+                }
+            }
+        }
+    },
+    "2025-9": {
+        "film": {
+            "carryover": 33,
+            "days": {
+                "1": {
+                    "production": 1
+                },
+                "2": {
+                    "production": 1
+                },
+                "3": {
+                    "production": 1
+                },
+                "4": {
+                    "production": 1
+                },
+                "5": {
+                    "delivery": 12,
+                    "production": 1
+                },
+                "9": {
+                    "production": 1
+                },
+                "11": {
+                    "production": 1
+                },
+                "12": {
+                    "production": 1
+                },
+                "17": {
+                    "production": 1
+                },
+                "19": {
+                    "production": 1
+                },
+                "22": {
+                    "production": 1
+                },
+                "25": {
+                    "production": 1
+                },
+                "26": {
+                    "delivery": 12,
+                    "production": 1
+                },
+                "29": {
+                    "production": 1
+                },
+                "30": {
+                    "production": 1
+                }
+            }
+        },
+        "plain": {
+            "carryover": 13,
+            "days": {
+                "2": {
+                    "production": 1
+                },
+                "3": {
+                    "production": 1
+                },
+                "4": {
+                    "production": 1
+                },
+                "5": {
+                    "production": 1
+                },
+                "8": {
+                    "production": 1
+                },
+                "9": {
+                    "production": 1
+                },
+                "11": {
+                    "production": 1
+                },
+                "18": {
+                    "production": 1
+                },
+                "24": {
+                    "delivery": 12,
+                    "production": 1
+                },
+                "25": {
+                    "delivery": 15,
+                    "production": 1
+                },
+                "26": {
+                    "production": 1
+                },
+                "30": {
+                    "production": 1
+                }
+            }
+        },
+        "eog": {
+            "carryover": 8,
+            "days": {
+                "1": {
+                    "production": 1
+                },
+                "5": {
+                    "delivery": 12
+                },
+                "8": {
+                    "production": 1
+                },
+                "12": {
+                    "production": 1
+                },
+                "16": {
+                    "production": 1
+                },
+                "19": {
+                    "production": 1
+                },
+                "29": {
+                    "production": 1
+                }
+            }
+        }
+    },
+    "2026-1": {
+        "film": {
+            "carryover": 21,
+            "days": {
+                "7": {
+                    "production": 1
+                },
+                "8": {
+                    "production": 1
+                },
+                "9": {
+                    "production": 1
+                },
+                "13": {
+                    "production": 1
+                },
+                "14": {
+                    "production": 1
+                },
+                "16": {
+                    "production": 1
+                },
+                "19": {
+                    "production": 1
+                },
+                "20": {
+                    "production": 1
+                },
+                "21": {
+                    "production": 1
+                },
+                "22": {
+                    "production": 1
+                },
+                "26": {
+                    "production": 1
+                },
+                "27": {
+                    "delivery": 12
+                },
+                "28": {
+                    "production": 1
+                },
+                "29": {
+                    "production": 1
+                }
+            }
+        },
+        "plain": {
+            "carryover": 17,
+            "days": {
+                "6": {
+                    "production": 1
+                },
+                "8": {
+                    "production": 1
+                },
+                "9": {
+                    "production": 1
+                },
+                "13": {
+                    "production": 1
+                },
+                "14": {
+                    "production": 1
+                },
+                "15": {
+                    "production": 1
+                },
+                "16": {
+                    "production": 1
+                },
+                "19": {
+                    "production": 1
+                },
+                "20": {
+                    "production": 1
+                },
+                "26": {
+                    "production": 1
+                },
+                "29": {
+                    "production": 1
+                },
+                "30": {
+                    "production": 1
+                }
+            }
+        },
+        "eog": {
+            "carryover": 16,
+            "days": {
+                "7": {
+                    "production": 1
+                },
+                "21": {
+                    "production": 1
+                },
+                "22": {
+                    "production": 1
+                },
+                "23": {
+                    "production": 1
+                },
+                "27": {
+                    "delivery": 4
+                },
+                "28": {
+                    "production": 1
+                }
+            }
+        }
+    },
+    "2026-2": {
+        "film": {
+            "carryover": 20,
+            "days": {
+                "2": {
+                    "production": 1
+                },
+                "3": {
+                    "production": 1
+                },
+                "4": {
+                    "production": 1
+                },
+                "5": {
+                    "delivery": 24,
+                    "production": 1
+                },
+                "6": {
+                    "production": 1
+                },
+                "10": {
+                    "production": 1
+                },
+                "13": {
+                    "production": 1
+                },
+                "16": {
+                    "production": 1
+                },
+                "17": {
+                    "production": 1
+                },
+                "18": {
+                    "production": 1
+                },
+                "20": {
+                    "production": 1
+                },
+                "25": {
+                    "production": 1
+                },
+                "26": {
+                    "production": 1
+                },
+                "27": {
+                    "production": 1
+                }
+            }
+        },
+        "plain": {
+            "carryover": 5,
+            "days": {
+                "5": {
+                    "production": 1
+                },
+                "6": {
+                    "production": 1
+                },
+                "10": {
+                    "production": 1
+                },
+                "13": {
+                    "production": 1
+                },
+                "16": {
+                    "production": 1
+                },
+                "25": {
+                    "delivery": 12
+                },
+                "26": {
+                    "delivery": 12,
+                    "production": 2
+                }
+            }
+        },
+        "eog": {
+            "carryover": 15,
+            "days": {
+                "2": {
+                    "production": 1
+                },
+                "3": {
+                    "production": 1
+                },
+                "4": {
+                    "production": 1
+                },
+                "6": {
+                    "delivery": 12
+                },
+                "9": {
+                    "production": 1
+                },
+                "17": {
+                    "production": 1
+                },
+                "18": {
+                    "production": 1
+                },
+                "19": {
+                    "production": 1
+                },
+                "20": {
+                    "production": 1
+                },
+                "24": {
+                    "production": 1
+                },
+                "25": {
+                    "production": 1
+                }
+            }
+        }
+    },
+    "2026-3": {
+        "film": {
+            "carryover": 30,
+            "days": {}
+        },
+        "plain": {
+            "carryover": 22,
+            "days": {
+                "2": {
+                    "production": 1
+                },
+                "3": {
+                    "production": 1
+                },
+                "4": {
+                    "production": 1
+                },
+                "5": {
+                    "production": 1
+                },
+                "6": {
+                    "production": 1
+                },
+                "9": {
+                    "production": 1
+                },
+                "10": {
+                    "production": 1
+                },
+                "11": {
+                    "production": 1
+                },
+                "12": {
+                    "production": 1
+                },
+                "13": {
+                    "production": 1
+                }
+            }
+        },
+        "eog": {
+            "carryover": 17,
+            "days": {
+                "16": {
+                    "production": 1
+                },
+                "17": {
+                    "production": 1
+                },
+                "18": {
+                    "production": 1
+                },
+                "19": {
+                    "production": 1
+                }
+            }
+        }
+    }
+};
+
 // Firebase Configuration
 const firebaseConfig = {
     apiKey: "AIzaSyAz4YDGJDcJ6-e6l5N9-LKin7TbWMb68As",
@@ -21,71 +1622,86 @@ if (firebaseConfig.apiKey !== "YOUR_API_KEY") {
 const isProduction = window.location.hostname === 'naishoku-spec.github.io';
 const SECRET_KEY = 'nippo-report-secure-key-2026';
 const DB_PATH = `${SECRET_KEY}/${isProduction ? 'nippo_records' : 'nippo_records_dev'}`;
+const ROLL_DB_PATH = `${SECRET_KEY}/${isProduction ? 'roll_inventory' : 'roll_inventory_dev'}`;
 const LS_KEY = isProduction ? 'nippo_records' : 'nippo_records_dev';
 
-console.log(`Running in ${isProduction ? 'PRODUCTION' : 'DEVELOPMENT'} mode. Data path: ${DB_PATH}, LocalStorage: ${LS_KEY}`);
+console.log(`Running in ${isProduction ? 'PRODUCTION' : 'DEVELOPMENT'} mode. Data path: ${DB_PATH}, Roll path: ${ROLL_DB_PATH}`);
 
 // State Management
 let records = JSON.parse(localStorage.getItem(LS_KEY)) || [];
 let currentDate = new Date().toLocaleDateString('sv-SE'); // YYYY-MM-DD format
 let isFirstLoad = true;
 
+// Roll Stock State
+const ROLL_STORAGE_KEY = 'rollInventoryData';
+const ROLL_TYPES = ['film', 'plain', 'eog'];
+const ROLL_LABELS = { film: 'フィルム', plain: '無地', eog: 'EOG' };
+const ROLL_DAY_NAMES = ['日', '月', '火', '水', '木', '金', '土'];
+const STOCK_LOW_THRESHOLD = 5;
+let rollAllData = {};
+let rollCurrentYear = new Date().getFullYear();
+let rollCurrentMonth = new Date().getMonth() + 1;
+
 // Real-time synchronization from Firebase
 if (database) {
+    // 1. Sync Daily Records
     database.ref(DB_PATH).on('value', (snapshot) => {
         const firebaseData = snapshot.val();
-        // ... (rest of the logic inside startApp)
-
-        // Convert Firebase object to array if needed
         let firebaseRecords = [];
         if (firebaseData) {
-            if (Array.isArray(firebaseData)) {
-                firebaseRecords = firebaseData;
-            } else {
-                // Firebase sometimes converts arrays to objects
-                firebaseRecords = Object.values(firebaseData);
-            }
+            firebaseRecords = Array.isArray(firebaseData) ? firebaseData : Object.values(firebaseData);
         }
 
         if (isFirstLoad) {
-            isFirstLoad = false;
-
-            // On first load: merge local and Firebase data
-            if (firebaseRecords.length > 0 && records.length === 0) {
-                // Firebase has data, local is empty - use Firebase
-                records = firebaseRecords;
-                localStorage.setItem(LS_KEY, JSON.stringify(records));
-            } else if (firebaseRecords.length === 0 && records.length > 0) {
-                // Local has data, Firebase is empty - push local to Firebase
-                database.ref(DB_PATH).set(records);
-            } else if (firebaseRecords.length > 0 && records.length > 0) {
-                // Both have data - merge by using the one with more records or more recent data
-                // Prefer Firebase if it has more or equal records (likely more up-to-date)
-                if (firebaseRecords.length >= records.length) {
-                    records = firebaseRecords;
-                    localStorage.setItem(LS_KEY, JSON.stringify(records));
-                } else {
-                    // Local has more - sync to Firebase
-                    database.ref(DB_PATH).set(records);
-                }
-            }
-
-            // Render after initial sync
-            if (typeof renderRecords === 'function') {
-                renderRecords();
-            }
-        } else {
-            // Subsequent updates - only accept if Firebase has data
             if (firebaseRecords.length > 0) {
                 records = firebaseRecords;
                 localStorage.setItem(LS_KEY, JSON.stringify(records));
-                if (typeof renderRecords === 'function') {
+            } else if (records.length > 0) {
+                database.ref(DB_PATH).set(records);
+            }
+            isFirstLoad = false;
+            ensureDayRecords(currentDate);
+            renderRecords();
+        } else {
+            // Check if data is actually different to avoid redundant renders
+            const isDifferent = JSON.stringify(records) !== JSON.stringify(firebaseRecords);
+            if (isDifferent && firebaseRecords.length > 0) {
+                records = firebaseRecords;
+                localStorage.setItem(LS_KEY, JSON.stringify(records));
+
+                // Only re-render if user is NOT currently focusing on an input in the table
+                const activeEl = document.activeElement;
+                const isTyping = activeEl && activeEl.closest('#records-list');
+
+                if (dayViewContainer.style.display === 'block' && !isTyping) {
                     renderRecords();
-                    if (monthViewContainer && monthViewContainer.style.display === 'block') {
-                        renderMonthlyRecords();
-                    }
+                }
+                if (monthViewContainer.style.display === 'block') {
+                    renderMonthlyRecords();
                 }
             }
+        }
+    });
+
+    // 2. Sync Roll Inventory
+    database.ref(ROLL_DB_PATH).on('value', (snapshot) => {
+        const firebaseRollData = snapshot.val();
+        if (firebaseRollData && Object.keys(firebaseRollData).length > 0) {
+            const isDifferent = JSON.stringify(rollAllData) !== JSON.stringify(firebaseRollData);
+            if (isDifferent) {
+                rollAllData = firebaseRollData;
+                localStorage.setItem(ROLL_STORAGE_KEY, JSON.stringify(rollAllData));
+
+                // Only re-render if user is NOT currently focusing on an input in the inventory table
+                const activeEl = document.activeElement;
+                const isTypingInInventory = activeEl && activeEl.closest('#inventoryBodyStock');
+
+                if (stockViewContainer.style.display === 'block' && !isTypingInInventory) {
+                    renderRollStock();
+                }
+            }
+        } else if (Object.keys(rollAllData).length > 0) {
+            database.ref(ROLL_DB_PATH).set(rollAllData);
         }
     });
 }
@@ -153,7 +1769,11 @@ function init() {
     });
 
     datePicker.value = currentDate;
-    ensureDayRecords(currentDate);
+    // ensureDayRecords is now called inside Firebase listener after sync
+
+
+    // Initialize Roll Stock Management BEFORE switching views to ensure data is loaded
+    initRollStock();
 
     // Default to stock view as requested for inventory management
     switchView('stock');
@@ -165,8 +1785,47 @@ function init() {
 
     document.getElementById('entry-form')?.addEventListener('submit', handleAddRecord);
 
-    // Initialize Roll Stock Management
-    initRollStock();
+    // Mobile Menu Setup
+    setupMobileMenu();
+
+    // Prevent data loss on refresh/close
+    window.addEventListener('beforeunload', (e) => {
+        saveRecords();
+        saveRollData();
+    });
+}
+
+function setupMobileMenu() {
+    const sidebar = document.getElementById('sidebar');
+    const sidebarOverlay = document.getElementById('sidebar-overlay');
+    const hamburgerBtn = document.getElementById('hamburger-btn');
+    const sidebarCloseBtn = document.getElementById('sidebar-close-btn');
+
+    if (!hamburgerBtn || !sidebar || !sidebarOverlay) return;
+
+    const toggleMenu = (show) => {
+        sidebar.classList.toggle('open', show);
+        sidebarOverlay.classList.toggle('active', show);
+        if (show) {
+            sidebarOverlay.style.display = 'block';
+        } else {
+            setTimeout(() => {
+                if (!sidebar.classList.contains('open')) {
+                    sidebarOverlay.style.display = 'none';
+                }
+            }, 300);
+        }
+    };
+
+    hamburgerBtn.addEventListener('click', () => toggleMenu(true));
+    sidebarCloseBtn?.addEventListener('click', () => toggleMenu(false));
+    sidebarOverlay.addEventListener('click', () => toggleMenu(false));
+
+    // Close menu when navigation item is clicked
+    const navItems = sidebar.querySelectorAll('.nav-item');
+    navItems.forEach(item => {
+        item.addEventListener('click', () => toggleMenu(false));
+    });
 }
 
 function switchView(view) {
@@ -184,6 +1843,18 @@ function switchView(view) {
     dayViewContainer.style.display = view === 'day' ? 'block' : 'none';
     monthViewContainer.style.display = view === 'month' ? 'block' : 'none';
     stockViewContainer.style.display = view === 'stock' ? 'block' : 'none';
+
+    // Toggle header selectors visibility
+    const stockMonthSelector = document.getElementById('monthSelectorStock');
+    const dayDateSelector = document.querySelector('.date-selector');
+
+    if (view === 'stock') {
+        if (stockMonthSelector) stockMonthSelector.style.display = 'flex';
+        if (dayDateSelector) dayDateSelector.style.display = 'none';
+    } else {
+        if (stockMonthSelector) stockMonthSelector.style.display = 'none';
+        if (dayDateSelector) dayDateSelector.style.display = 'block';
+    }
 
     if (view === 'day') renderRecords();
     if (view === 'month') renderMonthlyRecords();
@@ -322,13 +1993,55 @@ function handleAddRecord(e) {
 
 // Japanese Holiday Calculation
 function isJapaneseHoliday(dateStr) {
+    if (!dateStr) return false;
     const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return false;
+
     const y = date.getFullYear();
     const m = date.getMonth() + 1;
     const d = date.getDate();
     const w = date.getDay(); // 0:Sun, 1:Mon...
 
     // 1. Fixed Holidays
+    if (isFixedHoliday(y, m, d)) return true;
+
+    // 2. Happy Monday Holidays
+    const nthMonday = Math.floor((d - 1) / 7) + 1;
+    if (w === 1) {
+        if (m === 1 && nthMonday === 2) return true; // 成人の日 (2nd Mon)
+        if (m === 7 && nthMonday === 3) return true; // 海の日 (3rd Mon)
+        if (m === 9 && nthMonday === 3) return true; // 敬老の日 (3rd Mon)
+        if (m === 10 && nthMonday === 2) return true; // スポーツの日 (2nd Mon)
+    }
+
+    // 3. Substitute Holidays (振替休日)
+    // Simplified check: If Monday, and yesterday (Sunday) was a fixed holiday
+    if (w === 1) {
+        const yesterday = new Date(y, m - 1, d - 1);
+        if (isFixedHoliday(yesterday.getFullYear(), yesterday.getMonth() + 1, yesterday.getDate())) return true;
+
+        // Special case for GW: if 5/3-5/5 were Sunday or already compensated...
+        // For simplicity, checking if 5/6 is Monday and any of 5/3, 5/4, 5/5 was Sunday
+        if (m === 5 && d === 6) {
+            const d3 = new Date(y, 4, 3).getDay();
+            const d4 = new Date(y, 4, 4).getDay();
+            const d5 = new Date(y, 4, 5).getDay();
+            if (d3 === 0 || d4 === 0 || d5 === 0) return true;
+        }
+    }
+
+    // 4. National Holidays (国民の休日 - Bridge holidays)
+    // Sandwiched between two holidays.
+    const pStr = `${y}-${String(m).padStart(2, '0')}-${String(d - 1).padStart(2, '0')}`;
+    const nStr = `${y}-${String(m).padStart(2, '0')}-${String(d + 1).padStart(2, '0')}`;
+    // Use isFixedHoliday for simplified bridge check
+    if (isFixedHoliday(y, m, d - 1) && isFixedHoliday(y, m, d + 1)) return true;
+
+    return false;
+}
+
+// Fixed Holidays (and Equinoxes)
+function isFixedHoliday(y, m, d) {
     if (m === 1 && d === 1) return true; // 元日
     if (m === 2 && d === 11) return true; // 建国記念の日
     if (m === 2 && d === 23) return true; // 天皇誕生日
@@ -340,30 +2053,11 @@ function isJapaneseHoliday(dateStr) {
     if (m === 11 && d === 3) return true; // 文化の日
     if (m === 11 && d === 23) return true; // 勤労感謝の日
 
-    // 2. Happy Monday Holidays
-    const nthMonday = Math.floor((d - 1) / 7) + 1;
-    if (w === 1) {
-        if (m === 1 && nthMonday === 2) return true; // 成人の日 (2nd Mon)
-        if (m === 7 && nthMonday === 3) return true; // 海の日 (3rd Mon)
-        if (m === 9 && nthMonday === 3) return true; // 敬老の日 (3rd Mon)
-        if (m === 10 && nthMonday === 2) return true; // スポーツの日 (2nd Mon)
-    }
-
-    // 3. Equinoxes (Approximated)
-    const vernalEquinox = Math.floor(20.8431 + 0.242194 * (y - 1980) - Math.floor((y - 1980) / 4));
-    if (m === 3 && d === vernalEquinox) return true;
-    const autumnalEquinox = Math.floor(23.2488 + 0.242194 * (y - 1980) - Math.floor((y - 1980) / 4));
-    if (m === 9 && d === autumnalEquinox) return true;
-
-    // 4. Substitute Holidays (振替休日)
-    // If holiday is Sunday, the next Monday is holiday.
-    // To check if date is a substitute holiday, we check if it's Monday and if yesterday was a holiday.
-    if (w === 1) {
-        const yesterday = new Date(date);
-        yesterday.setDate(d - 1);
-        const yStr = yesterday.toLocaleDateString('sv-SE');
-        if (isJapaneseHoliday(yStr)) return true;
-    }
+    // Equinoxes
+    let vernal = Math.floor(20.8431 + 0.242194 * (y - 1980) - Math.floor((y - 1980) / 4));
+    if (m === 3 && d === vernal) return true;
+    let autumnal = Math.floor(23.2488 + 0.242194 * (y - 1980) - Math.floor((y - 1980) / 4));
+    if (m === 9 && d === autumnal) return true;
 
     return false;
 }
@@ -471,7 +2165,7 @@ function saveRecords() {
 
 // Google Sheets Synchronization
 async function syncToGoogleSheets(recordsToSync) {
-    const GAS_URL = 'https://script.google.com/macros/s/AKfycbyf3x1Ze2Qv9t4FXUsvVvEZdNAn9-Z1uqWrBV9Y6e8FlU_IrjOmm6BF8cz-HOS3gjHG/exec';
+    const GAS_URL = 'https://script.google.com/macros/s/AKfycbysvbSXcpBlSuiNxkpWsiaz4fcNv_Lyz0w9XTKZDWvv8ZlL1gNnHdVVDVpHnzYGIODY/exec';
 
     // Only send data that has content
     const activeRecords = recordsToSync.filter(r => r.count > 0 || (r.product && r.product !== ''));
@@ -493,6 +2187,68 @@ async function syncToGoogleSheets(recordsToSync) {
         console.log('Synced to Google Sheets (2F)');
     } catch (e) {
         console.error('Google Sheets sync failed:', e);
+    }
+}
+
+// Google Sheets Synchronization for Roll Stock
+async function syncRollToGoogleSheets(year, month) {
+    const GAS_URL = 'https://script.google.com/macros/s/AKfycbysvbSXcpBlSuiNxkpWsiaz4fcNv_Lyz0w9XTKZDWvv8ZlL1gNnHdVVDVpHnzYGIODY/exec';
+
+    const key = `${year}-${month}`;
+    const data = rollAllData[key];
+    if (!data) return;
+
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const records = [];
+
+    // Calculate daily balances to send
+    const currentBalances = {};
+    ROLL_TYPES.forEach(type => {
+        currentBalances[type] = data[type].carryover || 0;
+    });
+
+    for (let d = 1; d <= daysInMonth; d++) {
+        const row = {
+            date: `${year}/${month}/${d}`,
+        };
+
+        ROLL_TYPES.forEach(type => {
+            const dData = (data[type].days && data[type].days[d]) || {};
+            const del = dData.delivery || 0;
+            const prod = dData.production || 0;
+            currentBalances[type] = currentBalances[type] + del - prod;
+
+            row[`${type}Del`] = del;
+            row[`${type}Prod`] = prod;
+            row[`${type}Rem`] = currentBalances[type];
+        });
+
+        // Only include if there's any activity on this day
+        const hasActivity = ROLL_TYPES.some(type => row[`${type}Del`] > 0 || row[`${type}Prod`] > 0);
+        if (hasActivity) {
+            records.push(row);
+        }
+    }
+
+    if (records.length === 0) return;
+
+    try {
+        await fetch(GAS_URL, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                floor: 'ロール在庫表',
+                year: year,
+                month: month,
+                records: records
+            }),
+        });
+        console.log(`Synced Roll Stock for ${year}/${month} to Google Sheets`);
+    } catch (e) {
+        console.error('Roll Stock Google Sheets sync failed:', e);
     }
 }
 
@@ -629,120 +2385,13 @@ window.switchView = switchView;
 // ========== Roll Stock Management ==========
 // ==========================================
 
-const ROLL_STORAGE_KEY = 'rollInventoryData';
-const ROLL_TYPES = ['film', 'plain', 'eog'];
-const ROLL_LABELS = { film: 'フィルム', plain: '無地', eog: 'EOG' };
-const ROLL_DAY_NAMES = ['日', '月', '火', '水', '木', '金', '土'];
-const STOCK_LOW_THRESHOLD = 5;
-
-// Holiday list from Excel (serial dates converted)
-const ROLL_HOLIDAYS_SERIAL = [
-    45658, 45659, 45660, 45661, 45670, 45699, 45711, 45712, 45736, 45776,
-    45780, 45781, 45782, 45783, 45859, 45880, 45881, 45882, 45883, 45884,
-    45915, 45923, 45943, 45964, 45984, 45985, 46020, 46021, 46022,
-    46023, 46024, 46025, 46026, 46035, 46064, 46076, 46100
-];
-
-function serialToDateStr(serial) {
-    const epoch = new Date(1899, 11, 30);
-    const d = new Date(epoch.getTime() + serial * 86400000);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-const ROLL_HOLIDAY_SET = new Set(ROLL_HOLIDAYS_SERIAL.map(serialToDateStr));
 
 function isRollHoliday(year, month, day) {
     const key = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    return ROLL_HOLIDAY_SET.has(key);
+    return isJapaneseHoliday(key);
 }
 
-// Full initial data from Excel (16 months: Dec 2024 - Mar 2026)
-const ROLL_INITIAL_DATA = {
-    '2024-12': {
-        film: { carryover: 47, days: { 1: { production: 1 }, 2: { production: 1 }, 3: { production: 1 }, 4: { production: 1 }, 5: { production: 1 }, 8: { production: 1 }, 10: { production: 1 }, 11: { production: 1 }, 15: { production: 1 }, 16: { production: 1 }, 17: { production: 1 }, 18: { production: 1 }, 19: { delivery: 12, production: 1 }, 22: { production: 1 }, 23: { production: 1 }, 24: { production: 1 }, 25: { production: 1 } } },
-        plain: { carryover: 26, days: { 2: { production: 1 }, 5: { delivery: 12 }, 8: { production: 1 }, 9: { production: 1 }, 10: { production: 1 }, 11: { production: 1 }, 15: { production: 1 }, 16: { production: 1 }, 17: { production: 1 }, 18: { production: 1 }, 22: { production: 1 }, 23: { production: 1 } } },
-        eog: { carryover: 8, days: { 2: { production: 1 }, 5: { production: 1 }, 9: { delivery: 12 }, 12: { production: 1 }, 16: { production: 1 }, 19: { production: 1 }, 23: { production: 1 }, 25: { production: 1 } } }
-    },
-    '2025-1': {
-        film: { carryover: 43, days: { 6: { production: 1 }, 7: { production: 1 }, 8: { production: 1 }, 9: { production: 1 }, 10: { production: 1 }, 14: { production: 1 }, 15: { production: 1 }, 16: { production: 1 }, 17: { production: 1 }, 20: { production: 1 }, 21: { production: 1 }, 22: { production: 1 }, 23: { production: 1 }, 24: { production: 1 }, 27: { production: 1 }, 28: { production: 1 }, 29: { production: 1 }, 30: { production: 1 } } },
-        plain: { carryover: 21, days: { 6: { production: 1 }, 7: { production: 1 }, 8: { production: 1 }, 9: { production: 1 }, 14: { production: 1 }, 15: { production: 1 }, 16: { production: 1 }, 20: { production: 1 }, 21: { production: 1 }, 22: { production: 1 }, 23: { production: 1 }, 24: { production: 1 }, 27: { production: 1 }, 28: { production: 1 }, 29: { production: 1 }, 30: { production: 1 } } },
-        eog: { carryover: 7, days: { 6: { production: 1 }, 7: { production: 1 }, 8: { production: 1 }, 9: { production: 1 }, 10: { production: 1 } } }
-    },
-    '2025-2': {
-        film: { carryover: 37, days: { 3: { production: 1 }, 4: { production: 1 }, 5: { production: 1 }, 6: { production: 1 }, 7: { production: 1 }, 10: { production: 1 }, 12: { production: 1 }, 13: { production: 1 }, 17: { production: 1 }, 18: { production: 1 }, 19: { production: 1 }, 20: { production: 1 }, 21: { production: 1 }, 25: { production: 1 }, 26: { production: 1 }, 27: { production: 1 } } },
-        plain: { carryover: 31, days: { 3: { production: 1 }, 4: { production: 1 }, 5: { production: 1 }, 6: { production: 1 }, 7: { production: 1 }, 10: { production: 1 }, 12: { production: 1 }, 13: { production: 1 }, 17: { production: 1 }, 18: { production: 1 }, 19: { production: 1 }, 20: { production: 1 }, 21: { production: 1 }, 25: { production: 1 }, 26: { production: 1 }, 27: { production: 1 } } },
-        eog: { carryover: 14, days: { 3: { production: 1 }, 4: { production: 1 }, 5: { production: 1 }, 10: { production: 1 }, 17: { production: 1 }, 18: { production: 1 }, 19: { production: 1 }, 20: { production: 1 } } }
-    },
-    '2025-3': {
-        film: { carryover: 43, days: { 3: { production: 1 }, 4: { production: 1 }, 5: { production: 1 }, 6: { production: 1 }, 7: { production: 1 }, 10: { production: 1 }, 11: { production: 1 }, 12: { production: 1 }, 13: { production: 1 }, 14: { production: 1 }, 17: { production: 1 }, 18: { production: 1 }, 19: { production: 1 }, 24: { production: 1 }, 25: { production: 1 }, 26: { production: 1 }, 27: { production: 1 } } },
-        plain: { carryover: 28, days: { 3: { production: 1 }, 4: { production: 1 }, 5: { production: 1 }, 6: { production: 1 }, 7: { production: 1 }, 10: { production: 1 }, 11: { production: 1 }, 12: { production: 1 }, 13: { production: 1 }, 14: { production: 1 }, 17: { production: 1 }, 18: { production: 1 }, 19: { production: 1 }, 24: { production: 1 }, 25: { production: 1 }, 26: { production: 1 }, 27: { production: 1 } } },
-        eog: { carryover: 22, days: { 3: { production: 1 }, 10: { production: 1 }, 11: { production: 1 }, 12: { production: 1 }, 13: { production: 1 }, 14: { production: 1 } } }
-    },
-    '2025-4': {
-        film: { carryover: 26, days: { 1: { production: 1 }, 2: { production: 1 }, 3: { production: 1 }, 4: { production: 1 }, 7: { production: 1 }, 8: { production: 1 }, 9: { production: 1 }, 10: { production: 1 }, 11: { production: 1 }, 14: { production: 1 }, 15: { production: 1 }, 16: { production: 1 }, 17: { production: 1 }, 18: { production: 1 }, 21: { production: 1 }, 22: { production: 1 }, 23: { production: 1 }, 24: { production: 1 }, 25: { production: 1 } } },
-        plain: { carryover: 11, days: { 1: { production: 1 }, 2: { production: 1 }, 3: { production: 1 }, 4: { production: 1 }, 7: { production: 1 }, 8: { production: 1 }, 9: { production: 1 }, 10: { production: 1 }, 14: { production: 1 }, 15: { production: 1 }, 16: { production: 1 }, 17: { production: 1 }, 21: { production: 1 }, 22: { production: 1 }, 23: { production: 1 }, 24: { production: 1 }, 25: { production: 1 } } },
-        eog: { carryover: 16, days: { 1: { production: 1 }, 7: { production: 1 }, 8: { production: 1 }, 9: { production: 1 }, 10: { production: 1 }, 14: { production: 1 }, 15: { production: 1 }, 16: { production: 1 }, 17: { production: 1 }, 21: { production: 1 }, 22: { production: 1 } } }
-    },
-    '2025-5': {
-        film: { carryover: 7, days: { 1: { production: 1 }, 2: { production: 1 }, 7: { production: 1 }, 8: { production: 1 }, 9: { production: 1 }, 12: { delivery: 12, production: 1 }, 13: { production: 1 }, 14: { production: 1 }, 15: { production: 1 }, 16: { production: 1 }, 19: { production: 1 }, 20: { production: 1 }, 21: { production: 1 }, 22: { production: 1 }, 23: { production: 1 }, 26: { production: 1 }, 27: { production: 1 }, 28: { production: 1 }, 29: { production: 1 }, 30: { production: 1 } } },
-        plain: { carryover: -6, days: { 1: { delivery: 12 }, 2: { production: 1 }, 7: { production: 1 }, 8: { production: 1 }, 9: { production: 1 }, 12: { production: 1 }, 13: { production: 1 }, 14: { production: 1 }, 15: { production: 1 }, 19: { production: 1 }, 20: { production: 1 }, 21: { production: 1 }, 22: { production: 1 }, 26: { production: 1 }, 27: { production: 1 }, 28: { production: 1 }, 29: { production: 1 } } },
-        eog: { carryover: 5, days: { 1: { production: 1 }, 2: { production: 1 }, 7: { production: 1 }, 8: { production: 1 }, 9: { production: 1 }, 12: { production: 1 }, 16: { delivery: 12 } } }
-    },
-    '2025-6': {
-        film: { carryover: -1, days: { 2: { delivery: 12, production: 1 }, 3: { production: 1 }, 4: { production: 1 }, 5: { production: 1 }, 6: { production: 1 }, 9: { production: 1 }, 10: { production: 1 }, 11: { production: 1 }, 12: { production: 1 }, 13: { production: 1 }, 16: { production: 1 }, 17: { production: 1 }, 18: { production: 1 }, 19: { production: 1 }, 20: { production: 1 }, 23: { production: 1 }, 24: { production: 1 }, 25: { production: 1 }, 26: { production: 1 }, 27: { production: 1 }, 30: { production: 1 } } },
-        plain: { carryover: -12, days: { 2: { production: 1 }, 3: { production: 1 }, 4: { production: 1 }, 5: { production: 1 }, 6: { production: 1 }, 9: { delivery: 24, production: 1 }, 10: { production: 1 }, 16: { production: 1 }, 17: { production: 1 }, 18: { production: 1 }, 19: { production: 1 }, 23: { production: 1 }, 24: { production: 1 }, 25: { production: 1 }, 26: { production: 1 }, 30: { production: 1 } } },
-        eog: { carryover: 8, days: { 2: { production: 1 }, 3: { production: 1 }, 4: { production: 1 }, 5: { production: 1 }, 9: { production: 1 }, 10: { production: 1 }, 11: { production: 1 }, 12: { production: 1 }, 16: { production: 1 }, 17: { production: 1 } } }
-    },
-    '2025-7': {
-        film: { carryover: -10, days: { 1: { production: 1 }, 2: { production: 1 }, 3: { production: 1 }, 4: { production: 1 }, 7: { delivery: 12, production: 1 }, 8: { production: 1 }, 9: { production: 1 }, 10: { production: 1 }, 11: { production: 1 }, 14: { production: 1 }, 15: { production: 1 }, 16: { production: 1 }, 17: { production: 1 }, 18: { production: 1 }, 22: { production: 1 }, 23: { production: 1 }, 24: { production: 1 }, 25: { production: 1 }, 28: { production: 1 }, 29: { production: 1 }, 30: { production: 1 }, 31: { production: 1 } } },
-        plain: { carryover: -5, days: { 1: { production: 1 }, 2: { production: 1 }, 3: { production: 1 }, 4: { production: 1 }, 7: { production: 1 }, 8: { production: 1 }, 9: { production: 1 }, 10: { production: 1 }, 11: { production: 1 }, 14: { delivery: 12 }, 15: { production: 1 }, 16: { production: 1 }, 17: { production: 1 }, 22: { production: 1 }, 23: { production: 1 }, 24: { production: 1 }, 25: { production: 1 }, 28: { production: 1 }, 29: { production: 1 } } },
-        eog: { carryover: -2, days: { 1: { production: 1 }, 2: { production: 1 }, 7: { delivery: 12 }, 8: { production: 1 }, 9: { production: 1 }, 14: { production: 1 }, 15: { production: 1 }, 22: { production: 1 }, 23: { production: 1 }, 24: { production: 1 } } }
-    },
-    '2025-8': {
-        film: { carryover: -20, days: { 1: { delivery: 12 }, 4: { production: 1 }, 5: { production: 1 }, 6: { production: 1 }, 7: { production: 1 }, 8: { production: 1 }, 18: { production: 1 }, 19: { production: 1 }, 20: { production: 1 }, 21: { production: 1 }, 22: { production: 1 }, 25: { production: 1 }, 26: { production: 1 }, 27: { production: 1 }, 28: { production: 1 }, 29: { production: 1 } } },
-        plain: { carryover: -12, days: { 1: { delivery: 12, production: 1 }, 4: { production: 1 }, 5: { production: 1 }, 7: { production: 1 }, 8: { production: 1 }, 18: { production: 1 }, 19: { production: 1 }, 20: { production: 1 }, 21: { production: 1 }, 25: { production: 1 }, 26: { production: 1 }, 27: { production: 1 }, 28: { production: 1 }, 29: { production: 1 } } },
-        eog: { carryover: -2, days: { 1: { production: 1 }, 4: { production: 1 } } }
-    },
-    '2025-9': {
-        film: { carryover: -24, days: { 1: { production: 1 }, 2: { production: 1 }, 3: { production: 1 }, 4: { production: 1 }, 5: { production: 1 }, 8: { production: 1 }, 9: { production: 1 }, 10: { production: 1 }, 11: { production: 1 }, 12: { production: 1 }, 16: { production: 1 }, 17: { production: 1 }, 18: { production: 1 }, 19: { production: 1 }, 24: { production: 1 }, 25: { delivery: 12, production: 1 }, 26: { production: 1 }, 29: { production: 1 }, 30: { production: 1 } } },
-        plain: { carryover: -15, days: { 1: { production: 1 }, 2: { production: 1 }, 3: { production: 1 }, 4: { production: 1 }, 5: { delivery: 12 }, 8: { production: 1 }, 9: { production: 1 }, 10: { production: 1 }, 11: { production: 1 }, 16: { production: 1 }, 17: { production: 1 }, 18: { production: 1 }, 19: { production: 1 }, 24: { production: 1 }, 25: { production: 1 }, 29: { production: 1 }, 30: { production: 1 } } },
-        eog: { carryover: -4, days: { 1: { production: 1 }, 2: { production: 1 }, 3: { production: 1 }, 8: { production: 1 }, 9: { production: 1 }, 10: { production: 1 }, 11: { production: 1 }, 16: { delivery: 12 } } }
-    },
-    '2025-10': {
-        film: { carryover: -31, days: { 1: { production: 1 }, 2: { production: 1 }, 3: { production: 1 }, 6: { production: 1 }, 7: { production: 1 }, 8: { production: 1 }, 9: { production: 1 }, 10: { production: 1 }, 14: { production: 1 }, 15: { production: 1 }, 16: { production: 1 }, 17: { production: 1 }, 20: { production: 1 }, 21: { production: 1 }, 22: { production: 1 }, 23: { production: 1 }, 24: { production: 1 }, 27: { production: 1 }, 28: { delivery: 24, production: 1 }, 29: { production: 1 }, 30: { production: 1 }, 31: { production: 1 } } },
-        plain: { carryover: -20, days: { 1: { production: 1 }, 2: { production: 1 }, 3: { production: 1 }, 6: { production: 1 }, 7: { production: 1 }, 8: { production: 1 }, 10: { production: 1 }, 14: { delivery: 12 }, 16: { production: 1 }, 17: { production: 1 }, 20: { production: 1 }, 21: { production: 1 }, 22: { production: 1 }, 23: { production: 1 }, 24: { production: 1 }, 27: { production: 1 }, 28: { production: 1 }, 29: { production: 1 } } },
-        eog: { carryover: -1, days: { 1: { production: 1 }, 2: { production: 1 }, 6: { production: 1 }, 7: { production: 1 }, 8: { production: 1 }, 9: { production: 1 }, 14: { production: 1 }, 15: { production: 1 }, 16: { production: 1 }, 20: { production: 1 }, 21: { production: 1 }, 22: { production: 1 } } }
-    },
-    '2025-11': {
-        film: { carryover: -29, days: { 4: { production: 1 }, 5: { production: 1 }, 6: { production: 1 }, 7: { production: 1 }, 10: { production: 1 }, 11: { production: 1 }, 12: { production: 1 }, 13: { production: 1 }, 14: { production: 1 }, 17: { production: 1 }, 18: { production: 1 }, 19: { production: 1 }, 20: { production: 1 }, 21: { production: 1 }, 25: { production: 1 }, 26: { production: 1 }, 27: { production: 1 }, 28: { production: 1 } } },
-        plain: { carryover: 15, days: { 5: { production: 1 }, 11: { production: 1 }, 12: { production: 1 }, 13: { production: 1 }, 18: { production: 1 }, 19: { production: 1 }, 20: { production: 1 }, 25: { production: 1 }, 26: { production: 1 }, 27: { production: 1 }, 28: { production: 1 } } },
-        eog: { carryover: 6, days: { 4: { production: 1 }, 5: { delivery: 12 }, 7: { production: 1 }, 10: { production: 1 }, 14: { production: 1 }, 17: { production: 1 }, 21: { production: 1 } } }
-    },
-    '2025-12': {
-        film: { carryover: 24, days: { 1: { production: 1 }, 3: { production: 1 }, 4: { production: 1 }, 8: { production: 1 }, 10: { production: 1 }, 11: { production: 1 }, 12: { production: 1 }, 16: { production: 1 }, 17: { production: 1 }, 18: { production: 1 }, 19: { delivery: 12, production: 1 }, 22: { production: 1 }, 23: { production: 1 }, 24: { production: 1 }, 25: { production: 1 } } },
-        plain: { carryover: 4, days: { 2: { production: 1 }, 3: { production: 1 }, 8: { delivery: 12 }, 9: { production: 1 }, 10: { production: 1 }, 15: { production: 1 }, 17: { production: 1 }, 18: { production: 1 }, 19: { production: 1 }, 24: { production: 2 }, 25: { delivery: 12, production: 1 } } },
-        eog: { carryover: 12, days: { 1: { production: 1 }, 4: { production: 1 }, 5: { production: 1 }, 8: { delivery: 12, production: 1 }, 12: { production: 1 }, 15: { production: 1 }, 19: { production: 1 }, 23: { production: 1 } } }
-    },
-    '2026-1': {
-        film: { carryover: 21, days: { 7: { production: 1 }, 8: { production: 1 }, 9: { production: 1 }, 13: { production: 1 }, 14: { production: 1 }, 16: { production: 1 }, 19: { production: 1 }, 20: { production: 1 }, 21: { production: 1 }, 22: { production: 1 }, 26: { production: 1 }, 27: { delivery: 12 }, 28: { production: 1 }, 29: { production: 1 } } },
-        plain: { carryover: 17, days: { 6: { production: 1 }, 8: { production: 1 }, 9: { production: 1 }, 13: { production: 1 }, 14: { production: 1 }, 15: { production: 1 }, 16: { production: 1 }, 19: { production: 1 }, 20: { production: 1 }, 26: { production: 1 }, 29: { production: 1 }, 30: { production: 1 } } },
-        eog: { carryover: 16, days: { 7: { production: 1 }, 21: { production: 1 }, 22: { production: 1 }, 23: { production: 1 }, 27: { delivery: 4 }, 28: { production: 1 } } }
-    },
-    '2026-2': {
-        film: { carryover: 20, days: { 2: { production: 1 }, 3: { production: 1 }, 4: { production: 1 }, 5: { delivery: 24, production: 1 }, 6: { production: 1 }, 10: { production: 1 }, 13: { production: 1 }, 16: { production: 1 }, 17: { production: 1 }, 18: { production: 1 }, 20: { production: 1 }, 25: { production: 1 }, 26: { production: 1 }, 27: { production: 1 } } },
-        plain: { carryover: 5, days: { 5: { production: 1 }, 6: { production: 1 }, 10: { production: 1 }, 13: { production: 1 }, 16: { production: 1 }, 25: { delivery: 12 }, 26: { delivery: 12, production: 2 } } },
-        eog: { carryover: 15, days: { 2: { production: 1 }, 3: { production: 1 }, 4: { production: 1 }, 6: { delivery: 12 }, 9: { production: 1 }, 17: { production: 1 }, 18: { production: 1 }, 19: { production: 1 }, 20: { production: 1 }, 24: { production: 1 }, 25: { production: 1 } } }
-    },
-    '2026-3': {
-        film: { carryover: 30, days: {} },
-        plain: { carryover: 22, days: { 2: { production: 1 }, 3: { production: 1 }, 4: { production: 1 }, 5: { production: 1 }, 6: { production: 1 }, 9: { production: 1 }, 10: { production: 1 }, 11: { production: 1 }, 12: { production: 1 }, 13: { production: 1 } } },
-        eog: { carryover: 17, days: { 16: { production: 1 }, 17: { production: 1 }, 18: { production: 1 }, 19: { production: 1 } } }
-    }
-};
-
-let rollCurrentYear = new Date().getFullYear();
-let rollCurrentMonth = new Date().getMonth() + 1;
-let rollAllData = {};
+;
 
 function initRollStock() {
     loadRollData();
@@ -815,22 +2464,6 @@ function setupRollEventListeners() {
         updateRollSelectors();
         renderRollStock();
     });
-    document.getElementById('saveBtnStock')?.addEventListener('click', () => {
-        saveRollData();
-        alert('保存しました');
-    });
-    document.getElementById('resetBtnStock')?.addEventListener('click', () => {
-        if (confirm('この月のデータをリセットしますか？（Excelの初期データに戻ります）')) {
-            const key = `${rollCurrentYear}-${rollCurrentMonth}`;
-            if (ROLL_INITIAL_DATA[key]) {
-                rollAllData[key] = JSON.parse(JSON.stringify(ROLL_INITIAL_DATA[key]));
-            } else {
-                delete rollAllData[key];
-            }
-            saveRollData();
-            renderRollStock();
-        }
-    });
 }
 
 function updateRollSelectors() {
@@ -840,6 +2473,13 @@ function updateRollSelectors() {
 
 function saveRollData() {
     localStorage.setItem(ROLL_STORAGE_KEY, JSON.stringify(rollAllData));
+    if (database) {
+        database.ref(ROLL_DB_PATH).set(rollAllData);
+    }
+
+    // Sync to Google Sheets
+    syncRollToGoogleSheets(rollCurrentYear, rollCurrentMonth);
+
     const status = document.getElementById('saveStatusStock');
     if (status) {
         const now = new Date();
@@ -895,7 +2535,7 @@ function renderRollStock() {
     const carryRow = document.createElement('tr');
     carryRow.style.background = 'var(--bg-main)';
     carryRow.style.borderBottom = '2px solid var(--border)';
-    let carryHtml = '<td style="font-weight:700; padding:0.75rem;">繰越</td>';
+    let carryHtml = '<td style="font-weight:700; padding:0.75rem; white-space:nowrap;">先月の繰越</td>';
     ROLL_TYPES.forEach(type => {
         carryHtml += `<td></td><td></td><td><input type="number" class="carry-input" data-type="${type}" value="${data[type].carryover || 0}" style="font-weight:700; color:var(--primary)"></td>`;
     });
@@ -906,6 +2546,7 @@ function renderRollStock() {
         input.addEventListener('change', (e) => {
             const type = e.target.dataset.type;
             data[type].carryover = parseInt(e.target.value) || 0;
+            propagateCarryover(rollCurrentYear, rollCurrentMonth); // Added
             recalculateRollStock();
             autoSaveRoll();
         });
@@ -919,7 +2560,13 @@ function renderRollStock() {
         const holiday = isRollHoliday(rollCurrentYear, rollCurrentMonth, day);
         const tr = document.createElement('tr');
 
-        if (w === 0) tr.className = 'row-sunday-stock';
+        const today = new Date();
+        const isToday = today.getFullYear() === rollCurrentYear &&
+            today.getMonth() === rollCurrentMonth - 1 &&
+            today.getDate() === day;
+
+        if (isToday) tr.className = 'row-today-stock';
+        else if (w === 0) tr.className = 'row-sunday-stock';
         else if (holiday) tr.className = 'row-holiday-stock';
         else if (w === 6) tr.className = 'row-saturday-stock';
 
@@ -954,6 +2601,7 @@ function renderRollStock() {
                     if (Object.keys(data[type].days[d]).length === 0) delete data[type].days[d];
                 }
 
+                propagateCarryover(rollCurrentYear, rollCurrentMonth); // Added
                 recalculateRollStock();
                 autoSaveRoll();
             });
@@ -966,33 +2614,33 @@ function renderRollStock() {
 
 let rollAutoSaveTimer = null;
 function autoSaveRoll() {
+    // Save to local storage immediately
+    localStorage.setItem(ROLL_STORAGE_KEY, JSON.stringify(rollAllData));
+
+    // Throttle Firebase sync
     clearTimeout(rollAutoSaveTimer);
     rollAutoSaveTimer = setTimeout(() => {
-        localStorage.setItem(ROLL_STORAGE_KEY, JSON.stringify(rollAllData));
-        const status = document.getElementById('saveStatusStock');
-        if (status) {
-            const now = new Date();
-            status.textContent = `自動保存: ${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}`;
-        }
-    }, 1000);
+        saveRollData();
+    }, 1000); // Reduced to 1s
 }
 
 function recalculateRollStock() {
     const data = getRollMonthData(rollCurrentYear, rollCurrentMonth);
     const daysInMonth = new Date(rollCurrentYear, rollCurrentMonth, 0).getDate();
 
-    ROLL_TYPES.forEach(type => {
-        let current = data[type].carryover || 0;
-        let totalDelivery = 0;
-        let totalProduction = 0;
+    // Get real current date data for summary cards
+    const now = new Date();
+    const realYear = now.getFullYear();
+    const realMonth = now.getMonth() + 1;
+    const realMonthData = getRollMonthData(realYear, realMonth);
+    const realDaysInMonth = new Date(realYear, realMonth, 0).getDate();
 
+    ROLL_TYPES.forEach(type => {
+        // 1. Calculate and Update Viewed Table
+        let current = data[type].carryover || 0;
         for (let d = 1; d <= daysInMonth; d++) {
             const dData = (data[type].days && data[type].days[d]) || {};
-            const del = dData.delivery || 0;
-            const prod = dData.production || 0;
-            current = current + del - prod;
-            totalDelivery += del;
-            totalProduction += prod;
+            current = current + (dData.delivery || 0) - (dData.production || 0);
 
             const cell = document.getElementById(`rem-${type}-${d}`);
             if (cell) {
@@ -1002,26 +2650,30 @@ function recalculateRollStock() {
             }
         }
 
-        // Update summary cards
+        // 2. Calculate Real Today's Inventory for Summary Cards
+        let realInventory = realMonthData[type].carryover || 0;
+        let realDelivery = 0;
+        let realProduction = 0;
+        for (let d = 1; d <= realDaysInMonth; d++) {
+            const dData = (realMonthData[type].days && realMonthData[type].days[d]) || {};
+            realDelivery += (dData.delivery || 0);
+            realProduction += (dData.production || 0);
+            realInventory = realInventory + (dData.delivery || 0) - (dData.production || 0);
+        }
+
+        // Update summary cards with REAL inventory status
         const carryEl = document.getElementById(`${type}CarryoverStock`);
         const curEl = document.getElementById(`${type}CurrentStock`);
-        const delEl = document.getElementById(`${type}DeliveryTotalStock`);
-        const prodEl = document.getElementById(`${type}ProductionTotalStock`);
 
-        if (carryEl) carryEl.textContent = data[type].carryover || 0;
+        if (carryEl) carryEl.textContent = realMonthData[type].carryover || 0;
         if (curEl) {
-            curEl.textContent = current;
-            curEl.classList.toggle('low-stock-stock', current <= STOCK_LOW_THRESHOLD && current >= 0);
-            curEl.style.color = current < 0 ? 'var(--danger)' : '';
+            curEl.textContent = realInventory;
+            curEl.classList.toggle('low-stock-stock', realInventory <= STOCK_LOW_THRESHOLD && realInventory >= 0);
+            curEl.style.color = realInventory < 0 ? 'var(--danger)' : '';
         }
-        if (delEl) delEl.textContent = totalDelivery;
-        if (prodEl) prodEl.textContent = totalProduction;
     });
 
     renderRollFooter(data, daysInMonth);
-
-    // Auto-propagate to future months
-    propagateCarryover(rollCurrentYear, rollCurrentMonth);
 }
 
 function propagateCarryover(year, month) {
@@ -1075,7 +2727,7 @@ function renderRollFooter(data, daysInMonth) {
     const tr = document.createElement('tr');
     tr.style.background = 'var(--bg-main)';
     tr.style.borderTop = '2px solid var(--border)';
-    let html = '<td style="font-weight:700; padding:0.75rem;">次月繰越</td>';
+    let html = '<td style="font-weight:700; padding:0.75rem; white-space:nowrap;">次月繰越</td>';
 
     ROLL_TYPES.forEach(type => {
         let delTotal = 0, prodTotal = 0;
