@@ -2162,7 +2162,7 @@ function saveRecords() {
 
 // Google Sheets Synchronization
 async function syncToGoogleSheets(recordsToSync) {
-    const GAS_URL = 'https://script.google.com/macros/s/AKfycbzOetoYvk0WkzIa9LsgcODc5qfnsUJbyT_PZVSfZLWxQPaA0x9V2T7OLQqfM3w5zShP/exec';
+    const GAS_URL = 'https://script.google.com/macros/s/AKfycbxU3MdLFS_1LxJ1T1dFpt0QVN2PejD3QBnSHxaVfN9edGjNuRU6IJkmg9csfRtlvzba/exec';
 
     // Only send data that has content
     const activeRecords = recordsToSync.filter(r => r.count > 0 || (r.product && r.product !== ''));
@@ -2490,8 +2490,8 @@ function saveRollData() {
         database.ref(ROLL_DB_PATH).set(rollAllData);
     }
 
-    // Sync to Google Sheets
-    syncRollToGoogleSheets(rollCurrentYear, rollCurrentMonth);
+    // Sync to Google Sheets (Temporarily disabled)
+    // syncRollToGoogleSheets(rollCurrentYear, rollCurrentMonth);
 
     const status = document.getElementById('saveStatusStock');
     if (status) {

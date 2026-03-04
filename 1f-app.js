@@ -388,7 +388,7 @@ function saveRecords() {
 
 // Google Sheets Synchronization for 1F
 async function syncToGoogleSheets(recordsToSync) {
-    const GAS_URL = 'https://script.google.com/macros/s/AKfycbzOetoYvk0WkzIa9LsgcODc5qfnsUJbyT_PZVSfZLWxQPaA0x9V2T7OLQqfM3w5zShP/exec';
+    const GAS_URL = 'https://script.google.com/macros/s/AKfycbxU3MdLFS_1LxJ1T1dFpt0QVN2PejD3QBnSHxaVfN9edGjNuRU6IJkmg9csfRtlvzba/exec';
 
     // Filter out empty records
     const activeRecords = recordsToSync.filter(r => r.count > 0 || r.notes);
