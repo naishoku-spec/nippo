@@ -371,11 +371,17 @@ tr:last-child td {
     padding: 4px 8px;
 }
 
-/* Standard up/down arrows enabled */
+/* Hide spin buttons (up/down arrows) */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
 input[type="number"] {
-    appearance: auto;
-    -moz-appearance: number-input;
-    -webkit-appearance: number-input;
+    -moz-appearance: textfield;
+    appearance: textfield;
+    appearance: none;
 }
 
 .inline-input[type="time"] {

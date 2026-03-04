@@ -2162,7 +2162,7 @@ function saveRecords() {
 
 // Google Sheets Synchronization
 async function syncToGoogleSheets(recordsToSync) {
-    const GAS_URL = 'https://script.google.com/macros/s/AKfycbysvbSXcpBlSuiNxkpWsiaz4fcNv_Lyz0w9XTKZDWvv8ZlL1gNnHdVVDVpHnzYGIODY/exec';
+    const GAS_URL = 'https://script.google.com/macros/s/AKfycbzOetoYvk0WkzIa9LsgcODc5qfnsUJbyT_PZVSfZLWxQPaA0x9V2T7OLQqfM3w5zShP/exec';
 
     // Only send data that has content
     const activeRecords = recordsToSync.filter(r => r.count > 0 || (r.product && r.product !== ''));
@@ -2189,7 +2189,7 @@ async function syncToGoogleSheets(recordsToSync) {
 
 // Google Sheets Synchronization for Roll Stock
 async function syncRollToGoogleSheets(year, month) {
-    const GAS_URL = 'https://script.google.com/macros/s/AKfycbysvbSXcpBlSuiNxkpWsiaz4fcNv_Lyz0w9XTKZDWvv8ZlL1gNnHdVVDVpHnzYGIODY/exec';
+    const GAS_URL = 'https://script.google.com/macros/s/AKfycbzOetoYvk0WkzIa9LsgcODc5qfnsUJbyT_PZVSfZLWxQPaA0x9V2T7OLQqfM3w5zShP/exec';
 
     const key = `${year}-${month}`;
     const data = rollAllData[key];
@@ -2198,15 +2198,26 @@ async function syncRollToGoogleSheets(year, month) {
     const daysInMonth = new Date(year, month, 0).getDate();
     const records = [];
 
-    // Calculate daily balances to send
+    // 1. Add Carryover Row (Matches UI top row)
+    const carryRow = {
+        date: "繰越分",
+        filmDel: "", filmProd: "", filmRem: data.film.carryover || 0,
+        plainDel: "", plainProd: "", plainRem: data.plain.carryover || 0,
+        eogDel: "", eogProd: "", eogRem: data.eog.carryover || 0
+    };
+    records.push(carryRow);
+
+    // 2. Calculate daily balances and add ALL days (even if 0) to match the table exactly
     const currentBalances = {};
     ROLL_TYPES.forEach(type => {
         currentBalances[type] = data[type].carryover || 0;
     });
 
     for (let d = 1; d <= daysInMonth; d++) {
+        const dateObj = new Date(year, month - 1, d);
+        const dayOfWeek = ROLL_DAY_NAMES[dateObj.getDay()];
         const row = {
-            date: `${year}/${month}/${d}`,
+            date: `${year}/${month}/${d} (${dayOfWeek})`,
         };
 
         ROLL_TYPES.forEach(type => {
@@ -2215,19 +2226,13 @@ async function syncRollToGoogleSheets(year, month) {
             const prod = dData.production || 0;
             currentBalances[type] = currentBalances[type] + del - prod;
 
-            row[`${type}Del`] = del;
-            row[`${type}Prod`] = prod;
+            row[`${type}Del`] = del || ""; // Use empty string for 0 to keep it clean
+            row[`${type}Prod`] = prod || "";
             row[`${type}Rem`] = currentBalances[type];
         });
 
-        // Only include if there's any activity on this day
-        const hasActivity = ROLL_TYPES.some(type => row[`${type}Del`] > 0 || row[`${type}Prod`] > 0);
-        if (hasActivity) {
-            records.push(row);
-        }
+        records.push(row);
     }
-
-    if (records.length === 0) return;
 
     try {
         await fetch(GAS_URL, {
