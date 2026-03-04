@@ -2597,8 +2597,8 @@ function renderRollStock() {
         let rowHtml = `<td style="padding:0.5rem; white-space:nowrap;">${dayLabel}${dayTag}</td>`;
         ROLL_TYPES.forEach(type => {
             const dData = (data[type].days && data[type].days[day]) || {};
-            rowHtml += `<td><input type="number" min="0" data-type="${type}" data-day="${day}" data-field="delivery" value="${dData.delivery || ''}" placeholder="–"></td>`;
-            rowHtml += `<td><input type="number" min="0" data-type="${type}" data-day="${day}" data-field="production" value="${dData.production || ''}" placeholder="–"></td>`;
+            rowHtml += `<td><input type="number" min="0" class="stock-input" data-type="${type}" data-day="${day}" data-field="delivery" value="${dData.delivery || ''}" placeholder="–"></td>`;
+            rowHtml += `<td><input type="number" min="0" class="stock-input" data-type="${type}" data-day="${day}" data-field="production" value="${dData.production || ''}" placeholder="–"></td>`;
             rowHtml += `<td id="rem-${type}-${day}" class="remaining-cell-stock">0</td>`;
         });
         tr.innerHTML = rowHtml;
@@ -2611,12 +2611,17 @@ function renderRollStock() {
                 const field = e.target.dataset.field;
                 const val = parseInt(e.target.value) || 0;
 
-                if (!data[type].days) data[type].days = {};
-                if (!data[type].days[d]) data[type].days[d] = {};
-                if (val > 0) data[type].days[d][field] = val;
-                else {
-                    delete data[type].days[d][field];
-                    if (Object.keys(data[type].days[d]).length === 0) delete data[type].days[d];
+                if (val > 0) {
+                    if (!data[type].days) data[type].days = {};
+                    if (!data[type].days[d]) data[type].days[d] = {};
+                    data[type].days[d][field] = val;
+                } else {
+                    if (data[type].days && data[type].days[d]) {
+                        delete data[type].days[d][field];
+                        if (Object.keys(data[type].days[d]).length === 0) {
+                            delete data[type].days[d];
+                        }
+                    }
                 }
 
                 propagateCarryover(rollCurrentYear, rollCurrentMonth); // Added
