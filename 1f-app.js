@@ -380,7 +380,7 @@ function saveRecords() {
     if (database) {
         database.ref(DB_PATH).set(records)
             .then(() => {
-                syncToGoogleSheets(records);
+                // syncToGoogleSheets(records); // Disconnected
             })
             .catch(err => console.error('Firebase save failed:', err));
     }

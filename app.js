@@ -1641,6 +1641,7 @@ const STOCK_LOW_THRESHOLD = 5;
 let rollAllData = {};
 let rollCurrentYear = new Date().getFullYear();
 let rollCurrentMonth = new Date().getMonth() + 1;
+let isFirstRollLoad = true;
 
 // Real-time synchronization from Firebase
 if (database) {
@@ -1692,17 +1693,22 @@ if (database) {
                 rollAllData = firebaseRollData;
                 localStorage.setItem(ROLL_STORAGE_KEY, JSON.stringify(rollAllData));
 
-                // Only re-render if user is NOT currently focusing on an input in the inventory table
-                const activeEl = document.activeElement;
-                const isTypingInInventory = activeEl && activeEl.closest('#inventoryBodyStock');
+                const isTyping = document.activeElement &&
+                    (document.activeElement.classList.contains('stock-input') ||
+                        document.activeElement.classList.contains('carry-input'));
 
-                if (stockViewContainer.style.display === 'block' && !isTypingInInventory) {
+                if (stockViewContainer.style.display === 'block' && !isTyping) {
                     renderRollStock();
+                } else if (stockViewContainer.style.display === 'block') {
+                    // Update only non-input elements like remaining balance cells and totals
+                    recalculateRollStock();
                 }
             }
-        } else if (Object.keys(rollAllData).length > 0) {
+        } else if (isFirstRollLoad && Object.keys(rollAllData).length > 0) {
+            // Push initial data to cloud if empty
             database.ref(ROLL_DB_PATH).set(rollAllData);
         }
+        isFirstRollLoad = false;
     });
 }
 
@@ -2150,8 +2156,7 @@ function saveRecords() {
     if (database) {
         database.ref(DB_PATH).set(records)
             .then(() => {
-                // After Firebase success, sync to Google Sheets
-                syncToGoogleSheets(records);
+                // syncToGoogleSheets(records); // Disconnected
             })
             .catch((error) => {
                 console.error('Firebase save failed:', error);
@@ -2634,7 +2639,7 @@ function autoSaveRoll() {
     clearTimeout(rollAutoSaveTimer);
     rollAutoSaveTimer = setTimeout(() => {
         saveRollData();
-    }, 1000); // Reduced to 1s
+    }, 500); // Shorter throttle for better responsiveness
 }
 
 function recalculateRollStock() {
