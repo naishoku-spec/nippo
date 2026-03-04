@@ -1066,7 +1066,13 @@ span.flatpickr-weekday:nth-child(7n) {
     }
 
     .main-container {
-        padding: 1rem;
+        padding: 0.5rem;
+        /* Minimize margin */
+    }
+
+    .card {
+        padding: 0.25rem;
+        /* Maximize table width */
     }
 
     header {
@@ -1080,33 +1086,41 @@ span.flatpickr-weekday:nth-child(7n) {
     }
 
     .inventory-table-stock {
-        font-size: 0.65rem;
-        /* Further reduce font for single screen fit */
+        font-size: 0.75rem;
+        /* Slightly larger for readability */
         width: 100%;
         table-layout: fixed;
-        /* Force fixed layout to prevent overflow */
     }
 
-    .inventory-table-stock th,
+    .inventory-table-stock th {
+        padding: 0.4rem 0.1rem !important;
+        font-size: 0.7rem;
+    }
+
     .inventory-table-stock td {
-        padding: 0.15rem 0.05rem !important;
-        /* Minimum padding */
+        padding: 0 !important;
+        height: 48px;
+        /* Taller cells for easier tapping */
     }
 
     .inventory-table-stock td input {
-        padding: 0.15rem 0 !important;
-        font-size: 0.65rem;
+        padding: 0 !important;
+        font-size: 0.85rem;
+        /* Larger text for the actual input value */
+        height: 100%;
+        font-weight: 700;
     }
 
     .inventory-table-stock .date-col-stock {
-        width: 65px;
-        /* Tight width for "先月の繰越" */
-        font-size: 0.6rem;
+        width: 60px;
+        font-size: 0.65rem;
     }
 
     .remaining-cell-stock {
-        padding: 0.15rem 0 !important;
+        padding: 0 !important;
+        line-height: 48px;
         font-weight: 800;
+        font-size: 0.8rem;
     }
 }
 

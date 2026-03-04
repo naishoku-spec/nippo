@@ -1834,19 +1834,16 @@ function switchView(view) {
     if (viewMonthBtn) viewMonthBtn.classList.toggle('active', view === 'month');
     if (viewStockBtn) viewStockBtn.classList.toggle('active', view === 'stock');
 
-    // Sidebar items
-    const sidebarDay = document.getElementById('sidebar-day');
-    const sidebarStock = document.getElementById('sidebar-stock');
-    if (sidebarDay) sidebarDay.classList.toggle('active', view === 'day' || view === 'month');
-    if (sidebarStock) sidebarStock.classList.toggle('active', view === 'stock');
+    // Sidebar items (IDs now match viewDayBtn and viewStockBtn in index.html)
+    // The active class will be handled above via classList.toggle if buttons were found by ID
 
-    dayViewContainer.style.display = view === 'day' ? 'block' : 'none';
-    monthViewContainer.style.display = view === 'month' ? 'block' : 'none';
-    stockViewContainer.style.display = view === 'stock' ? 'block' : 'none';
+    dayViewContainer.style.display = (view === 'day') ? 'block' : 'none';
+    monthViewContainer.style.display = (view === 'month') ? 'block' : 'none';
+    stockViewContainer.style.display = (view === 'stock') ? 'block' : 'none';
 
     // Toggle header selectors visibility
     const stockMonthSelector = document.getElementById('monthSelectorStock');
-    const dayDateSelector = document.querySelector('.date-selector');
+    const dayDateSelector = document.getElementById('dayDateSelector');
 
     if (view === 'stock') {
         if (stockMonthSelector) stockMonthSelector.style.display = 'flex';
@@ -2403,10 +2400,21 @@ function loadRollData() {
     const stored = localStorage.getItem(ROLL_STORAGE_KEY);
     if (stored) {
         try {
-            rollAllData = JSON.parse(stored);
+            const parsed = JSON.parse(stored);
+            if (parsed && Object.keys(parsed).length > 0) {
+                rollAllData = parsed;
+            } else {
+                // If parsed data is empty or invalid, use initial data
+                rollAllData = JSON.parse(JSON.stringify(ROLL_INITIAL_DATA));
+            }
         } catch (e) {
-            rollAllData = {};
+            // If JSON parsing fails, use initial data
+            console.error("Error parsing roll data from localStorage, using initial data:", e);
+            rollAllData = JSON.parse(JSON.stringify(ROLL_INITIAL_DATA));
         }
+    } else {
+        // If no data in localStorage, use initial data
+        rollAllData = JSON.parse(JSON.stringify(ROLL_INITIAL_DATA));
     }
     // Merge initial data (don't overwrite user edits)
     Object.keys(ROLL_INITIAL_DATA).forEach(key => {
@@ -2535,7 +2543,7 @@ function renderRollStock() {
     const carryRow = document.createElement('tr');
     carryRow.style.background = 'var(--bg-main)';
     carryRow.style.borderBottom = '2px solid var(--border)';
-    let carryHtml = '<td style="font-weight:700; padding:0.75rem; white-space:nowrap;">先月の繰越</td>';
+    let carryHtml = '<td style="font-weight:700; padding:0.75rem; white-space:nowrap;">繰越分</td>';
     ROLL_TYPES.forEach(type => {
         carryHtml += `<td></td><td></td><td><input type="number" class="carry-input" data-type="${type}" value="${data[type].carryover || 0}" style="font-weight:700; color:var(--primary)"></td>`;
     });

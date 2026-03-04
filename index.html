@@ -37,11 +37,11 @@
                     <span class="nav-icon">🏭</span>
                     一階日報
                 </a>
-                <button id="sidebar-day" class="nav-item active" onclick="switchView('day')">
+                <button id="view-day" class="nav-item active" onclick="switchView('day')">
                     <span class="nav-icon">📋</span>
                     2階日報
                 </button>
-                <button id="sidebar-stock" class="nav-item" onclick="switchView('stock')">
+                <button id="view-stock" class="nav-item" onclick="switchView('stock')">
                     <span class="nav-icon">📦</span>
                     ロール在庫表
                 </button>
@@ -60,7 +60,7 @@
                     </div>
                 </div>
                 <div class="header-selectors">
-                    <div class="date-selector">
+                    <div class="date-selector" id="dayDateSelector">
                         <input type="date" id="current-date-picker">
                     </div>
                     <!-- Moved stock month selector here -->
@@ -390,7 +390,7 @@
                         </div>
                         <div class="card-body-stock">
                             <div class="stat-stock">
-                                <span class="stat-label-stock">先月の繰越</span>
+                                <span class="stat-label-stock">繰越分</span>
                                 <span class="stat-value-stock" id="filmCarryoverStock">0</span>
                             </div>
 
@@ -407,7 +407,7 @@
                         </div>
                         <div class="card-body-stock">
                             <div class="stat-stock">
-                                <span class="stat-label-stock">先月の繰越</span>
+                                <span class="stat-label-stock">繰越分</span>
                                 <span class="stat-value-stock" id="plainCarryoverStock">0</span>
                             </div>
 
@@ -424,7 +424,7 @@
                         </div>
                         <div class="card-body-stock">
                             <div class="stat-stock">
-                                <span class="stat-label-stock">先月の繰越</span>
+                                <span class="stat-label-stock">繰越分</span>
                                 <span class="stat-value-stock" id="eogCarryoverStock">0</span>
                             </div>
 
