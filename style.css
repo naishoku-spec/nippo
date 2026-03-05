@@ -282,6 +282,11 @@ select:focus {
     overflow-x: auto;
 }
 
+/* Allow sticky header to work by escaping horizontal scroll context */
+.inventory-table-wrapper {
+    overflow: visible !important;
+}
+
 table {
     width: 100%;
     border-collapse: collapse;
@@ -894,12 +899,31 @@ span.flatpickr-weekday:nth-child(7n) {
     border-collapse: collapse;
 }
 
+.inventory-table-stock thead {
+    position: -webkit-sticky;
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    /* Soft shadow to separate from table body when scrolling */
+    box-shadow: 0 4px 6px -4px rgba(0, 0, 0, 0.15);
+}
+
 .inventory-table-stock th {
     background: var(--bg-main);
     text-align: center;
     border: 1px solid var(--border);
     padding: 0.5rem;
     font-size: 0.85rem;
+    position: relative;
+    /* relative and pseudo-element to fix Safari border disappearance */
+}
+
+.inventory-table-stock th::after {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border: 1px solid var(--border);
+    pointer-events: none;
 }
 
 .inventory-table-stock td {
