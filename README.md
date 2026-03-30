@@ -1,4 +1,4 @@
-# 2階日報 (Production Log)
+# 2階製造 (Production Log)
 
 複数人で共有可能な日報管理ツールです。
 

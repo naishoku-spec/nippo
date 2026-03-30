@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>1階日報 - プレス機 R1-R4</title>
+    <title>1階プレス機 - プレス機 R1-R4</title>
     <meta name="description" content="1階プレス機（R1-R4）の日報管理アプリ">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link
@@ -26,25 +26,59 @@
             <button class="sidebar-close-btn" id="sidebar-close-btn" aria-label="メニューを閉じる">✕</button>
             <div class="sidebar-header">
                 <div class="logo-section">
-                    <h1 style="font-size: 1.5rem;">日報システム</h1>
+                    <h1 style="font-size: 1.5rem;">管理システム</h1>
                 </div>
             </div>
 
-            <div class="sidebar-title">メニュー</div>
-            <nav class="sidebar-nav">
-                <a href="1f.html" class="nav-item active">
-                    <span class="nav-icon">🏭</span>
-                    一階日報
-                </a>
-                <a href="index.html" class="nav-item">
-                    <span class="nav-icon">📋</span>
-                    2階日報
-                </a>
-                <a href="index.html?view=stock" class="nav-item">
-                    <span class="nav-icon">📦</span>
-                    ロール在庫表
-                </a>
-            </nav>
+            <div class="sidebar-section">
+                <div class="sidebar-title">日報管理</div>
+                <nav class="sidebar-nav">
+                    <a href="1f.html" class="nav-item active">
+                        <span class="nav-icon">・</span>
+                        1階プレス機
+                    </a>
+                    <a href="1f-kenpin.html" class="nav-item">
+                        <span class="nav-icon">・</span>
+                        1階検品機
+                    </a>
+                    <a href="index.html?view=day" class="nav-item">
+                        <span class="nav-icon">・</span>
+                        2階製造
+                    </a>
+                </nav>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-title">在庫管理</div>
+                <nav class="sidebar-nav">
+                    <a href="index.html?view=stock" class="nav-item">
+                        <span class="nav-icon">・</span>
+                        ロール在庫
+                    </a>
+                    <a href="index.html?view=sliver" class="nav-item">
+                        <span class="nav-icon">・</span>
+                        スライバー在庫
+                    </a>
+                    <a href="index.html?view=hanapon" class="nav-item">
+                        <span class="nav-icon">・</span>
+                        鼻ぽん在庫
+                    </a>
+                    <a href="index.html?view=snowsprint" class="nav-item">
+                        <span class="nav-icon">・</span>
+                        スノースプリント資材
+                    </a>
+                </nav>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-title">シフト管理</div>
+                <nav class="sidebar-nav">
+                    <a href="index.html?view=shift" class="nav-item">
+                        <span class="nav-icon">・</span>
+                        シフト表
+                    </a>
+                </nav>
+            </div>
         </aside>
 
         <!-- Sidebar Overlay -->
@@ -56,7 +90,7 @@
                 <div style="display: flex; align-items: center; gap: 0.75rem;">
                     <button class="hamburger-btn" id="hamburger-btn" aria-label="メニューを開く">☰</button>
                     <div class="logo-section">
-                        <h1>1階日報 <span style="font-weight:300; opacity:0.7">Press Machine Log</span></h1>
+                        <h1>1階プレス機 <span style="font-weight:300; opacity:0.7">Press Machine Log</span></h1>
                     </div>
                 </div>
                 <div style="display: flex; gap: 1rem; align-items: center;">
@@ -71,6 +105,27 @@
             </header>
 
             <div id="day-view-container">
+                <!-- Records Table -->
+                <div class="card" style="margin-bottom: 1.5rem;">
+                    <div class="table-container">
+                        <table id="records-table-1f">
+                            <thead>
+                                <tr>
+                                    <th>機械</th>
+                                    <th>開始時間</th>
+                                    <th>終了時間</th>
+                                    <th>稼働時間</th>
+                                    <th>カウント/日</th>
+                                    <th>カウントTOTAL</th>
+                                    <th>備考</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="records-list-1f"></tbody>
+                        </table>
+                    </div>
+                </div>
+
                 <!-- Navigation and Summary -->
                 <div
                     style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 1.5rem; gap: 1rem; flex-wrap: wrap;">
@@ -80,7 +135,7 @@
                             <div>
                                 <div
                                     style="font-size: 0.8rem; color: var(--text-muted); font-weight: 700; margin-bottom: 0.25rem;">
-                                    🏆 R1～R4 本日の合算</div>
+                                    🏆 R1~R4の総プレス数/日</div>
                                 <div id="grand-total-display-1f"
                                     style="font-size: 2.25rem; font-weight: 800; color: var(--primary); font-family: 'Outfit', sans-serif; line-height: 1;">
                                     0</div>
@@ -99,27 +154,6 @@
                             style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.75rem; margin-top: 1.25rem; border-top: 1px dashed var(--border); padding-top: 1rem;">
                             <!-- Generated by JS -->
                         </div>
-                    </div>
-                </div>
-
-                <!-- Records Table -->
-                <div class="card">
-                    <div class="table-container">
-                        <table id="records-table-1f">
-                            <thead>
-                                <tr>
-                                    <th>機械</th>
-                                    <th>開始時間</th>
-                                    <th>終了時間</th>
-                                    <th>稼働時間</th>
-                                    <th>カウント/日</th>
-                                    <th>カウントTOTAL</th>
-                                    <th>備考</th>
-                                    <th></th>
-                                </tr>
-                            </thead>
-                            <tbody id="records-list-1f"></tbody>
-                        </table>
                     </div>
                 </div>
 
@@ -186,7 +220,7 @@
                 <div class="month-summary-grid">
                     <div class="card">
                         <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 1rem;">📊 機械別月間カウント</h3>
-                        <div id="monthly-machine-list" style="display: flex; flex-direction: column; gap: 0.75rem;">
+                        <div id="monthly-machine-list">
                         </div>
                     </div>
                     <div class="card">
@@ -217,17 +251,6 @@
                 </div>
             </div>
 
-            <!-- Carryover Settings -->
-            <div class="card" style="margin-top: 2rem;" id="carryover-section">
-                <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 1rem;">⚙️ 繰越カウント設定</h3>
-                <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">各機械の累計カウントの開始値（繰越）を設定します。
-                </p>
-                <div id="carryover-inputs"
-                    style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
-                </div>
-                <button id="save-carryover-btn" class="btn btn-primary"
-                    style="margin-top: 1rem; width: auto; padding: 0.5rem 1.5rem;">保存</button>
-            </div>
         </div>
     </div>
 

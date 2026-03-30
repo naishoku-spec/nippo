@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>1階検品機</title>
+    <meta name="description" content="一階検品機の日報管理アプリ">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;600;700;800&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="1f-style.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/ja.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+    <style>
+        /* Premium modern spreadsheet styling */
+        .excel-table-wrapper {
+            overflow-x: auto;
+            margin: 0;
+            padding: 0;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05); /* Soft drop shadow */
+            background: #fff;
+            border: 1px solid rgba(226, 232, 240, 0.8);
+        }
+
+        #kenpin-spreadsheet {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            font-size: 13px;
+            font-family: 'Inter', 'Yu Gothic', sans-serif;
+            table-layout: fixed;
+        }
+
+        #kenpin-spreadsheet th {
+            /* Sleek dark gradient header */
+            background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+            color: #f8fafc;
+            padding: 6px 2px;
+            font-weight: 700;
+            text-align: center;
+            white-space: normal;     /* Allow wrapping for larger text */
+            line-height: 1.2;
+            word-break: keep-all;    /* Try to break at logical points */
+            font-size: 14px;
+            letter-spacing: -0.2px;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
+            border-bottom: 2px solid #0f172a;
+        }
+        
+        #kenpin-spreadsheet th:last-child {
+            border-right: none;
+        }
+
+        /* Make "Lot" header specifically larger since it's short */
+        #kenpin-spreadsheet th:nth-child(4) {
+            font-size: 19px;
+            letter-spacing: -1px; /* Tighter letter spacing to squeeze it into the 5% column width */
+        }
+
+        #kenpin-spreadsheet td {
+            border-right: 1px solid #cbd5e1; /* Darker border */
+            border-bottom: 1px solid #cbd5e1; /* Darker border */
+            padding: 0;
+            height: 36px;
+            vertical-align: middle;
+            transition: background 0.2s ease;
+        }
+        
+        #kenpin-spreadsheet td:last-child {
+            border-right: none;
+        }
+
+        #kenpin-spreadsheet tr:nth-child(odd) td {
+            background: #ffffff;
+        }
+
+        #kenpin-spreadsheet tr:nth-child(even) td {
+            background: #f8fafc;
+        }
+
+        #kenpin-spreadsheet tr:hover td {
+            background: #f1f5f9; /* Subtle hover effect */
+        }
+
+        #kenpin-spreadsheet .cell-input {
+            width: 100%;
+            height: 100%;
+            border: none;
+            background: transparent;
+            padding: 4px 8px;    /* Original padding */
+            font-size: 13px;     /* Original font size */
+            font-family: inherit;
+            box-sizing: border-box;
+            outline: none;
+            color: #334155;      /* Original text color */
+            transition: all 0.2s;
+            text-overflow: ellipsis; /* Keep this so text doesn't cut mid-letter */
+        }
+
+        #kenpin-spreadsheet .cell-input:focus {
+            background: #ffffff;
+            box-shadow: inset 0 0 0 2px #3b82f6; /* Modern blue focus ring */
+            z-index: 5;
+            position: relative;
+            border-radius: 2px;
+        }
+
+        #kenpin-spreadsheet .cell-input[type="number"] {
+            text-align: right;
+            font-feature-settings: "tnum";
+            font-variant-numeric: tabular-nums;
+            font-weight: 500;
+        }
+
+        #kenpin-spreadsheet .cell-input[type="time"] {
+            text-align: center;
+            padding: 0 4px;
+            color: #475569;
+        }
+
+        #kenpin-spreadsheet .cell-readonly {
+            padding: 4px 8px;
+            text-align: center;
+            font-size: 13px;
+            white-space: nowrap;
+            color: #64748b;
+        }
+
+        #kenpin-spreadsheet .cell-rate {
+            text-align: right;
+            padding-right: 8px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        #kenpin-spreadsheet .cell-day {
+            text-align: center;
+            font-size: 12px;
+            padding: 4px;
+            white-space: nowrap;
+            color: #64748b;
+            background: #f8fafc;
+            border-right: 2px solid #e2e8f0; /* Thicker border for header-like column */
+            font-weight: 500;
+        }
+
+        #kenpin-spreadsheet tr:hover .cell-day {
+            background: #f1f5f9;
+        }
+
+        #kenpin-spreadsheet .cell-delete {
+            text-align: center;
+        }
+
+        #kenpin-spreadsheet .cell-delete button {
+            background: none;
+            border: none;
+            color: #ef4444;
+            cursor: pointer;
+            font-size: 14px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            transition: all 0.2s;
+            opacity: 0.6;
+        }
+
+        #kenpin-spreadsheet tr:hover .cell-delete button {
+            opacity: 1;
+        }
+
+        #kenpin-spreadsheet .cell-delete button:hover {
+            background: #fef2f2;
+            color: #dc2626;
+        }
+
+        /* Column widths - percentage based to prevent horizontal scroll */
+        .col-day { width: 3.5%; }
+        .col-customer { width: 14.0%; }
+        .col-type { width: 10.5%; }
+        .col-lot { width: 5.0%; }
+        .col-time { width: 7.5%; }
+        .col-duration { width: 5.5%; }
+        .col-order { width: 6.0%; }
+        .col-product { width: 6.0%; }
+        .col-reject { width: 4.4%; }
+        .col-rate { width: 5.0%; }
+        .col-operator { width: 7.5%; }
+
+        .spreadsheet-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 16px 20px;
+            background: #ffffff;
+            border-bottom: 1px solid #e2e8f0;
+            border-radius: 12px 12px 0 0;
+        }
+
+        .spreadsheet-header h1 {
+            font-size: 1.25rem;
+            font-weight: 800;
+            color: #0f172a;
+            margin: 0;
+            letter-spacing: -0.02em;
+        }
+
+        .spreadsheet-controls {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-left: auto;
+        }
+
+        .spreadsheet-controls .date-input {
+            border: 1px solid #cbd5e1;
+            padding: 6px 12px;
+            font-size: 14px;
+            border-radius: 6px;
+            color: #334155;
+            font-weight: 500;
+            background: #f8fafc;
+            transition: border 0.2s;
+        }
+
+        .spreadsheet-controls .date-input:focus {
+            border-color: #3b82f6;
+            outline: none;
+        }
+
+        .add-row-btn {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            color: #fff;
+            border: none;
+            padding: 8px 16px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            border-radius: 6px;
+            box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
+            transition: all 0.2s ease;
+        }
+
+        .add-row-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 6px rgba(37, 99, 235, 0.3);
+            background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+        }
+        
+        .add-row-btn:active {
+            transform: translateY(0);
+        }
+
+        .delete-row-btn {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            color: #fff;
+            border: none;
+            padding: 8px 16px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            border-radius: 6px;
+            box-shadow: 0 2px 4px rgba(220, 38, 38, 0.2);
+            transition: all 0.2s ease;
+            margin-left: 8px; /* Space from add button */
+        }
+
+        .delete-row-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 6px rgba(220, 38, 38, 0.3);
+            background: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
+        }
+        
+        .delete-row-btn:active {
+            transform: translateY(0);
+        }
+
+        /* Notes Panel */
+        .notes-panel {
+            margin-top: 1.5rem;
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 16px 20px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+            display: none; /* Hidden by default */
+        }
+
+        .notes-panel.active {
+            display: block;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .notes-panel h3 {
+            margin: 0 0 10px 0;
+            font-size: 1rem;
+            color: #1e293b;
+            font-weight: 700;
+        }
+
+        .notes-panel textarea {
+            width: 100%;
+            height: 80px;
+            padding: 10px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            font-family: inherit;
+            font-size: 13px;
+            resize: vertical;
+            transition: border 0.2s;
+        }
+
+        .notes-panel textarea:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Active row highlighting */
+        #kenpin-spreadsheet tr.active-row td {
+            background: #e0f2fe !important;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app-wrapper">
+        <!-- Sidebar Menu -->
+        <aside class="sidebar" id="sidebar">
+            <button class="sidebar-close-btn" id="sidebar-close-btn" aria-label="メニューを閉じる">✕</button>
+            <div class="sidebar-header">
+                <div class="logo-section">
+                    <h1 style="font-size: 1.5rem;">管理システム</h1>
+                </div>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-title">日報管理</div>
+                <nav class="sidebar-nav">
+                    <a href="1f.html" class="nav-item">
+                        <span class="nav-icon">・</span>
+                        1階プレス機
+                    </a>
+                    <a href="1f-kenpin.html" class="nav-item active">
+                        <span class="nav-icon">・</span>
+                        1階検品機
+                    </a>
+                    <a href="index.html?view=day" id="view-day" class="nav-item">
+                        <span class="nav-icon">・</span>
+                        2階製造
+                    </a>
+                </nav>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-title">在庫管理</div>
+                <nav class="sidebar-nav">
+                    <a href="index.html?view=stock" id="view-stock" class="nav-item">
+                        <span class="nav-icon">・</span>
+                        ロール在庫
+                    </a>
+                    <a href="index.html?view=sliver" id="view-sliver" class="nav-item">
+                        <span class="nav-icon">・</span>
+                        スライバー在庫
+                    </a>
+                    <a href="index.html?view=hanapon" id="view-hanapon" class="nav-item">
+                        <span class="nav-icon">・</span>
+                        鼻ぽん在庫
+                    </a>
+                    <a href="index.html?view=snowsprint" id="view-snowsprint" class="nav-item">
+                        <span class="nav-icon">・</span>
+                        スノースプリント資材
+                    </a>
+                </nav>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-title">シフト管理</div>
+                <nav class="sidebar-nav">
+                    <a href="index.html?view=shift" class="nav-item">
+                        <span class="nav-icon">・</span>
+                        シフト表
+                    </a>
+                </nav>
+            </div>
+        </aside>
+
+        <!-- Sidebar Overlay -->
+        <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+        <!-- Main Content -->
+        <div class="main-container" style="padding: 0;">
+            <!-- Compact header like Excel toolbar -->
+            <div class="spreadsheet-header">
+                <button class="hamburger-btn" id="hamburger-btn" aria-label="メニューを開く">☰</button>
+                <div class="logo-section">
+                    <h1>1階検品機</h1>
+                </div>
+                <div class="spreadsheet-controls">
+                    <input type="date" id="current-date-picker" class="date-input">
+                    <button class="add-row-btn" id="add-row-btn">＋ 行追加</button>
+                    <button class="delete-row-btn" id="delete-row-btn">－ 行削除</button>
+                </div>
+            </div>
+
+            <!-- Excel-like table -->
+            <div class="excel-table-wrapper">
+                <table id="kenpin-spreadsheet">
+                    <colgroup>
+                        <col class="col-day">
+                        <col class="col-customer">
+                        <col class="col-type">
+                        <col class="col-lot">
+                        <col class="col-time">
+                        <col class="col-time">
+                        <col class="col-duration">
+                        <col class="col-order">
+                        <col class="col-product">
+                        <col class="col-reject">
+                        <col class="col-reject">
+                        <col class="col-reject">
+                        <col class="col-reject">
+                        <col class="col-reject">
+                        <col class="col-rate">
+                        <col class="col-operator">
+                    </colgroup>
+                    <thead>
+                        <tr>
+                            <th>日</th>
+                            <th>納入先</th>
+                            <th>種類(設定)</th>
+                            <th>ﾛｯﾄ</th>
+                            <th>始/時</th>
+                            <th>終/時</th>
+                            <th>製造時間</th>
+                            <th>受注数</th>
+                            <th>製品ｶｳﾝﾄ</th>
+                            <th>上排</th>
+                            <th>下排</th>
+                            <th>Aｶﾒﾗ</th>
+                            <th>Bｶﾒﾗ</th>
+                            <th>側面</th>
+                            <th>不良率</th>
+                            <th>作業者</th>
+                        </tr>
+                    </thead>
+                    <tbody id="records-list-kenpin"></tbody>
+                </table>
+            </div>
+
+            <!-- Contextual Notes Panel -->
+            <div class="notes-panel" id="notes-panel">
+                <h3><span id="notes-panel-title">行を選択してください</span> の備考 / 特記事項</h3>
+                <textarea id="notes-textarea" placeholder="ここに備考を入力します（自動保存されます）"></textarea>
+            </div>
+        </div>
+    </div>
+
+    <datalist id="customersList">
+        <option value="アズワン">
+        <option value="エフスリィー＆ニチエー">
+        <option value="エフスリィー(アグリス様)">
+        <option value="エフスリィー(配達分)">
+        <option value="エフスリィー(配達分)＆九州医療">
+        <option value="オルガンメディカル">
+        <option value="カクイ">
+        <option value="川本産業">
+        <option value="九州医療">
+        <option value="ジープラン">
+        <option value="ソフトメディカル">
+        <option value="高橋器械店">
+        <option value="竹山">
+        <option value="トムス">
+        <option value="ニチエー">
+    </datalist>
+
+    <datalist id="typesList">
+        <option value="アグリス長谷川SP">
+        <option value="シボ付No.5">
+        <option value="シボ付No.6">
+        <option value="シボ付No.6厚">
+        <option value="ノーマルNo.5">
+        <option value="ノーマルNo.6">
+        <option value="ノーマルNo.6厚">
+        <option value="メッキン">
+    </datalist>
+
+    <datalist id="operatorsList">
+        <option value="川嶋">
+        <option value="岡崎">
+        <option value="亀井">
+        <option value="牛田">
+        <option value="西岡">
+        <option value="今枝">
+    </datalist>
+
+    <script src="1f-kenpin-app.js"></script>
+</body>
+
+</html>

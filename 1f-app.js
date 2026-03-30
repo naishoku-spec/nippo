@@ -29,7 +29,6 @@ console.log(`1F App: Running in ${isProduction ? 'PRODUCTION' : 'DEVELOPMENT'} m
 
 // State Management
 let records = JSON.parse(localStorage.getItem(LS_KEY)) || [];
-let carryOver = JSON.parse(localStorage.getItem(LS_CARRYOVER_KEY)) || { R1: 0, R2: 0, R3: 0, R4: 0 };
 let currentDate = new Date().toLocaleDateString('sv-SE');
 let isFirstLoad = true;
 
@@ -45,6 +44,16 @@ if (database) {
 
         if (isFirstLoad) {
             isFirstLoad = false;
+            // --- 1-TIME PATCH to fix R1 count ---
+            let patched = false;
+            firebaseRecords.forEach(r => {
+                if (r.machine === 'R1' && r.count === 1) {
+                    r.count = 0;
+                    patched = true;
+                }
+            });
+            // ------------------------------------
+            
             if (firebaseRecords.length > 0 && records.length === 0) {
                 records = firebaseRecords;
                 localStorage.setItem(LS_KEY, JSON.stringify(records));
@@ -58,9 +67,15 @@ if (database) {
                     database.ref(DB_PATH).set(records);
                 }
             }
+            if (patched) database.ref(DB_PATH).set(records);
             if (typeof renderRecords === 'function') renderRecords();
         } else {
             if (firebaseRecords.length > 0) {
+                // --- 1-TIME PATCH ---
+                firebaseRecords.forEach(r => {
+                    if (r.machine === 'R1' && r.count === 1) r.count = 0;
+                });
+                // --------------------
                 records = firebaseRecords;
                 localStorage.setItem(LS_KEY, JSON.stringify(records));
                 if (typeof renderRecords === 'function') {
@@ -68,17 +83,6 @@ if (database) {
                     if (monthViewContainer && monthViewContainer.style.display === 'block') renderMonthlyRecords();
                 }
             }
-        }
-    });
-
-    // Sync carryover
-    database.ref(DB_CARRYOVER_PATH).on('value', (snapshot) => {
-        const data = snapshot.val();
-        if (data) {
-            carryOver = data;
-            localStorage.setItem(LS_CARRYOVER_KEY, JSON.stringify(carryOver));
-            renderCarryoverInputs();
-            if (typeof renderRecords === 'function') renderRecords();
         }
     });
 }
@@ -124,11 +128,9 @@ function init() {
     viewDayBtn.addEventListener('click', () => switchView('day'));
     viewMonthBtn.addEventListener('click', () => switchView('month'));
     document.getElementById('entry-form-1f').addEventListener('submit', handleAddRecord);
-    document.getElementById('save-carryover-btn').addEventListener('click', saveCarryover);
 
     ensureDayRecords(currentDate);
     renderRecords();
-    renderCarryoverInputs();
 
     // Mobile Menu Setup
     setupMobileMenu();
@@ -212,11 +214,11 @@ function renderMonthlyRecords() {
     // Machine list
     const machineListEl = document.getElementById('monthly-machine-list');
     machineListEl.innerHTML = MACHINES.map(m => `
-        <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; background: rgba(var(--primary-rgb), 0.03); border: 1px solid var(--border); border-radius: 8px;">
-            <span class="machine-badge machine-badge-${m.toLowerCase()}" style="font-size: 1rem; padding: 0.4rem 0.8rem;">${m}</span>
-            <div style="text-align: right;">
-                <div style="font-weight: 800; font-size: 1.25rem; color: var(--primary);">${machineData[m].total.toLocaleString()}</div>
-                <div style="font-size: 0.7rem; color: var(--text-muted);">${machineData[m].days}日稼働 / 平均 ${machineData[m].days > 0 ? Math.round(machineData[m].total / machineData[m].days).toLocaleString() : 0}/日</div>
+        <div class="monthly-machine-item">
+            <span class="machine-badge machine-badge-${m.toLowerCase()}">${m}</span>
+            <div class="stats-data">
+                <div class="total-val">${machineData[m].total.toLocaleString()}</div>
+                <div class="avg-val">${machineData[m].days}日 / 平均 ${machineData[m].days > 0 ? Math.round(machineData[m].total / machineData[m].days).toLocaleString() : 0}</div>
             </div>
         </div>
     `).join('');
@@ -225,17 +227,19 @@ function renderMonthlyRecords() {
     const statsOverviewEl = document.getElementById('monthly-stats-overview-1f');
     const dayCount = Object.keys(dailyData).length;
     statsOverviewEl.innerHTML = `
-        <div style="margin-bottom: 1rem;">
-            <div style="font-size: 0.8rem; color: var(--text-muted);">稼働日数</div>
-            <div style="font-size: 1.5rem; font-weight: 800;">${dayCount} 日</div>
-        </div>
-        <div style="margin-bottom: 1rem;">
-            <div style="font-size: 0.8rem; color: var(--text-muted);">総プレス数（4台合算）</div>
-            <div style="font-size: 2rem; font-weight: 800; color: var(--primary);">${totalMonthCount.toLocaleString()}</div>
-        </div>
-        <div>
-            <div style="font-size: 0.8rem; color: var(--text-muted);">月平均/日</div>
-            <div style="font-size: 1.5rem; font-weight: 800;">${dayCount > 0 ? Math.round(totalMonthCount / dayCount).toLocaleString() : 0}</div>
+        <div class="stats-summary-flex">
+            <div class="stats-item">
+                <div class="stats-label">稼働日数</div>
+                <div class="stats-value">${dayCount} 日</div>
+            </div>
+            <div class="stats-item primary">
+                <div class="stats-label">総プレス数</div>
+                <div class="stats-value">${totalMonthCount.toLocaleString()}</div>
+            </div>
+            <div class="stats-item">
+                <div class="stats-label">月平均/日</div>
+                <div class="stats-value">${dayCount > 0 ? Math.round(totalMonthCount / dayCount).toLocaleString() : 0}</div>
+            </div>
         </div>
     `;
 
@@ -386,40 +390,12 @@ function saveRecords() {
     }
 }
 
-// Google Sheets Synchronization for 1F
-async function syncToGoogleSheets(recordsToSync) {
-    const GAS_URL = 'https://script.google.com/macros/s/AKfycbxU3MdLFS_1LxJ1T1dFpt0QVN2PejD3QBnSHxaVfN9edGjNuRU6IJkmg9csfRtlvzba/exec';
-
-    // Filter out empty records
-    const activeRecords = recordsToSync.filter(r => r.count > 0 || r.notes);
-
-    if (activeRecords.length === 0) return;
-
-    try {
-        await fetch(GAS_URL, {
-            method: 'POST',
-            mode: 'no-cors',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                floor: '1F',
-                records: activeRecords
-            }),
-        });
-        console.log('Synced to Google Sheets (1F)');
-    } catch (e) {
-        console.error('Google Sheets sync failed:', e);
-    }
-}
-
 // Calculate cumulative total for a machine up to a certain date
 function getCumulativeTotal(machine, upToDate) {
-    const base = carryOver[machine] || 0;
     const sum = records
         .filter(r => r.machine === machine && r.date <= upToDate && r.count > 0)
         .reduce((acc, r) => acc + r.count, 0);
-    return base + sum;
+    return sum;
 }
 
 // Render Records
@@ -575,36 +551,6 @@ function deleteRecord(id) {
         saveRecords();
         renderRecords();
     }
-}
-
-// Carryover management
-function renderCarryoverInputs() {
-    const container = document.getElementById('carryover-inputs');
-    container.innerHTML = MACHINES.map(m => `
-        <div style="display: flex; align-items: center; gap: 0.5rem;">
-            <span class="machine-badge machine-badge-${m.toLowerCase()}" style="min-width: 40px; text-align: center;">${m}</span>
-            <input type="number" class="inline-input carryover-input" data-machine="${m}"
-                   value="${carryOver[m] || ''}" placeholder="0"
-                   style="border: 1px solid var(--border); padding: 8px; border-radius: 6px;">
-        </div>
-    `).join('');
-}
-
-function saveCarryover() {
-    const inputs = document.querySelectorAll('.carryover-input');
-    inputs.forEach(input => {
-        carryOver[input.dataset.machine] = parseInt(input.value) || 0;
-    });
-    try {
-        localStorage.setItem(LS_CARRYOVER_KEY, JSON.stringify(carryOver));
-    } catch (e) {
-        console.error('Carryover LocalStorage save failed:', e);
-    }
-    if (database) {
-        database.ref(DB_CARRYOVER_PATH).set(carryOver).catch(err => console.error('Carryover Firebase save failed:', err));
-    }
-    renderRecords();
-    alert('繰越カウントを保存しました。');
 }
 
 // Expose functions to global scope

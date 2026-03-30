@@ -204,4 +204,205 @@
     #carryover-inputs {
         grid-template-columns: 1fr 1fr !important;
     }
+
+    /* Monthly View Compact Styles */
+    .month-summary-grid {
+        grid-template-columns: 1fr !important;
+        gap: 0.75rem !important;
+    }
+
+    .month-summary-grid .card {
+        padding: 0.75rem !important;
+        margin-bottom: 0 !important;
+    }
+
+    .month-summary-grid h3 {
+        margin-bottom: 0.5rem !important;
+        font-size: 0.9rem !important;
+    }
+
+    #monthly-machine-list {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.5rem;
+    }
+
+    .monthly-machine-item {
+        display: flex;
+        flex-direction: column;
+        padding: 0.5rem !important;
+        background: rgba(var(--primary-rgb), 0.03);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        align-items: flex-start !important;
+    }
+
+    .monthly-machine-item .machine-badge {
+        font-size: 0.7rem !important;
+        padding: 2px 6px !important;
+        margin-bottom: 0.25rem;
+    }
+
+    .monthly-machine-item .stats-data {
+        width: 100%;
+    }
+
+    .monthly-machine-item .total-val {
+        font-weight: 800;
+        font-size: 1.1rem;
+        color: var(--primary);
+        line-height: 1.1;
+    }
+
+    .monthly-machine-item .avg-val {
+        font-size: 0.6rem;
+        color: var(--text-muted);
+        margin-top: 0.15rem;
+    }
+
+    /* Stats Summary Flex Layout */
+    .stats-summary-flex {
+        display: flex;
+        gap: 0.5rem;
+        justify-content: space-between;
+    }
+
+    .stats-item {
+        flex: 1;
+        background: var(--bg-main);
+        padding: 0.5rem;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+        text-align: center;
+    }
+
+    .stats-item.primary {
+        background: rgba(var(--primary-rgb), 0.05);
+        border-color: rgba(var(--primary-rgb), 0.1);
+    }
+
+    .stats-label {
+        font-size: 0.6rem;
+        color: var(--text-muted);
+        margin-bottom: 2px;
+    }
+
+    .stats-value {
+        font-size: 1rem;
+        font-weight: 800;
+    }
+
+    .stats-item.primary .stats-value {
+        color: var(--primary);
+        font-size: 1.2rem;
+    }
+
+    /* Compact daily breakdown */
+    .month-table {
+        font-size: 0.75rem !important;
+    }
+
+    .month-table th, .month-table td {
+        padding: 0.5rem 0.25rem !important;
+    }
 }
+
+/* Default styles for new classes (non-mobile) */
+#monthly-machine-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.monthly-machine-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem;
+    background: rgba(var(--primary-rgb), 0.03);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+}
+
+.monthly-machine-item .machine-badge {
+    font-size: 1rem;
+    padding: 0.4rem 0.8rem;
+}
+
+.monthly-machine-item .stats-data {
+    text-align: right;
+}
+
+.monthly-machine-item .total-val {
+    font-weight: 800;
+    font-size: 1.25rem;
+    color: var(--primary);
+}
+
+.monthly-machine-item .avg-val {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+}
+
+.stats-summary-flex {
+    display: block;
+}
+
+.stats-item {
+    margin-bottom: 1rem;
+}
+
+.stats-label {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.stats-value {
+    font-size: 1.5rem;
+    font-weight: 800;
+}
+
+.stats-item.primary .stats-value {
+    font-size: 2rem;
+    color: var(--primary);
+}
+
+/* Inspection Machine Table Spreadsheet Style */
+#records-table-kenpin {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+}
+
+#records-table-kenpin th,
+#records-table-kenpin td {
+    border: 1px solid var(--border) !important;
+    padding: 0;
+    text-align: center;
+}
+
+#records-table-kenpin .inline-input {
+    border: none !important;
+    padding: 6px 2px !important;
+    text-align: center;
+    width: 100%;
+    background: transparent !important;
+    box-shadow: none !important;
+    font-size: 0.8rem;
+}
+
+#records-table-kenpin tr:hover {
+    background: rgba(var(--primary-rgb), 0.02);
+}
+
+#records-table-kenpin td:focus-within {
+    background: rgba(var(--primary-rgb), 0.05);
+}
+
+#records-table-kenpin .inline-input:focus {
+    background: white !important;
+    outline: 2px solid var(--primary);
+    z-index: 10;
+    position: relative;
+}
+.inventory-title-header, .logo-section h1 { display: none !important; }
