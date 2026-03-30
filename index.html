@@ -4,478 +4,757 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>シフト管理ダッシュボード</title>
-    <link rel="stylesheet" href="styles.css">
-    <!-- Firebase SDK の追加 -->
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
-    <style>
-        /* キャッシュ対策として重要なスタイルをここに直接記述 */
-        .btn-confirm {
-            background: #3b82f6 !important;
-            color: #fff !important;
-            border: none !important;
-            padding: 12px 24px !important;
-            border-radius: 12px !important;
-            font-weight: 700 !important;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-            width: 100%;
-            box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.3);
-            font-family: inherit;
-            margin-top: 5px;
-        }
+    <title>2階製造 - 記録ツール</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <!-- Flatpickr for custom date styling -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/ja.js"></script>
 
-        .btn-confirm:hover {
-            background: #2563eb !important;
-            transform: translateY(-2px);
-            box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.4);
-        }
-
-        .help-text {
-            font-size: 12px;
-            color: #64748b;
-            margin-top: 12px;
-            line-height: 1.6;
-            background: #f8fafc;
-            padding: 10px;
-            border-radius: 8px;
-            border: 1px solid #e2e8f0;
-        }
-    </style>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
 </head>
 
 <body>
-    <div class="dashboard-container">
-        <!-- ヘッダーセクション -->
-        <header class="header-section">
-            <div class="title-group">
-                <h1 id="main-title">シフト表</h1>
-                <p>Team Schedule Management System</p>
+    <div class="app-wrapper">
+        <!-- Sidebar Menu -->
+        <aside class="sidebar" id="sidebar">
+            <button class="sidebar-close-btn" id="sidebar-close-btn" aria-label="メニューを閉じる">✕</button>
+            <div class="sidebar-header">
+                <div class="logo-section">
+                    <h1 style="font-size: 1.5rem;">管理システム</h1>
+                </div>
             </div>
-            <div class="work-time-card">
-                <h3>就業時間</h3>
-                <div class="time-row"><span>早番</span> 07:00 〜 17:30</div>
-                <div class="time-row"><span>中番</span> 08:30 〜 17:30</div>
-            </div>
-        </header>
 
-        <!-- シフトテーブルセクション -->
-        <div class="table-wrapper">
-            <table class="shift-table">
-                <thead>
-                    <tr>
-                        <th width="20%">日付</th>
-                        <th width="20%">◆ 昼(早番)</th>
-                        <th width="20%">♣ 昼(遅)</th>
-                        <th width="20%">通常シフト</th>
-                        <th width="20%">備考</th>
-                    </tr>
-                </thead>
-                <tbody id="shift-tbody">
-                    <!-- Firebaseからデータを取得して生成 -->
-                </tbody>
-            </table>
+            <div class="sidebar-section">
+                <div class="sidebar-title">日報管理</div>
+                <nav class="sidebar-nav">
+                    <a href="1f.html" class="nav-item">
+                        <span class="nav-icon">・</span>
+                        1階プレス機
+                    </a>
+                    <a href="1f-kenpin.html" class="nav-item">
+                        <span class="nav-icon">・</span>
+                        1階検品機
+                    </a>
+                    <a href="javascript:void(0)" id="sidebar-view-day" class="nav-item active" onclick="switchView('day')">
+                        <span class="nav-icon">・</span>
+                        2階製造
+                    </a>
+                </nav>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-title">在庫管理</div>
+                <nav class="sidebar-nav">
+                    <a href="javascript:void(0)" id="view-stock" class="nav-item" onclick="switchView('stock')">
+                        <span class="nav-icon">・</span>
+                        ロール在庫
+                    </a>
+                    <a href="javascript:void(0)" id="view-sliver" class="nav-item" onclick="switchView('sliver')">
+                        <span class="nav-icon">・</span>
+                        スライバー在庫
+                    </a>
+                    <a href="javascript:void(0)" id="view-hanapon" class="nav-item" onclick="switchView('hanapon')">
+                        <span class="nav-icon">・</span>
+                        鼻ぽん在庫
+                    </a>
+                    <a href="javascript:void(0)" id="view-snowsprint" class="nav-item" onclick="switchView('snowsprint')">
+                        <span class="nav-icon">・</span>
+                        スノースプリント資材
+                    </a>
+                </nav>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-title">シフト管理</div>
+                <nav class="sidebar-nav">
+                    <a href="javascript:void(0)" id="view-shift" class="nav-item" onclick="switchView('shift')">
+                        <span class="nav-icon">・</span>
+                        シフト表
+                    </a>
+                </nav>
+            </div>
+        </aside>
+
+        <!-- Sidebar Overlay -->
+        <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+        <!-- Main Content -->
+        <div class="main-container">
+            <header>
+                <div class="header-left">
+                    <button class="hamburger-btn" id="hamburger-btn" aria-label="メニューを開く">☰</button>
+                    <div class="logo-section">
+                        <h1 class="inventory-title-header">2階製造</h1>
+                    </div>
+                </div>
+                <div class="header-selectors">
+                    <!-- Day/Month Toggle (Always left-most for Production View) -->
+                    <div class="view-toggle" id="productionViewToggle" style="display: none;">
+                        <button id="view-day-btn" class="toggle-btn active">日別</button>
+                        <button id="view-month-btn" class="toggle-btn">月別集計</button>
+                    </div>
+
+                    <div class="date-selector" id="dayDateSelector">
+                        <input type="date" id="current-date-picker">
+                    </div>
+
+                    <div class="month-selector-stock" id="monthSelectorStock" style="display: none;">
+                        <button class="nav-btn-stock" id="prevMonthStock" title="前月">←</button>
+                        <div class="month-display-stock">
+                            <select id="yearSelectStock" class="year-select-stock"></select>
+                            <span class="month-separator-stock">年</span>
+                            <select id="monthSelectStock" class="month-select-stock"></select>
+                            <span class="month-separator-stock">月</span>
+                        </div>
+                        <button class="nav-btn-stock" id="nextMonthStock" title="次月">→</button>
+                    </div>
+
+                    <div class="month-selector-stock" id="monthSelectorSliver" style="display: none;">
+                        <button class="nav-btn-stock" id="prevMonthSliver" title="前月">←</button>
+                        <div class="month-display-stock">
+                            <select id="yearSelectSliver" class="year-select-stock"></select>
+                            <span class="month-separator-stock">年</span>
+                            <select id="monthSelectSliver" class="month-select-stock"></select>
+                            <span class="month-separator-stock">月</span>
+                        </div>
+                        <button class="nav-btn-stock" id="nextMonthSliver" title="次月">→</button>
+                    </div>
+
+                    <div class="month-selector-stock" id="monthSelectorHanapon" style="display: none;">
+                        <button class="nav-btn-stock" id="prevMonthHanapon" title="前月">←</button>
+                        <div class="month-display-stock">
+                            <select id="yearSelectHanapon" class="year-select-stock"></select>
+                            <span class="month-separator-stock">年</span>
+                            <select id="monthSelectHanapon" class="month-select-stock"></select>
+                            <span class="month-separator-stock">月</span>
+                        </div>
+                        <button class="nav-btn-stock" id="nextMonthHanapon" title="次月">→</button>
+                    </div>
+
+                    <div class="month-selector-stock" id="monthSelectorSnowsprint" style="display: none;">
+                        <button class="nav-btn-stock" id="prevMonthSnowsprint" title="前月">←</button>
+                        <div class="month-display-stock">
+                            <select id="yearSelectSnowsprint" class="year-select-stock"></select>
+                            <span class="month-separator-stock">年</span>
+                            <select id="monthSelectSnowsprint" class="month-select-stock"></select>
+                            <span class="month-separator-stock">月</span>
+                        </div>
+                        <button class="nav-btn-stock" id="nextMonthSnowsprint" title="次月">→</button>
+                    </div>
+                </div>
+            </header>
+
+            <div id="day-view-container">
+                <div class="dashboard-grid" style="display: block;">
+                    <!-- Main Display List (Direct Editing) -->
+                    <main>
+                        <div class="card">
+                            <div
+                                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+                                <div>
+                                    <h2 style="font-size: 1.5rem; letter-spacing: -0.01em;">本日の詳細記録</h2>
+                                    <p style="font-size: 0.875rem; color: var(--text-muted); margin-top: 0.25rem;">
+                                        各項目を直接クリックして編集できます。変更は自動的に保存されます。</p>
+                                </div>
+                            </div>
+                            <div class="table-container">
+                                <table id="records-table">
+                                    <thead>
+                                        <tr>
+                                            <th style="width: 80px;">機械</th>
+                                            <th>製品名 / 稼働内容</th>
+                                            <th style="width: 140px;">開始</th>
+                                            <th style="width: 140px;">終了</th>
+                                            <th style="width: 140px;">稼働時間</th>
+                                            <th style="width: 140px; text-align: right;">カウント</th>
+                                            <th style="width: 100px; text-align: center;">操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="records-list">
+                                        <!-- Records A-J will be pre-populated here -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </main>
+
+                    <!-- Daily Notes Section (Added between J and new entry form) -->
+                    <div class="card daily-notes-container">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                            <div>
+                                <h2 style="font-size: 1.5rem; letter-spacing: -0.01em;">備考欄</h2>
+                            </div>
+                            <div id="saveStatusNotes" style="font-size: 0.85rem; color: var(--primary); font-weight: 600;"></div>
+                        </div>
+                        <textarea id="day-note-text" placeholder="ここに備考を入力..." 
+                            style="width: 100%; min-height: 120px; padding: 1rem; border: 1px solid var(--border); border-radius: 8px; font-family: inherit; font-size: 1rem; resize: vertical; box-sizing: border-box; transition: border-color 0.2s, box-shadow 0.2s;"
+                            onfocus="this.style.borderColor='var(--primary)'; this.style.boxShadow='0 0 0 3px rgba(99, 102, 241, 0.1)'"
+                            onblur="this.style.borderColor='var(--border)'; this.style.boxShadow='none'"
+                            oninput="saveDailyNotes()"></textarea>
+                    </div>
+                </div>
+
+                <!-- Horizontal New Entry Form & Stats (At the bottom as requested) -->
+                <div class="card quick-entry-container">
+                    <div class="quick-entry-header">
+                        <div>
+                            <h2 style="font-size: 1.5rem; letter-spacing: -0.01em;">新規登録</h2>
+                            <p style="font-size: 0.875rem; color: var(--text-muted);">新しい機械稼働記録を追加します。</p>
+                        </div>
+
+                        <div class="quick-entry-stats">
+                            <div style="text-align: right; min-width: 80px;">
+                                <div
+                                    style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">
+                                    No.6 合計</div>
+                                <div id="no6-total-count"
+                                    style="font-size: 1.5rem; font-weight: 800; color: var(--accent);">
+                                    0</div>
+                            </div>
+                            <div style="text-align: right; min-width: 80px;">
+                                <div
+                                    style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">
+                                    鼻ぽん小 合計</div>
+                                <div id="hanapon-s-total-count"
+                                    style="font-size: 1.5rem; font-weight: 800; color: var(--accent);">0</div>
+                            </div>
+                            <div style="text-align: right; min-width: 100px;">
+                                <div
+                                    style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">
+                                    本日の合計</div>
+                                <div id="day-total-count"
+                                    style="font-size: 1.75rem; font-weight: 800; color: var(--primary);">
+                                    0</div>
+                            </div>
+                            <div style="text-align: right; min-width: 100px;">
+                                <div
+                                    style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">
+                                    平均時間</div>
+                                <div id="avg-duration"
+                                    style="font-size: 1.75rem; font-weight: 800; color: var(--primary);">
+                                    0h 00m</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <form id="entry-form" class="quick-entry-form">
+                        <div class="form-group small">
+                            <label>機械</label>
+                            <select id="machine" required>
+                                <option value="A">A</option>
+                                <option value="B">B</option>
+                                <option value="C">C</option>
+                                <option value="D">D</option>
+                                <option value="E">E</option>
+                                <option value="F">F</option>
+                                <option value="G">G</option>
+                                <option value="H">H</option>
+                                <option value="I">I</option>
+                                <option value="J">J</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>製品名</label>
+                            <select id="product" required>
+                                <option value="">選択してください...</option>
+                                <optgroup label="No.シリーズ">
+                                    <option value="No.4">No.4</option>
+                                    <option value="No.6">No.6</option>
+                                    <option value="No.10">No.10</option>
+                                    <option value="No.30フラット">No.30フラット</option>
+                                    <option value="No.30スイック">No.30スイック</option>
+                                    <option value="No.30タブレット">No.30タブレット</option>
+                                </optgroup>
+                                <optgroup label="鼻ぽんシリーズ">
+                                    <option value="鼻ぽん大">鼻ぽん大</option>
+                                    <option value="鼻ぽん小">鼻ぽん小</option>
+                                    <option value="穴あき鼻ぽん小さめ">穴あき鼻ぽん小さめ</option>
+                                    <option value="穴あき鼻ぽん普通">穴あき鼻ぽん普通</option>
+                                    <option value="鼻ぽん特注">鼻ぽん特注</option>
+                                </optgroup>
+                                <optgroup label="定型/特殊製品">
+                                    <option value="コア">コア</option>
+                                    <option value="楕円型タブレット">楕円型タブレット</option>
+                                    <option value="SH">SH</option>
+                                    <option value="MSH">MSH</option>
+                                    <option value="ソフト">ソフト</option>
+                                    <option value="インジェクション">インジェクション</option>
+                                </optgroup>
+                                <optgroup label="綿球/その他">
+                                    <option value="ガーゼボール">ガーゼボール</option>
+                                    <option value="固巻円柱綿">固巻円柱綿</option>
+                                    <option value="ぼぼ小">ぼぼ小</option>
+                                    <option value="ぼぼ大">ぼぼ大</option>
+                                    <option value="ウォータージェット綿球">ウォータージェット綿球</option>
+                                    <option value="美顔器 小">美顔器 小</option>
+                                    <option value="美顔器 大">美顔器 大</option>
+                                    <option value="歯科用綿球">歯科用綿球</option>
+                                    <option value="円柱状脱脂綿">円柱状脱脂綿</option>
+                                    <option value="俵綿球">俵綿球</option>
+                                    <option value="ふた">ふた</option>
+                                    <option value="コットンボール">コットンボール</option>
+                                    <option value="消臭ボール">消臭ボール</option>
+                                    <option value="高圧縮">高圧縮</option>
+                                    <option value="円錐型綿">円錐型綿</option>
+                                    <option value="エアロマビーズ">エアロマビーズ</option>
+                                </optgroup>
+                                <optgroup label="ツッペル/特殊綿球">
+                                    <option value="ツッペル極小 #6片">ツッペル極小 #6片</option>
+                                    <option value="ツッペル小 #10片">ツッペル小 #10片</option>
+                                    <option value="ツッペル中 #12片">ツッペル中 #12片</option>
+                                    <option value="ツッペル大 #14片">ツッペル大 #14片</option>
+                                    <option value="開頭綿球#40">開頭綿球#40</option>
+                                    <option value="むし綿球">むし綿球</option>
+                                </optgroup>
+                                <optgroup label="両穴コットン玉シリーズ">
+                                    <option value="両穴コットン玉#4両">両穴コットン玉#4両</option>
+                                    <option value="両穴コットン玉#6両">両穴コットン玉#6両</option>
+                                    <option value="両穴コットン玉#7両">両穴コットン玉#7両</option>
+                                    <option value="両穴コットン玉#8両">両穴コットン玉#8両</option>
+                                    <option value="両穴コットン玉#10両">両穴コットン玉#10両</option>
+                                    <option value="両穴コットン玉#12両">両穴コットン玉#12両</option>
+                                    <option value="両穴コットン玉#14両">両穴コットン玉#14両</option>
+                                    <option value="両穴コットン玉#16両">両穴コットン玉#16両</option>
+                                    <option value="両穴コットン玉#18両">両穴コットン玉#18両</option>
+                                    <option value="両穴コットン玉#20両">両穴コットン玉#20両</option>
+                                    <option value="両穴コットン玉#22両">両穴コットン玉#22両</option>
+                                    <option value="両穴コットン玉#25両">両穴コットン玉#25両</option>
+                                    <option value="両穴コットン玉#30両">両穴コットン玉#30両</option>
+                                    <option value="両穴コットン玉#35両">両穴コットン玉#35両</option>
+                                    <option value="両穴コットン玉#40両">両穴コットン玉#40両</option>
+                                </optgroup>
+                                <optgroup label="片穴コットン玉シリーズ">
+                                    <option value="片穴コットン玉#6片">片穴コットン玉#6片</option>
+                                    <option value="片穴コットン玉#8片">片穴コットン玉#8片</option>
+                                    <option value="片穴コットン玉#10片">片穴コットン玉#10片</option>
+                                    <option value="片穴コットン玉#12片">片穴コットン玉#12片</option>
+                                    <option value="片穴コットン玉#14片">片穴コットン玉#14片</option>
+                                    <option value="片穴コットン玉#16片">片穴コットン玉#16片</option>
+                                    <option value="片穴コットン玉#18片">片穴コットン玉#18片</option>
+                                    <option value="片穴コットン玉#20片">片穴コットン玉#20片</option>
+                                    <option value="片穴コットン玉#22片">片穴コットン玉#22片</option>
+                                    <option value="片穴コットン玉#25片">片穴コットン玉#25片</option>
+                                    <option value="片穴コットン玉#30片">片穴コットン玉#30片</option>
+                                    <option value="片穴コットン玉#35片">片穴コットン玉#35片</option>
+                                    <option value="片穴コットン玉#40片">片穴コットン玉#40片</option>
+                                    <option value="片穴コットン玉#10太片">片穴コットン玉#10太片</option>
+                                    <option value="片穴コットン玉#12太片">片穴コットン玉#12太片</option>
+                                    <option value="片穴コットン玉#14太片">片穴コットン玉#14太片</option>
+                                    <option value="片穴コットン玉#16太片">片穴コットン玉#16太片</option>
+                                    <option value="片穴コットン玉 半丸φ15">片穴コットン玉 半丸φ15</option>
+                                    <option value="片穴コットン玉 半丸φ20">片穴コットン玉 半丸φ20</option>
+                                    <option value="片穴コットン玉 半丸φ25">片穴コットン玉 半丸φ25</option>
+                                </optgroup>
+                                <optgroup label="その他">
+                                    <option value="サンプル">サンプル</option>
+                                </optgroup>
+                            </select>
+                        </div>
+                        <div class="form-group small">
+                            <label>開始時間</label>
+                            <input type="time" id="start-time" value="08:45" required>
+                        </div>
+                        <div class="form-group small">
+                            <label>終了時間</label>
+                            <input type="time" id="end-time" value="16:30">
+                        </div>
+                        <div class="form-group">
+                            <label>カウント</label>
+                            <input type="number" id="count" placeholder="">
+                        </div>
+                        <button type="submit" class="btn btn-primary" style="margin-top: 1.25rem;">追加</button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Monthly View Section -->
+            <div id="month-view-container">
+                <div class="card" style="margin-bottom: 2rem;">
+                    <h3 style="margin-bottom: 1rem;">製品別月間合計</h3>
+                    <div id="monthly-product-totals">
+                        <!-- Stats injected here -->
+                    </div>
+                </div>
+
+                <div class="card" style="margin-top: 2rem;">
+                    <h3 style="margin-bottom: 1.5rem;">月間詳細ログ (すべての記録)</h3>
+                    <div class="table-container">
+                        <table class="month-table" style="width: 100%; border-collapse: collapse;">
+                            <thead>
+                                <tr>
+                                    <th style="width: 80px;">日付</th>
+                                    <th style="width: 60px;">機械</th>
+                                    <th style="min-width: 200px;">製品名 / 稼働内容</th>
+                                    <th style="width: 120px;">開始</th>
+                                    <th style="width: 120px;">終了</th>
+                                    <th style="width: 140px;">稼働時間</th>
+                                    <th style="width: 140px; text-align: right;">カウント</th>
+                                </tr>
+                            </thead>
+                            <tbody id="monthly-full-detailed-list">
+                                <!-- Every single record for the month injected here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Inventory View Section -->
+            <div id="stock-view-container" style="display: none;">
+                <!-- Header for Inventory (Internal) -->
+                <!-- Redundant internal header removed, handled globally -->
+
+                <!-- Inventory Table -->
+                <div class="card" style="margin-bottom: 2rem;">
+                    <div class="table-container inventory-table-wrapper">
+                        <table class="inventory-table-stock" id="inventoryTableStock">
+                            <thead>
+                                <tr class="header-main-stock">
+                                    <th rowspan="2" class="date-col-stock">日付</th>
+                                    <th colspan="3" class="group-film-stock">フィルム</th>
+                                    <th colspan="3" class="group-plain-stock">無地</th>
+                                    <th colspan="3" class="group-eog-stock">EOG</th>
+                                </tr>
+                                <tr class="header-sub-stock">
+                                    <th class="sub-film-stock">配達</th>
+                                    <th class="sub-film-stock">製造</th>
+                                    <th class="sub-film-stock remaining-stock">残</th>
+                                    <th class="sub-plain-stock">配達</th>
+                                    <th class="sub-plain-stock">製造</th>
+                                    <th class="sub-plain-stock remaining-stock">残</th>
+                                    <th class="sub-eog-stock">配達</th>
+                                    <th class="sub-eog-stock">製造</th>
+                                    <th class="sub-eog-stock remaining-stock">残</th>
+                                </tr>
+                            </thead>
+                            <tbody id="inventoryBodyStock">
+                                <!-- Dynamic rows -->
+                            </tbody>
+                            <tfoot id="inventoryFootStock">
+                                <!-- Totals row -->
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Summary Cards (Moved below table as requested) -->
+                <div class="summary-section-stock" id="summarySectionStock">
+                    <div class="summary-card-stock film-card-stock" id="filmCardStock">
+                        <div class="card-header-stock">
+                            <div class="card-icon-stock film-icon-stock">F</div>
+                            <h3>フィルム</h3>
+                        </div>
+                        <div class="card-body-stock">
+                            <div class="stat-stock">
+                                <span class="stat-label-stock">繰越分</span>
+                                <span class="stat-value-stock" id="filmCarryoverStock">0</span>
+                            </div>
+
+                            <div class="stat-stock">
+                                <span class="stat-label-stock">現在庫</span>
+                                <span class="stat-value-stock highlight-stock" id="filmCurrentStock">0</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="summary-card-stock plain-card-stock" id="plainCardStock">
+                        <div class="card-header-stock">
+                            <div class="card-icon-stock plain-icon-stock">P</div>
+                            <h3>無地</h3>
+                        </div>
+                        <div class="card-body-stock">
+                            <div class="stat-stock">
+                                <span class="stat-label-stock">繰越分</span>
+                                <span class="stat-value-stock" id="plainCarryoverStock">0</span>
+                            </div>
+
+                            <div class="stat-stock">
+                                <span class="stat-label-stock">現在庫</span>
+                                <span class="stat-value-stock highlight-stock" id="plainCurrentStock">0</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="summary-card-stock eog-card-stock" id="eogCardStock">
+                        <div class="card-header-stock">
+                            <div class="card-icon-stock eog-icon-stock">E</div>
+                            <h3>EOG</h3>
+                        </div>
+                        <div class="card-body-stock">
+                            <div class="stat-stock">
+                                <span class="stat-label-stock">繰越分</span>
+                                <span class="stat-value-stock" id="eogCarryoverStock">0</span>
+                            </div>
+
+                            <div class="stat-stock">
+                                <span class="stat-label-stock">現在庫</span>
+                                <span class="stat-value-stock highlight-stock" id="eogCurrentStock">0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Action Bar -->
+                <div style="display: flex; justify-content: flex-end; align-items: center; margin-bottom: 2rem;">
+                    <div id="saveStatusStock" style="font-size: 0.85rem; color: var(--text-muted);"></div>
+                </div>
+            </div>
+
+            <!-- ========== Sliver View Section ========== -->
+            <div id="sliver-view-container" style="display: none;">
+                <!-- P Section (小玉) -->
+                <div class="card" style="margin-bottom: 2rem;">
+                    <div class="table-container sliver-table-wrapper">
+                        <table class="sliver-table" id="sliverTableP">
+                            <thead id="sliverHeadP">
+                                <!-- Dynamic headers -->
+                            </thead>
+                            <tbody id="sliverBodyP">
+                                <!-- Dynamic rows -->
+                            </tbody>
+                            <tfoot id="sliverFootP">
+                                <!-- Totals row -->
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- M Section (大玉) -->
+                <div class="card" style="margin-bottom: 2rem;">
+                    <div class="table-container sliver-table-wrapper">
+                        <table class="sliver-table" id="sliverTableM">
+                            <thead id="sliverHeadM">
+                                <!-- Dynamic headers -->
+                            </thead>
+                            <tbody id="sliverBodyM">
+                                <!-- Dynamic rows -->
+                            </tbody>
+                            <tfoot id="sliverFootM">
+                                <!-- Totals row -->
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Save Status -->
+                <div style="display: flex; justify-content: flex-end; align-items: center; margin-bottom: 2rem;">
+                    <div id="saveStatusSliver" style="font-size: 0.85rem; color: var(--text-muted);"></div>
+                </div>
+            </div>
+
+            <!-- ========================================== -->
+            <!-- ========= Hanapon Inventory View ========= -->
+            <!-- ========================================== -->
+            <div id="hanapon-view-container" style="display: none;">
+                <!-- Main Hanapon Types (小 and 大) -->
+                <div class="card" style="margin-bottom: 2rem;">
+                    <div class="card-header-stock">
+                        <h3 style="margin: 0;">・鼻ぽん 小・大</h3>
+                    </div>
+                    <div class="sliver-table-wrapper">
+                        <table class="sliver-table">
+                            <thead id="hanaponHeadMain">
+                                <!-- Generated by JS -->
+                            </thead>
+                            <tbody id="hanaponBodyMain">
+                                <!-- Generated by JS -->
+                            </tbody>
+                            <tfoot id="hanaponFootMain">
+                                <!-- Totals row -->
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Anaaki Hanapon Types (小さめ and ふつう) -->
+                <div class="card" style="margin-bottom: 2rem;">
+                    <div class="card-header-stock">
+                        <h3 style="margin: 0;">・穴あき 小さめ・ふつう</h3>
+                    </div>
+                    <div class="sliver-table-wrapper">
+                        <table class="sliver-table">
+                            <thead id="hanaponHeadAnaaki">
+                                <!-- Generated by JS -->
+                            </thead>
+                            <tbody id="hanaponBodyAnaaki">
+                                <!-- Generated by JS -->
+                            </tbody>
+                            <tfoot id="hanaponFootAnaaki">
+                                <!-- Totals row -->
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Save Status -->
+                <div style="display: flex; justify-content: flex-end; align-items: center; margin-bottom: 2rem;">
+                    <div id="saveStatusHanapon" style="font-size: 0.85rem; color: var(--text-muted);"></div>
+                </div>
+            </div>
+
+            <!-- ========================================== -->
+            <!-- ===== Snow Sprint Inventory View ========= -->
+            <!-- ========================================== -->
+            <div id="snowsprint-view-container" style="display: none;">
+                <!-- SN Section: スノースプリントⅡ (小/中 + 大/特大) -->
+                <div class="card" style="margin-bottom: 2rem;">
+                    <div class="card-header-stock">
+                        <h3 style="margin: 0;">・スノースプリントⅡ（小・中）</h3>
+                    </div>
+                    <div class="sliver-table-wrapper">
+                        <table class="sliver-table">
+                            <thead id="snHeadTable1"></thead>
+                            <tbody id="snBodyTable1"></tbody>
+                            <tfoot id="snFootTable1"></tfoot>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="card" style="margin-bottom: 2rem;">
+                    <div class="card-header-stock">
+                        <h3 style="margin: 0;">・スノースプリントⅡ（大・特大）</h3>
+                    </div>
+                    <div class="sliver-table-wrapper">
+                        <table class="sliver-table">
+                            <thead id="snHeadTable2"></thead>
+                            <tbody id="snBodyTable2"></tbody>
+                            <tfoot id="snFootTable2"></tfoot>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- IW Section: イワツキ用スノースプリント -->
+                <div class="card" style="margin-bottom: 2rem;">
+                    <div class="card-header-stock">
+                        <h3 style="margin: 0;">・イワツキ用スノースプリントⅡ</h3>
+                    </div>
+                    <div class="sliver-table-wrapper">
+                        <table class="sliver-table">
+                            <thead id="iwHeadTable1"></thead>
+                            <tbody id="iwBodyTable1"></tbody>
+                            <tfoot id="iwFootTable1"></tfoot>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- US Section: ユニバーサルスプリント -->
+                <div class="card" style="margin-bottom: 2rem;">
+                    <div class="card-header-stock">
+                        <h3 style="margin: 0;">・ユニバーサルスプリント（金具・箱）</h3>
+                    </div>
+                    <div class="sliver-table-wrapper">
+                        <table class="sliver-table">
+                            <thead id="usHeadTable1"></thead>
+                            <tbody id="usBodyTable1"></tbody>
+                            <tfoot id="usFootTable1"></tfoot>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- UR Section: ウレタン在庫 -->
+                <div class="card" style="margin-bottom: 2rem;">
+                    <div class="card-header-stock">
+                        <h3 style="margin: 0;">・ウレタン在庫（US用）</h3>
+                    </div>
+                    <div class="sliver-table-wrapper">
+                        <table class="sliver-table">
+                            <thead id="urHeadTable1"></thead>
+                            <tbody id="urBodyTable1"></tbody>
+                            <tfoot id="urFootTable1"></tfoot>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Save Status -->
+                <div style="display: flex; justify-content: flex-end; align-items: center; margin-bottom: 2rem;">
+                    <div id="saveStatusSnowsprint" style="font-size: 0.85rem; color: var(--text-muted);"></div>
+                </div>
+            </div>
+
+            <!-- ========================================== -->
+            <!-- ========= Shift Table View =============== -->
+            <!-- ========================================== -->
+            <div id="shift-view-container" style="display: none;">
+                <div class="shift-dashboard-container">
+                    <!-- ヘッダーセクション -->
+                    <div class="shift-header-section">
+                        <div class="shift-title-group">
+                            <h2 id="shift-main-title" class="shift-title">シフト表</h2>
+                            <p class="shift-subtitle">Team Schedule Management System</p>
+                        </div>
+                        <div class="shift-work-time-card">
+                            <h3>就業時間</h3>
+                            <div class="shift-time-row"><span>早番</span> 07:00 〜 17:30</div>
+                            <div class="shift-time-row"><span>中番</span> 08:30 〜 17:30</div>
+                        </div>
+                    </div>
+
+                    <!-- シフトテーブルセクション -->
+                    <div class="shift-table-wrapper">
+                        <table class="shift-table">
+                            <thead>
+                                <tr>
+                                    <th width="20%">日付</th>
+                                    <th width="20%">◆ 昼(早番)</th>
+                                    <th width="20%">♣ 昼(遅)</th>
+                                    <th width="20%">通常シフト</th>
+                                    <th width="20%">備考</th>
+                                </tr>
+                            </thead>
+                            <tbody id="shift-tbody">
+                                <!-- Firebaseからデータを取得して生成 -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- メンバー管理セクション -->
+                    <section class="shift-member-manager">
+                        <h3>メンバー管理 <small style="font-weight: normal; color: #888;">（ドラッグで順番変更）</small></h3>
+                        <div id="shift-member-list" class="shift-member-list">
+                            <!-- JavaScriptで生成 -->
+                        </div>
+                        <div class="shift-add-member-form">
+                            <input type="text" id="shift-new-member-name" class="shift-add-input" placeholder="新しい名前を入力...">
+                            <button onclick="shiftAddMember()" class="shift-btn-add">追加</button>
+                        </div>
+                        <div style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 15px;">
+                            <button onclick="shiftUpdateRotationOrder()" class="shift-btn-confirm">
+                                <span style="font-size: 1.2em;">🔄</span>
+                                この順番を「自動計算ルール」として保存する
+                            </button>
+                            <div class="shift-help-text">
+                                <strong>【自動計算の更新手順】</strong><br>
+                                1. 「メンバー管理」からメンバーを追加したり、ドラッグで順番を入れ替えます。<br>
+                                2. 上の青色のボタンをクリックすると、メンバー管理で並べた順番（左からの順番で）自動計算ルールが適用されます。<br>
+                                3. <strong>今週の月曜日</strong>を起点に設定した順で再スタートします。
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- フッターセクション -->
+                    <div class="shift-footer-info">
+                        <div class="shift-break-legend">
+                            <div class="shift-legend-item">
+                                <div class="shift-mini-badge shift-badge-early">◆</div>
+                                <div><strong>時間差昼休憩:</strong> 11:30 〜 12:30</div>
+                            </div>
+                            <div class="shift-legend-item">
+                                <div class="shift-mini-badge shift-badge-late">♣</div>
+                                <div><strong>時間差昼休憩:</strong> 12:30 〜 13:30</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
-
-        <!-- メンバー管理セクション -->
-        <section class="member-manager">
-            <h3>メンバー管理 <small style="font-weight: normal; color: #888;">（ドラッグで順番変更）</small></h3>
-            <div id="member-list" class="member-list">
-                <!-- JavaScriptで生成 -->
-            </div>
-            <div class="add-member-form">
-                <input type="text" id="new-member-name" class="add-input" placeholder="新しい名前を入力...">
-                <button onclick="addMember()" class="btn-add">追加</button>
-            </div>
-            <div style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 15px;">
-                <button onclick="updateRotationOrder()" class="btn-confirm">
-                    <span style="font-size: 1.2em;">🔄</span>
-                    この順番を「自動計算ルール」として保存する
-                </button>
-                <div class="help-text">
-                    <strong>【自動計算の更新手順】</strong><br>
-                    1. 「メンバー管理」からメンバーを追加したり、ドラッグで順番を入れ替えます。<br>
-                    2. 上の青色のボタンをクリックすると、メンバー管理で並べた順番（左からの順番で）自動計算ルールが適用されます。<br>
-                    3. <strong>今週の月曜日</strong>を起点に設定した順で再スタートします。
-                </div>
-            </div>
-        </section>
-
-        <!-- フッターセクション -->
-        <footer class="footer-info">
-            <div class="break-legend">
-                <div class="legend-item">
-                    <div class="mini-badge badge-early">◆</div>
-                    <div><strong>時間差昼休憩:</strong> 11:30 〜 12:30</div>
-                </div>
-                <div class="legend-item">
-                    <div class="mini-badge badge-late">♣</div>
-                    <div><strong>時間差昼休憩:</strong> 12:30 〜 13:30</div>
-                </div>
-            </div>
-
-        </footer>
     </div>
 
-    <script>
-        // --- Firebase 設定 (ここにあなたの情報を貼り付けてください) ---
-        const firebaseConfig = {
-            apiKey: "AIzaSyBHw9a4RSsGXUV4LK93cX4nfyDSLibeiH8",
-            authDomain: "shift-table-427cd.firebaseapp.com",
-            databaseURL: "https://shift-table-427cd-default-rtdb.asia-southeast1.firebasedatabase.app",
-            projectId: "shift-table-427cd",
-            storageBucket: "shift-table-427cd.firebasestorage.app",
-            messagingSenderId: "331317417060",
-            appId: "1:331317417060:web:0af3960ebe56ff0ea3b71"
-        };
-        // -----------------------------------------------------------
-
-        // --- セキュリティ・保存先設定 ---
-        const SECRET_PATH = "shift-ontmi-7709-table-17493";
-
-        // 【固定】デフォルトの回転順序
-        const DEFAULT_ROTATION = ["滝沢", "臼井", "村田", "今枝", "大竹", "西岡"];
-        let rotationOrder = [...DEFAULT_ROTATION];
-
-        // 設定の初期値
-        const DEFAULT_NAMES = ["西岡", "滝沢", "大竹", "臼井", "村田", "今枝"];
-        let names = [...DEFAULT_NAMES];
-        let overrides = {};
-
-        // ローテーションの起点 (Firebaseから読み込むが、初期値として設定)
-        let baseDate = new Date("2026-03-30");
-        const baseEarlyIndex = 0;
-
-        // 初回描画
-        renderMembers();
-
-        // Firebase初期化
-        if (firebaseConfig.apiKey !== "YOUR_API_KEY") {
-            try {
-                firebase.initializeApp(firebaseConfig);
-                const database = firebase.database();
-                const dataRef = database.ref('shift_data/' + SECRET_PATH);
-
-                dataRef.on('value', (snapshot) => {
-                    const data = snapshot.val();
-                    if (data) {
-                        if (data.members) names = data.members;
-                        if (data.rotation_order) rotationOrder = data.rotation_order;
-                        if (data.base_date) baseDate = new Date(data.base_date);
-                        overrides = data.overrides || {};
-                        renderMembers();
-                    } else {
-                        saveAllData();
-                    }
-                });
-
-                window.saveAllData = function () {
-                    dataRef.set({
-                        members: names,
-                        rotation_order: rotationOrder,
-                        base_date: baseDate.toISOString().split('T')[0],
-                        overrides: overrides
-                    });
-                };
-            } catch (e) {
-                console.error("Firebaseの初期化に失敗しました。", e);
-            }
-        } else {
-            console.warn("Firebaseの設定が未完了です。");
-        }
-
-        // 現在の「メンバー管理」の並び順を、今後の「自動回転順」として保存する
-        function updateRotationOrder() {
-            if (confirm("現在の「メンバー管理」の並び順を、今週からのシフト自動計算のループとして確定しますか？")) {
-                const today = new Date();
-                const monday = getMondayOfCurrentWeek(today);
-
-                // 起点を今週の月曜日に更新
-                baseDate = monday;
-                rotationOrder = [...names];
-
-                saveAllData();
-                alert("回転順を今週（" + baseDate.toLocaleDateString() + "の週）から確定しました。");
-                generateTable();
-            }
-        }
-
-
-
-        // ドラッグ&ドロップ関連
-        let draggedElement = null;
-        let draggedIndex = null;
-
-        // メンバー一覧の描画
-        function renderMembers() {
-            const list = document.getElementById('member-list');
-            list.innerHTML = names.map((name, index) => `
-                <div class="member-chip" draggable="true" data-index="${index}">
-                    <span class="drag-handle">☰</span>
-                    ${name}
-                    <span class="delete-btn" onclick="deleteMember(${index})">×</span>
-                </div>
-            `).join('');
-
-            // ドラッグ&ドロップイベントを設定
-            setupDragAndDrop();
-            generateTable();
-        }
-
-        function setupDragAndDrop() {
-            const chips = document.querySelectorAll('.member-chip');
-
-            chips.forEach(chip => {
-                chip.addEventListener('dragstart', handleDragStart);
-                chip.addEventListener('dragend', handleDragEnd);
-                chip.addEventListener('dragover', handleDragOver);
-                chip.addEventListener('drop', handleDrop);
-                chip.addEventListener('dragenter', handleDragEnter);
-                chip.addEventListener('dragleave', handleDragLeave);
-            });
-        }
-
-        function handleDragStart(e) {
-            draggedElement = this;
-            draggedIndex = parseInt(this.dataset.index);
-            this.classList.add('dragging');
-            e.dataTransfer.effectAllowed = 'move';
-        }
-
-        function handleDragEnd(e) {
-            this.classList.remove('dragging');
-            document.querySelectorAll('.member-chip').forEach(chip => {
-                chip.classList.remove('drag-over');
-            });
-        }
-
-        function handleDragOver(e) {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'move';
-        }
-
-        function handleDragEnter(e) {
-            e.preventDefault();
-            if (this !== draggedElement) {
-                this.classList.add('drag-over');
-            }
-        }
-
-        function handleDragLeave(e) {
-            this.classList.remove('drag-over');
-        }
-
-        function handleDrop(e) {
-            e.preventDefault();
-            const targetIndex = parseInt(this.dataset.index);
-
-            if (draggedIndex !== targetIndex) {
-                // 配列内で要素を移動
-                const movedName = names.splice(draggedIndex, 1)[0];
-                names.splice(targetIndex, 0, movedName);
-
-                // 順番が変わったので自動計算を優先するためにoverridesをクリア（任意）
-                // ユーザーは「メンバー管理の順番で組みたい」とのことなので、
-                // 移動させた場合は自動計算を再適用するのが直感的です
-                overrides = {};
-                saveAllData();
-            }
-
-            this.classList.remove('drag-over');
-        }
-
-
-
-        function addMember() {
-            const input = document.getElementById('new-member-name');
-            const name = input.value.trim();
-            if (name && !names.includes(name)) {
-                names.push(name);
-                input.value = '';
-                saveAllData();
-            }
-        }
-
-        function deleteMember(index) {
-            if (names.length <= 2) {
-                alert("シフト作成には最低2名のメンバーが必要です。");
-                return;
-            }
-            if (confirm(`「${names[index]}」を削除しますか？`)) {
-                names.splice(index, 1);
-                saveAllData();
-            }
-        }
-
-        function saveRowState(weekId) {
-            const row = document.querySelector(`tr[data-week-id="${weekId}"]`);
-            if (!row) return;
-
-            overrides[weekId] = {
-                date: row.querySelector('.editable-date').value,
-                early: row.querySelectorAll('.name-select')[0].value,
-                late: row.querySelectorAll('.name-select')[1].value,
-                normal: row.querySelectorAll('.staff-all-input')[0].value,
-                notes: row.querySelectorAll('.staff-all-input')[1].value
-            };
-            saveAllData();
-        }
-
-        // --- シフト計算ロジック (継続) ---
-        function isJapaneseHoliday(date) {
-            const y = date.getFullYear();
-            const m = date.getMonth() + 1;
-            const d = date.getDate();
-            const w = date.getDay();
-
-            if (m === 1 && d === 1) return true;
-            if (m === 2 && d === 11) return true;
-            if (m === 2 && d === 23) return true;
-            if (m === 4 && d === 29) return true;
-            if (m === 5 && d === 3) return true;
-            if (m === 5 && d === 4) return true;
-            if (m === 5 && d === 5) return true;
-            if (m === 8 && d === 11) return true;
-            if (m === 11 && d === 3) return true;
-            if (m === 11 && d === 23) return true;
-
-            const springEquinox = Math.floor(20.8431 + 0.242194 * (y - 1980) - Math.floor((y - 1980) / 4));
-            const autumnEquinox = Math.floor(23.2488 + 0.242194 * (y - 1980) - Math.floor((y - 1980) / 4));
-            if (m === 3 && d === springEquinox) return true;
-            if (m === 9 && d === autumnEquinox) return true;
-
-            const getNthMonday = (year, month, n) => {
-                let count = 0;
-                for (let day = 1; day <= 31; day++) {
-                    if (new Date(year, month - 1, day).getDay() === 1) {
-                        count++;
-                        if (count === n) return day;
-                    }
-                }
-                return 0;
-            };
-
-            if (m === 1 && d === getNthMonday(y, 1, 2)) return true;
-            if (m === 7 && d === getNthMonday(y, 7, 3)) return true;
-            if (m === 9 && d === getNthMonday(y, 9, 3)) return true;
-            if (m === 10 && d === getNthMonday(y, 10, 2)) return true;
-
-            if (w === 1) {
-                const yesterday = new Date(y, m - 1, d - 1);
-                if (yesterday.getDay() === 0 && isJapaneseHoliday(yesterday)) return true;
-            }
-
-            const keiroNoHi = getNthMonday(y, 9, 3);
-            if (m === 9 && d === keiroNoHi + 1 && keiroNoHi !== 0 && autumnEquinox === keiroNoHi + 2) return true;
-
-            return false;
-        }
-
-        function getMondayOfCurrentWeek(d) {
-            const day = d.getDay();
-            const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-            const monday = new Date(d.getFullYear(), d.getMonth(), diff);
-            monday.setHours(0, 0, 0, 0);
-            return monday;
-        }
-
-        function formatDate(date, isFirstRow) {
-            const y = date.getFullYear();
-            const m = date.getMonth() + 1;
-            const d = date.getDate();
-            const dayNames = ["日", "月", "火", "水", "木", "金", "土"];
-            const day = dayNames[date.getDay()];
-            if (m === 1 || (isFirstRow)) return `${y}/${m}/${d} (${day})`;
-            return `${m}/${d} (${day})`;
-        }
-
-        function generateTable() {
-            const tbody = document.getElementById('shift-tbody');
-            const today = new Date();
-            const currentMonday = getMondayOfCurrentWeek(today);
-
-            const diffTime = currentMonday.getTime() - baseDate.getTime();
-            const diffWeeks = Math.round(diffTime / (7 * 24 * 60 * 60 * 1000));
-
-            let tableHTML = '';
-            let startMonth = "";
-            let endMonth = "";
-
-            const nameOptions = (selectedName) => {
-                return names.map((name) =>
-                    `<option value="${name}" ${name === selectedName ? 'selected' : ''}>${name}</option>`
-                ).join('');
-            };
-
-            for (let i = 0; i < 5; i++) {
-                const weekStartDate = new Date(currentMonday);
-                weekStartDate.setDate(currentMonday.getDate() + (i * 7));
-                const weekId = weekStartDate.toISOString().split('T')[0];
-
-                const displayWeekDate = new Date(weekStartDate);
-                if (isJapaneseHoliday(displayWeekDate)) {
-                    displayWeekDate.setDate(displayWeekDate.getDate() + 1);
-                }
-
-                // --- 固定のローテーション順で計算 ---
-                const totalRotation = rotationOrder.length;
-                // 今週のインデックスを計算 (負の数にも対応できるよう +totalRotation)
-                const earlyIdx = (((baseEarlyIndex + diffWeeks + i) % totalRotation) + totalRotation) % totalRotation;
-                const lateIdx = (earlyIdx + 1) % totalRotation;
-
-                const rowData = overrides[weekId] || {
-                    date: formatDate(displayWeekDate, i === 0) + " 〜",
-                    early: rotationOrder[earlyIdx],
-                    late: rotationOrder[lateIdx],
-                    normal: "すべて全員",
-                    notes: ""
-                };
-
-                if (i === 0) startMonth = (displayWeekDate.getMonth() + 1) + "月";
-                if (i === 4) endMonth = (displayWeekDate.getMonth() + 1) + "月";
-
-                tableHTML += `
-                    <tr data-week-id="${weekId}">
-                        <td>
-                            <input type="text" class="editable-date" value="${rowData.date}" oninput="saveRowState('${weekId}')">
-                        </td>
-                        <td>
-                            <span class="badge badge-early">
-                                <span class="icon">◆</span>
-                                <select class="name-select" onchange="saveRowState('${weekId}')">
-                                    ${nameOptions(rowData.early)}
-                                </select>
-                            </span>
-                        </td>
-                        <td>
-                            <span class="badge badge-late">
-                                <span class="icon">♣</span>
-                                <select class="name-select" onchange="saveRowState('${weekId}')">
-                                    ${nameOptions(rowData.late)}
-                                </select>
-                            </span>
-                        </td>
-                        <td>
-                            <div class="staff-all">
-                                <input type="text" class="staff-all-input" value="${rowData.normal}" oninput="saveRowState('${weekId}')">
-                            </div>
-                        </td>
-                        <td>
-                            <input type="text" class="staff-all-input" placeholder="備考を入力..." value="${rowData.notes}" oninput="saveRowState('${weekId}')">
-                        </td>
-                    </tr>
-                `;
-            }
-
-            tbody.innerHTML = tableHTML;
-            document.getElementById('main-title').innerText = `${startMonth} 〜 ${endMonth} シフト表`;
-        }
-    </script>
+    <script src="app.js"></script>
 </body>
 
 </html>
