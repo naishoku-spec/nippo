@@ -4060,6 +4060,98 @@ let snowsprintAllData = {};
 let snowsprintCurrentYear = new Date().getFullYear();
 let snowsprintCurrentMonth = new Date().getMonth() + 1;
 let isFirstSnowsprintLoad = true;
+let snowsprintActiveProduct = 0;
+let snowsprintActiveSize = 0;
+
+const SNOWSPRINT_TAB_CONFIG = [
+    {
+        id: 'sn2', label: 'SNⅡ',
+        sizes: [
+            { id: 'small', label: '小', config: [{ id: 'small', title: '小', bg: '#bae6fd', color: '#0369a1', items: [
+                { id: 'metal', title: '金具', bg: '#e0f2fe' },
+                { id: 'inner_box', title: '中箱', bg: '#e0f2fe' },
+                { id: 'outer_box', title: '外箱', bg: '#e0f2fe' }
+            ]}], category: 'sn2' },
+            { id: 'medium', label: '中', config: [{ id: 'medium', title: '中', bg: '#7dd3fc', color: '#0c4a6e', items: [
+                { id: 'metal', title: '金具', bg: '#e0f2fe' },
+                { id: 'inner_box', title: '中箱', bg: '#e0f2fe' },
+                { id: 'outer_box', title: '外箱', bg: '#e0f2fe' }
+            ]}], category: 'sn2' },
+            { id: 'large', label: '大', config: [{ id: 'large', title: '大', bg: '#fcd34d', color: '#92400e', items: [
+                { id: 'metal', title: '金具', bg: '#fef3c7' },
+                { id: 'inner_box', title: '中箱', bg: '#fef3c7' },
+                { id: 'outer_box', title: '外箱', bg: '#fef3c7' }
+            ]}], category: 'sn2' },
+            { id: 'extra_large', label: '特大', config: [{ id: 'extra_large', title: '特大', bg: '#fbbf24', color: '#b45309', items: [
+                { id: 'metal', title: '金具', bg: '#fef3c7' },
+                { id: 'inner_box', title: '中箱', bg: '#fef3c7' },
+                { id: 'outer_box', title: '外箱', bg: '#fef3c7' }
+            ]}], category: 'sn2' }
+        ]
+    },
+    {
+        id: 'iwatsuki', label: 'イワツキ',
+        sizes: [
+            { id: 's3_4', label: 'S3・4', config: [
+                { id: 's3', title: 'S3', bg: '#e9d5ff', color: '#6b21a8', items: [
+                    { id: 'metal', title: '金具', bg: '#f3e8ff' }
+                ]},
+                { id: 's4', title: 'S4', bg: '#d8b4fe', color: '#581c87', items: [
+                    { id: 'metal', title: '金具', bg: '#f3e8ff' }
+                ]},
+                { id: 's3_4', title: 'S3・S4', bg: '#c084fc', color: '#4c1d95', items: [
+                    { id: 'inner_box', title: '中箱', bg: '#f3e8ff' },
+                    { id: 'outer_box', title: '外箱', bg: '#f3e8ff' }
+                ]}
+            ], category: 'iwatsuki' },
+            { id: 's5', label: 'S5', config: [{ id: 's5', title: 'S5', bg: '#a855f7', color: '#3b0764', items: [
+                { id: 'metal', title: '金具', bg: '#f3e8ff' },
+                { id: 'inner_box', title: '中箱', bg: '#f3e8ff' },
+                { id: 'outer_box', title: '外箱', bg: '#f3e8ff' }
+            ]}], category: 'iwatsuki' }
+        ]
+    },
+    {
+        id: 'us', label: 'US',
+        sizes: [
+            { id: 'us_small', label: '小', config: [{ id: 'small', title: 'US 小', bg: '#fbcfe8', color: '#be185d', items: [
+                { id: 'metal', title: '金具', bg: '#fce7f3' }
+            ]}], category: 'us' },
+            { id: 'us_medium', label: '中', config: [{ id: 'medium', title: 'US 中', bg: '#f9a8d4', color: '#9d174d', items: [
+                { id: 'metal', title: '金具', bg: '#fce7f3' }
+            ]}], category: 'us' },
+            { id: 'us_large', label: '大', config: [{ id: 'large', title: 'US 大', bg: '#f472b6', color: '#831843', items: [
+                { id: 'metal', title: '金具', bg: '#fce7f3' }
+            ]}], category: 'us' },
+            { id: 'us_box', label: '箱', config: [{ id: 'box', title: 'US 箱', bg: '#fb7185', color: '#881337', items: [
+                { id: 'box', title: '箱', bg: '#ffe4e6' }
+            ]}], category: 'us' }
+        ]
+    },
+    {
+        id: 'urethane', label: 'ウレタン',
+        sizes: [
+            { id: 'ur_s_thick', label: '小厚', config: [{ id: 'small', title: '小 ウレタン厚', bg: '#0369a1', color: '#ffffff', items: [
+                { id: 'urethane_thick', title: 'ウレタン', bg: '#e0f2fe' }
+            ]}], category: 'us' },
+            { id: 'ur_s_thin', label: '小薄', config: [{ id: 'small', title: '小 ウレタン薄', bg: '#0369a1', color: '#ffffff', items: [
+                { id: 'urethane_thin', title: 'ウレタン', bg: '#e0f2fe' }
+            ]}], category: 'us' },
+            { id: 'ur_m_thick', label: '中厚', config: [{ id: 'medium', title: '中 ウレタン厚', bg: '#0369a1', color: '#ffffff', items: [
+                { id: 'urethane_thick', title: 'ウレタン', bg: '#e0f2fe' }
+            ]}], category: 'us' },
+            { id: 'ur_m_thin', label: '中薄', config: [{ id: 'medium', title: '中 ウレタン薄', bg: '#0369a1', color: '#ffffff', items: [
+                { id: 'urethane_thin', title: 'ウレタン', bg: '#e0f2fe' }
+            ]}], category: 'us' },
+            { id: 'ur_l_thick', label: '大厚', config: [{ id: 'large', title: '大 ウレタン厚', bg: '#0369a1', color: '#ffffff', items: [
+                { id: 'urethane_thick', title: 'ウレタン', bg: '#e0f2fe' }
+            ]}], category: 'us' },
+            { id: 'ur_l_thin', label: '大薄', config: [{ id: 'large', title: '大 ウレタン薄', bg: '#0369a1', color: '#ffffff', items: [
+                { id: 'urethane_thin', title: 'ウレタン', bg: '#e0f2fe' }
+            ]}], category: 'us' }
+        ]
+    }
+];
 
 const SNOWSPRINT_INITIAL_DATA = {
   "2025-5": {
@@ -6663,7 +6755,7 @@ function renderSnowsprintGeneric(headId, bodyId, footId, configGroups, category)
         group.items.forEach((item) => {
             trSub1 += `<th colspan="3" class="sub-film-stock" style="background: ${item.bg}; text-align: center; border: 1px solid var(--border);">${item.title}</th>`;
             trSub2 += `
-                <th class="sub-film-stock"><span class="snow-text-desktop">入荷</span><span class="snow-text-mobile">入</span></th>
+                <th class="sub-film-stock"><span class="snow-text-desktop">入荷</span><span class="snow-text-mobile">入荷</span></th>
                 <th class="sub-film-stock"><span class="usage-text-desktop">使用数</span><span class="usage-text-mobile">使用</span></th>
                 <th class="sub-film-stock remaining-stock"><span class="snow-text-desktop">残数</span><span class="snow-text-mobile">残</span></th>
             `;
@@ -6785,86 +6877,62 @@ function recalculateSnowsprint() {
     renderSnowsprint();
 }
 
+function renderSnowsprintSizeTabs() {
+    const container = document.getElementById('snSizeTabs');
+    if (!container) return;
+    const product = SNOWSPRINT_TAB_CONFIG[snowsprintActiveProduct];
+    if (!product) return;
+
+    container.innerHTML = product.sizes.map((size, i) =>
+        `<button class="sn-size-tab${i === snowsprintActiveSize ? ' active' : ''}" data-size="${i}" onclick="switchSnowsprintSize(${i})">${size.label}</button>`
+    ).join('');
+}
+
+function switchSnowsprintProduct(idx) {
+    snowsprintActiveProduct = idx;
+    snowsprintActiveSize = 0;
+
+    // Update product tab active state
+    document.querySelectorAll('.sn-product-tab').forEach(btn => {
+        btn.classList.toggle('active', parseInt(btn.dataset.product) === idx);
+    });
+
+    renderSnowsprintSizeTabs();
+    renderSnowsprint();
+}
+window.switchSnowsprintProduct = switchSnowsprintProduct;
+
+function switchSnowsprintSize(idx) {
+    snowsprintActiveSize = idx;
+
+    // Update size tab active state
+    document.querySelectorAll('.sn-size-tab').forEach(btn => {
+        btn.classList.toggle('active', parseInt(btn.dataset.size) === idx);
+    });
+
+    renderSnowsprint();
+}
+window.switchSnowsprintSize = switchSnowsprintSize;
+
 function renderSnowsprint() {
-    renderSnowsprintGeneric('snHeadTable1', 'snBodyTable1', 'snFootTable1', [
-        { id: 'small', title: '小', bg: '#bae6fd', color: '#0369a1', items: [
-            { id: 'metal', title: '金具', bg: '#e0f2fe' },
-            { id: 'inner_box', title: '中箱', bg: '#e0f2fe' },
-            { id: 'outer_box', title: '外箱', bg: '#e0f2fe' }
-        ]},
-        { id: 'medium', title: '中', bg: '#7dd3fc', color: '#0c4a6e', items: [
-            { id: 'metal', title: '金具', bg: '#e0f2fe' },
-            { id: 'inner_box', title: '中箱', bg: '#e0f2fe' },
-            { id: 'outer_box', title: '外箱', bg: '#e0f2fe' }
-        ]}
-    ], 'sn2');
+    const product = SNOWSPRINT_TAB_CONFIG[snowsprintActiveProduct];
+    if (!product) return;
 
-    renderSnowsprintGeneric('snHeadTable2', 'snBodyTable2', 'snFootTable2', [
-        { id: 'large', title: '大', bg: '#fcd34d', color: '#92400e', items: [
-            { id: 'metal', title: '金具', bg: '#fef3c7' },
-            { id: 'inner_box', title: '中箱', bg: '#fef3c7' },
-            { id: 'outer_box', title: '外箱', bg: '#fef3c7' }
-        ]},
-        { id: 'extra_large', title: '特大', bg: '#fbbf24', color: '#b45309', items: [
-            { id: 'metal', title: '金具', bg: '#fef3c7' },
-            { id: 'inner_box', title: '中箱', bg: '#fef3c7' },
-            { id: 'outer_box', title: '外箱', bg: '#fef3c7' }
-        ]}
-    ], 'sn2');
+    // Ensure size tabs are rendered
+    const sizeTabsEl = document.getElementById('snSizeTabs');
+    if (sizeTabsEl && sizeTabsEl.children.length === 0) {
+        renderSnowsprintSizeTabs();
+    }
 
-    renderSnowsprintGeneric('iwHeadTable1', 'iwBodyTable1', 'iwFootTable1', [
-        { id: 's3', title: '小3', bg: '#e9d5ff', color: '#6b21a8', items: [
-            { id: 'metal', title: '金具', bg: '#f3e8ff' }
-        ]},
-        { id: 's4', title: '小4', bg: '#d8b4fe', color: '#581c87', items: [
-            { id: 'metal', title: '金具', bg: '#f3e8ff' }
-        ]},
-        { id: 's3_4', title: '小3・小4', bg: '#c084fc', color: '#4c1d95', items: [
-            { id: 'inner_box', title: '中箱', bg: '#f3e8ff' },
-            { id: 'outer_box', title: '外箱', bg: '#f3e8ff' }
-        ]},
-        { id: 's5', title: '小5', bg: '#a855f7', color: '#3b0764', items: [
-            { id: 'metal', title: '金具', bg: '#f3e8ff' },
-            { id: 'inner_box', title: '中箱', bg: '#f3e8ff' },
-            { id: 'outer_box', title: '外箱', bg: '#f3e8ff' }
-        ]}
-    ], 'iwatsuki');
+    // Clamp active size index
+    if (snowsprintActiveSize >= product.sizes.length) {
+        snowsprintActiveSize = 0;
+    }
 
-    renderSnowsprintGeneric('usHeadTable1', 'usBodyTable1', 'usFootTable1', [
-        { id: 'small', title: 'US 小', bg: '#fbcfe8', color: '#be185d', items: [
-            { id: 'metal', title: '金具', bg: '#fce7f3' }
-        ]},
-        { id: 'medium', title: 'US 中', bg: '#f9a8d4', color: '#9d174d', items: [
-            { id: 'metal', title: '金具', bg: '#fce7f3' }
-        ]},
-        { id: 'large', title: 'US 大', bg: '#f472b6', color: '#831843', items: [
-            { id: 'metal', title: '金具', bg: '#fce7f3' }
-        ]},
-        { id: 'box', title: 'US 箱', bg: '#fb7185', color: '#881337', items: [
-            { id: 'box', title: '箱', bg: '#ffe4e6' }
-        ]}
-    ], 'us');
+    const sizeConfig = product.sizes[snowsprintActiveSize];
+    if (!sizeConfig) return;
 
-    renderSnowsprintGeneric('urHeadTable1', 'urBodyTable1', 'urFootTable1', [
-        { id: 'small', title: '小 ウレタン厚', bg: '#0369a1', color: '#ffffff', items: [
-            { id: 'urethane_thick', title: 'ウレタン', bg: '#e0f2fe' }
-        ]},
-        { id: 'small', title: '小 ウレタン薄', bg: '#0369a1', color: '#ffffff', items: [
-            { id: 'urethane_thin', title: 'ウレタン', bg: '#e0f2fe' }
-        ]},
-        { id: 'medium', title: '中 ウレタン厚', bg: '#0369a1', color: '#ffffff', items: [
-            { id: 'urethane_thick', title: 'ウレタン', bg: '#e0f2fe' }
-        ]},
-        { id: 'medium', title: '中 ウレタン薄', bg: '#0369a1', color: '#ffffff', items: [
-            { id: 'urethane_thin', title: 'ウレタン', bg: '#e0f2fe' }
-        ]},
-        { id: 'large', title: '大 ウレタン厚', bg: '#0369a1', color: '#ffffff', items: [
-            { id: 'urethane_thick', title: 'ウレタン', bg: '#e0f2fe' }
-        ]},
-        { id: 'large', title: '大 ウレタン薄', bg: '#0369a1', color: '#ffffff', items: [
-            { id: 'urethane_thin', title: 'ウレタン', bg: '#e0f2fe' }
-        ]}
-    ], 'us');
+    renderSnowsprintGeneric('snTabHead', 'snTabBody', 'snTabFoot', sizeConfig.config, sizeConfig.category);
 }
 
 // Finally, start the application

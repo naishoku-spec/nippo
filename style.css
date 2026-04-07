@@ -1536,6 +1536,136 @@ tr.weekend-holiday td:first-child .date-desktop {
     font-weight: 800;
 }
 
+/* ========================================================= */
+/* ======= Snow Sprint Tab Navigation System =============== */
+/* ========================================================= */
+
+/* Product Line Tabs (Level 1) */
+.sn-product-tabs {
+    display: flex;
+    gap: 4px;
+    padding: 4px;
+    background: var(--bg-main, #f1f5f9);
+    border-radius: 14px;
+    margin-bottom: 8px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+}
+.sn-product-tabs::-webkit-scrollbar { display: none; }
+
+.sn-product-tab {
+    flex: 1;
+    min-width: 0;
+    padding: 10px 16px;
+    border: none;
+    border-radius: 10px;
+    background: transparent;
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-muted, #64748b);
+    cursor: pointer;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    white-space: nowrap;
+    text-align: center;
+    position: relative;
+}
+
+.sn-product-tab:hover {
+    color: var(--text-main, #1e293b);
+    background: rgba(var(--primary-rgb, 99, 102, 241), 0.06);
+}
+
+.sn-product-tab.active {
+    background: var(--primary, #6366f1);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+    font-weight: 700;
+}
+
+/* Size Tabs (Level 2) */
+.sn-size-tabs {
+    display: flex;
+    gap: 2px;
+    padding: 3px;
+    background: rgba(var(--primary-rgb, 99, 102, 241), 0.06);
+    border-radius: 12px;
+    margin-bottom: 12px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+}
+.sn-size-tabs::-webkit-scrollbar { display: none; }
+
+.sn-size-tab {
+    flex: 1;
+    min-width: 0;
+    padding: 8px 14px;
+    border: none;
+    border-radius: 9px;
+    background: transparent;
+    font-family: inherit;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-muted, #64748b);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    text-align: center;
+}
+
+.sn-size-tab:hover {
+    color: var(--text-main, #1e293b);
+    background: rgba(255, 255, 255, 0.7);
+}
+
+.sn-size-tab.active {
+    background: #fff;
+    color: var(--primary, #6366f1);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+    font-weight: 700;
+}
+
+.sn-table-card {
+    margin-bottom: 1rem;
+    animation: snTabFadeIn 0.2s ease-out;
+}
+
+@keyframes snTabFadeIn {
+    from { opacity: 0.6; transform: translateY(4px); }
+    to   { opacity: 1;   transform: translateY(0); }
+}
+
+/* Mobile adjustments for tabs */
+@media (max-width: 600px) {
+    .sn-product-tabs {
+        gap: 3px;
+        padding: 3px;
+        border-radius: 10px;
+        margin-bottom: 6px;
+    }
+    .sn-product-tab {
+        padding: 8px 10px;
+        font-size: 0.78rem;
+        border-radius: 8px;
+    }
+    .sn-size-tabs {
+        gap: 2px;
+        padding: 2px;
+        border-radius: 8px;
+        margin-bottom: 8px;
+    }
+    .sn-size-tab {
+        padding: 7px 8px;
+        font-size: 0.72rem;
+        border-radius: 6px;
+    }
+    .sn-table-card {
+        margin-bottom: 0.5rem;
+    }
+}
+
 /* ========================================== */
 /* ========= Shift Table View =============== */
 /* ========================================== */
@@ -2023,3 +2153,33 @@ tr.weekend-holiday td:first-child .date-desktop {
 }
 
 .inventory-title-header, .logo-section h1 { display: none !important; }
+
+/* Snowsprint Tabs 
+================================== */
+.snow-tab-btn {
+    padding: 0.5rem 1rem;
+    background: #f1f5f9;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s;
+}
+.snow-tab-btn:hover {
+    background: #e2e8f0;
+}
+.snow-tab-btn.active {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+}
+.snow-tabs-container::-webkit-scrollbar {
+    display: none;
+}
+.snow-tabs-container {
+    scrollbar-width: none;
+}
+

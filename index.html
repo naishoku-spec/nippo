@@ -601,71 +601,26 @@
             <!-- ===== Snow Sprint Inventory View ========= -->
             <!-- ========================================== -->
             <div id="snowsprint-view-container" style="display: none;">
-                <!-- SN Section: スノースプリントⅡ (小/中 + 大/特大) -->
-                <div class="card" style="margin-bottom: 2rem;">
-                    <div class="card-header-stock">
-                        <h3 style="margin: 0;">・スノースプリントⅡ（小・中）</h3>
-                    </div>
-                    <div class="sliver-table-wrapper">
-                        <table class="sliver-table">
-                            <thead id="snHeadTable1"></thead>
-                            <tbody id="snBodyTable1"></tbody>
-                            <tfoot id="snFootTable1"></tfoot>
-                        </table>
-                    </div>
+                <!-- Product Line Tabs (Level 1) -->
+                <div class="sn-product-tabs" id="snProductTabs">
+                    <button class="sn-product-tab active" data-product="0" onclick="switchSnowsprintProduct(0)">SNⅡ</button>
+                    <button class="sn-product-tab" data-product="1" onclick="switchSnowsprintProduct(1)">イワツキ</button>
+                    <button class="sn-product-tab" data-product="2" onclick="switchSnowsprintProduct(2)">US</button>
+                    <button class="sn-product-tab" data-product="3" onclick="switchSnowsprintProduct(3)">ウレタン</button>
                 </div>
 
-                <div class="card" style="margin-bottom: 2rem;">
-                    <div class="card-header-stock">
-                        <h3 style="margin: 0;">・スノースプリントⅡ（大・特大）</h3>
-                    </div>
-                    <div class="sliver-table-wrapper">
-                        <table class="sliver-table">
-                            <thead id="snHeadTable2"></thead>
-                            <tbody id="snBodyTable2"></tbody>
-                            <tfoot id="snFootTable2"></tfoot>
-                        </table>
-                    </div>
+                <!-- Size Tabs (Level 2) -->
+                <div class="sn-size-tabs" id="snSizeTabs">
+                    <!-- Dynamically generated based on active product -->
                 </div>
 
-                <!-- IW Section: イワツキ用スノースプリント -->
-                <div class="card" style="margin-bottom: 2rem;">
-                    <div class="card-header-stock">
-                        <h3 style="margin: 0;">・イワツキ用スノースプリントⅡ</h3>
-                    </div>
+                <!-- Single Table -->
+                <div class="card sn-table-card">
                     <div class="sliver-table-wrapper">
-                        <table class="sliver-table">
-                            <thead id="iwHeadTable1"></thead>
-                            <tbody id="iwBodyTable1"></tbody>
-                            <tfoot id="iwFootTable1"></tfoot>
-                        </table>
-                    </div>
-                </div>
-
-                <!-- US Section: ユニバーサルスプリント -->
-                <div class="card" style="margin-bottom: 2rem;">
-                    <div class="card-header-stock">
-                        <h3 style="margin: 0;">・ユニバーサルスプリント（金具・箱）</h3>
-                    </div>
-                    <div class="sliver-table-wrapper">
-                        <table class="sliver-table">
-                            <thead id="usHeadTable1"></thead>
-                            <tbody id="usBodyTable1"></tbody>
-                            <tfoot id="usFootTable1"></tfoot>
-                        </table>
-                    </div>
-                </div>
-
-                <!-- UR Section: ウレタン在庫 -->
-                <div class="card" style="margin-bottom: 2rem;">
-                    <div class="card-header-stock">
-                        <h3 style="margin: 0;">・ウレタン在庫（US用）</h3>
-                    </div>
-                    <div class="sliver-table-wrapper">
-                        <table class="sliver-table">
-                            <thead id="urHeadTable1"></thead>
-                            <tbody id="urBodyTable1"></tbody>
-                            <tfoot id="urFootTable1"></tfoot>
+                        <table class="sliver-table" id="snTabTable">
+                            <thead id="snTabHead"></thead>
+                            <tbody id="snTabBody"></tbody>
+                            <tfoot id="snTabFoot"></tfoot>
                         </table>
                     </div>
                 </div>
