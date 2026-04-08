@@ -209,56 +209,13 @@
                             <p style="font-size: 0.875rem; color: var(--text-muted);">新しい機械稼働記録を追加します。</p>
                         </div>
 
-                        <div class="quick-entry-stats">
-                            <div style="text-align: right; min-width: 80px;">
-                                <div
-                                    style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">
-                                    No.6 合計</div>
-                                <div id="no6-total-count"
-                                    style="font-size: 1.5rem; font-weight: 800; color: var(--accent);">
-                                    0</div>
-                            </div>
-                            <div style="text-align: right; min-width: 80px;">
-                                <div
-                                    style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">
-                                    鼻ぽん小 合計</div>
-                                <div id="hanapon-s-total-count"
-                                    style="font-size: 1.5rem; font-weight: 800; color: var(--accent);">0</div>
-                            </div>
-                            <div style="text-align: right; min-width: 100px;">
-                                <div
-                                    style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">
-                                    本日の合計</div>
-                                <div id="day-total-count"
-                                    style="font-size: 1.75rem; font-weight: 800; color: var(--primary);">
-                                    0</div>
-                            </div>
-                            <div style="text-align: right; min-width: 100px;">
-                                <div
-                                    style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">
-                                    平均時間</div>
-                                <div id="avg-duration"
-                                    style="font-size: 1.75rem; font-weight: 800; color: var(--primary);">
-                                    0h 00m</div>
-                            </div>
-                        </div>
+
                     </div>
 
                     <form id="entry-form" class="quick-entry-form">
                         <div class="form-group small">
                             <label>機械</label>
-                            <select id="machine" required>
-                                <option value="A">A</option>
-                                <option value="B">B</option>
-                                <option value="C">C</option>
-                                <option value="D">D</option>
-                                <option value="E">E</option>
-                                <option value="F">F</option>
-                                <option value="G">G</option>
-                                <option value="H">H</option>
-                                <option value="I">I</option>
-                                <option value="J">J</option>
-                            </select>
+                            <input type="text" id="machine" required placeholder="機械を入力" style="width: 100%; box-sizing: border-box; padding: 0.5rem; border: 1px solid var(--border); border-radius: 6px;">
                         </div>
                         <div class="form-group">
                             <label>製品名</label>

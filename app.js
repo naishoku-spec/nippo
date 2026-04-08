@@ -2498,17 +2498,21 @@ function calculateAndDisplayStats() {
         }
     });
 
-    dayTotalEl.textContent = totalCount.toLocaleString();
-    document.getElementById('no6-total-count').textContent = totalNo6.toLocaleString();
-    document.getElementById('hanapon-s-total-count').textContent = totalHanaponSmall.toLocaleString();
+    if (dayTotalEl) dayTotalEl.textContent = totalCount.toLocaleString();
+    const no6TotalEl = document.getElementById('no6-total-count');
+    if (no6TotalEl) no6TotalEl.textContent = totalNo6.toLocaleString();
+    const hanaponTotalEl = document.getElementById('hanapon-s-total-count');
+    if (hanaponTotalEl) hanaponTotalEl.textContent = totalHanaponSmall.toLocaleString();
 
-    if (activeEntries > 0) {
-        const avgMins = totalMinutes / activeEntries;
-        const h = Math.floor(avgMins / 60);
-        const m = Math.floor(avgMins % 60);
-        avgDurationEl.textContent = `${h}h ${m.toString().padStart(2, '0')}m`;
-    } else {
-        avgDurationEl.textContent = '0h 00m';
+    if (avgDurationEl) {
+        if (activeEntries > 0) {
+            const avgMins = totalMinutes / activeEntries;
+            const h = Math.floor(avgMins / 60);
+            const m = Math.floor(avgMins % 60);
+            avgDurationEl.textContent = `${h}h ${m.toString().padStart(2, '0')}m`;
+        } else {
+            avgDurationEl.textContent = '0h 00m';
+        }
     }
 }
 

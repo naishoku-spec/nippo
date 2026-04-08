@@ -165,34 +165,13 @@
                             <p style="font-size: 0.875rem; color: var(--text-muted);">新しいプレス機稼働記録を追加します。</p>
                         </div>
 
-                        <div class="quick-entry-stats">
-                            <div style="text-align: right; min-width: 80px;">
-                                <div
-                                    style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">
-                                    本日の合計</div>
-                                <div id="day-total-count-1f"
-                                    style="font-size: 1.75rem; font-weight: 800; color: var(--primary);">0</div>
-                            </div>
-                            <div style="text-align: right; min-width: 100px;">
-                                <div
-                                    style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">
-                                    平均稼働時間</div>
-                                <div id="avg-duration-1f"
-                                    style="font-size: 1.75rem; font-weight: 800; color: var(--primary);">
-                                    0h 00m</div>
-                            </div>
-                        </div>
+
                     </div>
 
                     <form id="entry-form-1f" class="quick-entry-form">
                         <div class="form-group small">
                             <label>機械</label>
-                            <select id="machine-1f" required>
-                                <option value="R1">R1</option>
-                                <option value="R2">R2</option>
-                                <option value="R3">R3</option>
-                                <option value="R4">R4</option>
-                            </select>
+                            <input type="text" id="machine-1f" required placeholder="機械を入力" style="width: 100%; box-sizing: border-box; padding: 0.5rem; border: 1px solid var(--border); border-radius: 6px;">
                         </div>
                         <div class="form-group small">
                             <label>開始時間</label>

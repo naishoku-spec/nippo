@@ -482,7 +482,7 @@ function calculateAndDisplayStats() {
         }
     });
 
-    dayTotalEl.textContent = totalCount.toLocaleString();
+    if (dayTotalEl) dayTotalEl.textContent = totalCount.toLocaleString();
     if (grandTotalDisplayEl) {
         grandTotalDisplayEl.textContent = totalCount.toLocaleString();
     }
@@ -524,13 +524,15 @@ function calculateAndDisplayStats() {
         }).join('');
     }
 
-    if (activeEntries > 0) {
-        const avgMins = totalMinutes / activeEntries;
-        const h = Math.floor(avgMins / 60);
-        const m = Math.floor(avgMins % 60);
-        avgDurationEl.textContent = `${h}h ${m.toString().padStart(2, '0')}m`;
-    } else {
-        avgDurationEl.textContent = '0h 00m';
+    if (avgDurationEl) {
+        if (activeEntries > 0) {
+            const avgMins = totalMinutes / activeEntries;
+            const h = Math.floor(avgMins / 60);
+            const m = Math.floor(avgMins % 60);
+            avgDurationEl.textContent = `${h}h ${m.toString().padStart(2, '0')}m`;
+        } else {
+            avgDurationEl.textContent = '0h 00m';
+        }
     }
 }
 
