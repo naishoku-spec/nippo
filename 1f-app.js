@@ -18,7 +18,7 @@ if (firebaseConfig.apiKey !== "YOUR_API_KEY") {
 }
 
 // Environment Detection (Production vs Development)
-const isProduction = window.location.hostname === 'naishoku-spec.github.io';
+const isProduction = true; // 常に本番データ（Web）と同期するためにtrueに変更
 const SECRET_KEY = 'nippo-report-secure-key-2026';
 const DB_PATH = `${SECRET_KEY}/${isProduction ? '1f_nippo_records' : '1f_nippo_records_dev'}`;
 const DB_CARRYOVER_PATH = `${SECRET_KEY}/${isProduction ? '1f_carryover' : '1f_carryover_dev'}`;

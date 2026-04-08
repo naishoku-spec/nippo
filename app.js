@@ -1619,7 +1619,7 @@ if (firebaseConfig.apiKey !== "YOUR_API_KEY") {
 }
 
 // Environment Detection (Production vs Development)
-const isProduction = window.location.hostname === 'naishoku-spec.github.io';
+const isProduction = true; // 常に本番データ（Web）と同期するためにtrueに変更
 const SECRET_KEY = 'nippo-report-secure-key-2026';
 const DB_PATH = `${SECRET_KEY}/${isProduction ? 'nippo_records' : 'nippo_records_dev'}`;
 const ROLL_DB_PATH = `${SECRET_KEY}/${isProduction ? 'roll_inventory' : 'roll_inventory_dev'}`;
@@ -3246,15 +3246,15 @@ function renderSliverSection(section, sectionData, typesDef) {
             // 入庫
             rowsHtml += `<td><input type="number" class="sliver-input" value="${incoming || ''}" 
                 data-section="${sectionKey}" data-type="${t.key}" data-day="${d}" data-field="incoming"
-                onchange="updateSliverCell(this)" onfocus="this.select()"></td>`;
+                oninput="updateSliverCell(this)" onfocus="this.select()"></td>`;
             // 朝出庫
             rowsHtml += `<td><input type="number" class="sliver-input" value="${morning || ''}" 
                 data-section="${sectionKey}" data-type="${t.key}" data-day="${d}" data-field="morning"
-                onchange="updateSliverCell(this)" onfocus="this.select()"></td>`;
+                oninput="updateSliverCell(this)" onfocus="this.select()"></td>`;
             // 夕出庫
             rowsHtml += `<td><input type="number" class="sliver-input" value="${evening || ''}" 
                 data-section="${sectionKey}" data-type="${t.key}" data-day="${d}" data-field="evening"
-                onchange="updateSliverCell(this)" onfocus="this.select()"></td>`;
+                oninput="updateSliverCell(this)" onfocus="this.select()"></td>`;
             // 出庫後 (calculated)
             const lowClass = rem <= 5 ? ' low-stock' : '';
             rowsHtml += `<td class="sliver-remaining${lowClass}" id="sliver-rem-${sectionKey}-${t.key}-${d}">${rem}</td>`;
@@ -3293,37 +3293,55 @@ function updateSliverCell(input) {
     const typeKey = input.dataset.type;
     const day = input.dataset.day;
     const field = input.dataset.field;
-    const value = parseInt(input.value) || 0;
+    let value = input.value.trim();
+    value = value === '' ? 0 : parseInt(value);
+    if (isNaN(value)) return;
 
     const key = `${sliverCurrentYear}-${sliverCurrentMonth}`;
     if (!sliverAllData[key]) return;
     if (!sliverAllData[key][section]) return;
     if (!sliverAllData[key][section][typeKey]) return;
 
-    if (!sliverAllData[key][section][typeKey].days) {
-        sliverAllData[key][section][typeKey].days = {};
+    const dataObj = sliverAllData[key][section][typeKey];
+
+    if (!dataObj.days) {
+        dataObj.days = {};
     }
-    if (!sliverAllData[key][section][typeKey].days[day]) {
-        sliverAllData[key][section][typeKey].days[day] = { incoming: 0, morning: 0, evening: 0 };
+    if (!dataObj.days[day]) {
+        dataObj.days[day] = {};
     }
 
-    sliverAllData[key][section][typeKey].days[day][field] = value;
+    if (value === 0) {
+        delete dataObj.days[day][field];
+    } else {
+        dataObj.days[day][field] = value;
+    }
 
-    // Recalculate remaining balances for this section
+    // Clean up empty days
+    if (Object.keys(dataObj.days[day]).length === 0) {
+        delete dataObj.days[day];
+    }
+
+    // Recalculate remaining balances for this section (for current month visualization)
     recalculateSliverSection(section);
 
-    // Propagate carryover to future months
-    propagateSliverCarryover(sliverCurrentYear, sliverCurrentMonth);
+    // Save to local storage immediately for fast local reflection
+    localStorage.setItem(SLIVER_STORAGE_KEY, JSON.stringify(sliverAllData));
 
-    saveSliverData();
-
-    // Show save status
+    // Show save status immediately
     const statusEl = document.getElementById('saveStatusSliver');
     if (statusEl) {
         statusEl.textContent = '✓ 保存しました';
         statusEl.style.color = 'var(--accent)';
         setTimeout(() => { statusEl.textContent = ''; }, 2000);
     }
+
+    // Debounce propagation and Firebase save to prevent UI freeze
+    clearTimeout(window.sliverSaveTimer);
+    window.sliverSaveTimer = setTimeout(() => {
+        propagateSliverCarryover(sliverCurrentYear, sliverCurrentMonth);
+        saveSliverData();
+    }, 500);
 }
 
 function recalculateSliver() {
@@ -3339,14 +3357,26 @@ function recalculateSliverSection(section) {
     const typesDef = section === 'p' ? SLIVER_P_TYPES : SLIVER_M_TYPES;
     const daysInMonth = new Date(sliverCurrentYear, sliverCurrentMonth, 0).getDate();
 
+    const totalsObj = {};
+
     typesDef.forEach(t => {
         const typeData = data[section][t.key];
         if (!typeData) return;
 
         let balance = typeData.carryover || 0;
+        let totalIn = 0, totalMorn = 0, totalEve = 0;
+
         for (let d = 1; d <= daysInMonth; d++) {
             const dData = (typeData.days && typeData.days[d]) || {};
-            balance = balance + (dData.incoming || 0) - (dData.morning || 0) - (dData.evening || 0);
+            const incoming = parseInt(dData.incoming) || 0;
+            const morning = parseInt(dData.morning) || 0;
+            const evening = parseInt(dData.evening) || 0;
+
+            totalIn += incoming;
+            totalMorn += morning;
+            totalEve += evening;
+
+            balance = balance + incoming - morning - evening;
 
             const remEl = document.getElementById(`sliver-rem-${section}-${t.key}-${d}`);
             if (remEl) {
@@ -3358,7 +3388,23 @@ function recalculateSliverSection(section) {
                 }
             }
         }
+        totalsObj[t.key] = { incoming: totalIn, morning: totalMorn, evening: totalEve, finalRem: balance };
     });
+
+    const tfoot = document.getElementById(`sliverFoot${section.toUpperCase()}`);
+    if (tfoot) {
+        let footHtml = '<tr style="background: var(--bg-main); border-top: 2px solid var(--border);">';
+        footHtml += '<td style="font-weight:700; padding:0.75rem; white-space:nowrap;">残数</td>';
+        typesDef.forEach((t) => {
+            const sum = totalsObj[t.key] || { incoming: 0, morning: 0, evening: 0, finalRem: 0 };
+            footHtml += `<td style="font-weight:700">${sum.incoming || ''}</td>`;
+            footHtml += `<td style="font-weight:700">${sum.morning || ''}</td>`;
+            footHtml += `<td style="font-weight:700">${sum.evening || ''}</td>`;
+            footHtml += `<td style="font-weight:800; color:var(--primary)">${sum.finalRem}</td>`;
+        });
+        footHtml += '</tr>';
+        tfoot.innerHTML = footHtml;
+    }
 }
 
 function propagateSliverCarryover(year, month) {
@@ -3858,19 +3904,19 @@ function renderHanaponSection(sectionId, monthData, typesDef) {
             // 製造
             rowsHtml += `<td><input type="number" class="sliver-input hanapon-input" value="${production}" 
                 data-type="${t.key}" data-day="${d}" data-field="production"
-                onchange="updateHanaponCell(this)" onfocus="this.select()"></td>`;
+                oninput="updateHanaponCell(this)" onfocus="this.select()"></td>`;
             
             // キューライズ (optional)
             if (t.hasCurerise) {
                 rowsHtml += `<td><input type="number" class="sliver-input hanapon-input" value="${curerise}" 
                     data-type="${t.key}" data-day="${d}" data-field="curerise"
-                    onchange="updateHanaponCell(this)" onfocus="this.select()"></td>`;
+                    oninput="updateHanaponCell(this)" onfocus="this.select()"></td>`;
             }
             
             // 内職
             rowsHtml += `<td><input type="number" class="sliver-input hanapon-input" value="${naishoku}" 
                 data-type="${t.key}" data-day="${d}" data-field="naishoku"
-                onchange="updateHanaponCell(this)" onfocus="this.select()"></td>`;
+                oninput="updateHanaponCell(this)" onfocus="this.select()"></td>`;
             
             // 残数(ケース)
             const lowClass = rem <= 5 ? ' low-stock' : '';
@@ -3933,35 +3979,37 @@ function updateHanaponCell(input) {
     const typeKey = input.dataset.type;
     const day = input.dataset.day;
     const field = input.dataset.field;
-    const value = input.value === '' ? null : parseInt(input.value);
+    let value = input.value.trim();
+    value = value === '' ? 0 : parseInt(value);
+    if (isNaN(value)) return;
 
     const key = `${hanaponCurrentYear}-${hanaponCurrentMonth}`;
     if (!hanaponAllData[key] || !hanaponAllData[key][typeKey]) return;
 
-    if (!hanaponAllData[key][typeKey].days) {
-        hanaponAllData[key][typeKey].days = {};
+    const dataObj = hanaponAllData[key][typeKey];
+
+    if (!dataObj.days) {
+        dataObj.days = {};
     }
-    if (!hanaponAllData[key][typeKey].days[day]) {
-        hanaponAllData[key][typeKey].days[day] = {};
+    if (!dataObj.days[day]) {
+        dataObj.days[day] = {};
     }
 
-    if (value === null) {
-        delete hanaponAllData[key][typeKey].days[day][field];
+    if (value === 0) {
+        delete dataObj.days[day][field];
     } else {
-        hanaponAllData[key][typeKey].days[day][field] = value;
+        dataObj.days[day][field] = value;
     }
 
     // Clean up empty days
-    const dData = hanaponAllData[key][typeKey].days[day];
-    if (Object.keys(dData).length === 0 || 
-        (!dData.production && !dData.curerise && !dData.naishoku && 
-         dData.production !== 0 && dData.curerise !== 0 && dData.naishoku !== 0)) {
-        delete hanaponAllData[key][typeKey].days[day];
+    if (Object.keys(dataObj.days[day]).length === 0) {
+        delete dataObj.days[day];
     }
 
     recalculateHanapon();
-    propagateHanaponCarryover(hanaponCurrentYear, hanaponCurrentMonth);
-    saveHanaponData();
+    
+    // Save to local storage immediately for fast local reflection
+    localStorage.setItem(HANAPON_STORAGE_KEY, JSON.stringify(hanaponAllData));
 
     // Show save status
     const statusEl = document.getElementById('saveStatusHanapon');
@@ -3970,26 +4018,46 @@ function updateHanaponCell(input) {
         statusEl.style.color = 'var(--accent)';
         setTimeout(() => { statusEl.textContent = ''; }, 2000);
     }
+
+    // Debounce propagation and Firebase save to prevent UI freeze
+    clearTimeout(window.hanaponSaveTimer);
+    window.hanaponSaveTimer = setTimeout(() => {
+        propagateHanaponCarryover(hanaponCurrentYear, hanaponCurrentMonth);
+        saveHanaponData();
+    }, 500);
 }
 
 function recalculateHanapon() {
+    recalculateHanaponSection('Main', HANAPON_MAIN_TYPES);
+    recalculateHanaponSection('Anaaki', HANAPON_ANAAKI_TYPES);
+}
+
+function recalculateHanaponSection(sectionId, typesDef) {
     const key = `${hanaponCurrentYear}-${hanaponCurrentMonth}`;
     const data = hanaponAllData[key];
     if (!data) return;
 
-    const allTypes = [...HANAPON_MAIN_TYPES, ...HANAPON_ANAAKI_TYPES];
     const daysInMonth = new Date(hanaponCurrentYear, hanaponCurrentMonth, 0).getDate();
+    const totalsObj = {};
 
-    allTypes.forEach(t => {
+    typesDef.forEach(t => {
         const typeData = data[t.key];
         if (!typeData) return;
 
         let balance = typeData.carryover || 0;
+        let totalProd = 0, totalCure = 0, totalNaishoku = 0;
+
         for (let d = 1; d <= daysInMonth; d++) {
             const dData = (typeData.days && typeData.days[d]) || {};
-            balance = balance + (parseInt(dData.production) || 0) 
-                              - (parseInt(dData.curerise) || 0) 
-                              - (parseInt(dData.naishoku) || 0);
+            const prod = parseInt(dData.production) || 0;
+            const cure = parseInt(dData.curerise) || 0;
+            const nai = parseInt(dData.naishoku) || 0;
+
+            totalProd += prod;
+            totalCure += cure;
+            totalNaishoku += nai;
+
+            balance = balance + prod - cure - nai;
 
             const remEl = document.getElementById(`hanapon-rem-${t.key}-${d}`);
             const remPcsEl = document.getElementById(`hanapon-rem-pcs-${t.key}-${d}`);
@@ -4005,7 +4073,38 @@ function recalculateHanapon() {
                 remPcsEl.textContent = (balance * t.pcsPerCase).toLocaleString();
             }
         }
+        totalsObj[t.key] = { prod: totalProd, cure: totalCure, naishoku: totalNaishoku, finalRem: balance };
     });
+
+    const tfoot = document.getElementById(`hanaponFoot${sectionId}`);
+    if (tfoot) {
+        let footHtml = '<tr style="background: var(--bg-main); border-top: 2px solid var(--border);">';
+        footHtml += '<td style="font-weight:700; padding:0.75rem; white-space:nowrap;">合計 / 残</td>';
+
+        typesDef.forEach((t) => {
+            const sum = totalsObj[t.key] || { prod: 0, cure: 0, naishoku: 0, finalRem: 0 };
+            footHtml += `<td style="font-weight:700">${sum.prod || ''}</td>`;
+            if (t.hasCurerise) footHtml += `<td style="font-weight:700">${sum.cure || ''}</td>`;
+            footHtml += `<td style="font-weight:700">${sum.naishoku || ''}</td>`;
+            footHtml += `<td style="font-weight:800; color:var(--primary)">${sum.finalRem}</td>`;
+            footHtml += `<td class="hanapon-individual-col" style="font-weight:800; font-family: monospace;">${(sum.finalRem * t.pcsPerCase).toLocaleString()}</td>`;
+        });
+        footHtml += '</tr>';
+
+        let prodFootHtml = '<tr style="background: rgba(var(--primary-rgb), 0.05);">';
+        prodFootHtml += '<td style="font-weight:700; padding:0.75rem; white-space:nowrap; text-align: left;" colspan="1">月製造数</td>';
+        typesDef.forEach((t) => {
+            const sum = totalsObj[t.key] || { prod: 0 };
+            const totalPcs = sum.prod * t.pcsPerCase;
+            let skipSpan = t.hasCurerise ? 4 : 3;
+            if (window.innerWidth <= 600) skipSpan -= 1;
+            prodFootHtml += `<td colspan="${skipSpan}"></td>`;
+            prodFootHtml += `<td class="hanapon-individual-col" style="font-weight:800; color: #0284c7; font-family: monospace; white-space: nowrap;">${totalPcs.toLocaleString()}</td>`;
+        });
+        prodFootHtml += '</tr>';
+
+        tfoot.innerHTML = footHtml + prodFootHtml;
+    }
 }
 
 function propagateHanaponCarryover(year, month) {

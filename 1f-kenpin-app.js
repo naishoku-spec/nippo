@@ -17,7 +17,7 @@ if (firebase.apps.length === 0) {
 }
 database = firebase.database();
 
-const isProduction = window.location.hostname === 'naishoku-spec.github.io';
+const isProduction = true; // 常に本番データ（Web）と同期するためにtrueに変更
 const SECRET_KEY = 'nippo-report-secure-key-2026';
 const DB_PATH = `${SECRET_KEY}/${isProduction ? '1f_kenpin_records' : '1f_kenpin_records_dev'}`;
 const LS_KEY = isProduction ? '1f_kenpin_records' : '1f_kenpin_records_dev';
