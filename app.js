@@ -1644,6 +1644,7 @@ const ROLL_LABELS = { film: 'フィルム', plain: '無地', eog: 'EOG' };
 const ROLL_DAY_NAMES = ['日', '月', '火', '水', '木', '金', '土'];
 const STOCK_LOW_THRESHOLD = 5;
 let rollAllData = {};
+let rollLastEditTime = 0;
 let rollCurrentYear = new Date().getFullYear();
 let rollCurrentMonth = new Date().getMonth() + 1;
 let isFirstRollLoad = true;
@@ -1718,18 +1719,13 @@ if (database) {
         if (firebaseRollData && Object.keys(firebaseRollData).length > 0) {
             const isDifferent = JSON.stringify(rollAllData) !== JSON.stringify(firebaseRollData);
             if (isDifferent) {
+                if (Date.now() - rollLastEditTime < 2000) return; // 防止編集中の上書き
+
                 rollAllData = firebaseRollData;
                 localStorage.setItem(ROLL_STORAGE_KEY, JSON.stringify(rollAllData));
 
-                const isTyping = document.activeElement &&
-                    (document.activeElement.classList.contains('stock-input') ||
-                        document.activeElement.classList.contains('carry-input'));
-
-                if (stockViewContainer.style.display === 'block' && !isTyping) {
+                if (stockViewContainer.style.display === 'block') {
                     renderRollStock();
-                } else if (stockViewContainer.style.display === 'block') {
-                    // Update only non-input elements like remaining balance cells and totals
-                    recalculateRollStock();
                 }
             }
         } else if (isFirstRollLoad && Object.keys(rollAllData).length > 0) {
@@ -2716,6 +2712,7 @@ function renderRollStock() {
     body.appendChild(carryRow);
 
     carryRow.querySelectorAll('.carry-input').forEach(input => {
+        input.addEventListener('input', () => { rollLastEditTime = Date.now(); });
         input.addEventListener('change', (e) => {
             const type = e.target.dataset.type;
             const currentData = getRollMonthData(rollCurrentYear, rollCurrentMonth);
@@ -2761,6 +2758,7 @@ function renderRollStock() {
         body.appendChild(tr);
 
         tr.querySelectorAll('input').forEach(input => {
+            input.addEventListener('input', () => { rollLastEditTime = Date.now(); });
             input.addEventListener('change', (e) => {
                 const type = e.target.dataset.type;
                 const d = e.target.dataset.day;
@@ -2952,6 +2950,7 @@ const SLIVER_M_TYPES = [
 const SLIVER_DAY_NAMES = ['日', '月', '火', '水', '木', '金', '土'];
 
 let sliverAllData = {};
+let sliverLastEditTime = 0;
 let sliverCurrentYear = new Date().getFullYear();
 let sliverCurrentMonth = new Date().getMonth() + 1;
 let isFirstSliverLoad = true;
@@ -3029,16 +3028,13 @@ function initSliver() {
             if (firebaseData && Object.keys(firebaseData).length > 0) {
                 const isDifferent = JSON.stringify(sliverAllData) !== JSON.stringify(firebaseData);
                 if (isDifferent) {
+                    if (Date.now() - sliverLastEditTime < 2000) return; // 防止編集中の上書き
+
                     sliverAllData = firebaseData;
                     localStorage.setItem(SLIVER_STORAGE_KEY, JSON.stringify(sliverAllData));
 
-                    const isTyping = document.activeElement &&
-                        document.activeElement.classList.contains('sliver-input');
-
-                    if (sliverViewContainer.style.display === 'block' && !isTyping) {
+                    if (sliverViewContainer.style.display === 'block') {
                         renderSliver();
-                    } else if (sliverViewContainer.style.display === 'block') {
-                        recalculateSliver();
                     }
                 }
             } else if (isFirstSliverLoad && Object.keys(sliverAllData).length > 0) {
@@ -3293,6 +3289,7 @@ function renderSliverSection(section, sectionData, typesDef) {
 }
 
 function updateSliverCell(input) {
+    sliverLastEditTime = Date.now();
     const section = input.dataset.section; // 'p' or 'm'
     const typeKey = input.dataset.type;
     const day = input.dataset.day;
@@ -3472,6 +3469,7 @@ const HANAPON_ANAAKI_TYPES = [
 ];
 
 let hanaponAllData = {};
+let hanaponLastEditTime = 0;
 let hanaponCurrentYear = new Date().getFullYear();
 let hanaponCurrentMonth = new Date().getMonth() + 1;
 let isFirstHanaponLoad = true;
@@ -3678,16 +3676,13 @@ function initHanapon() {
             if (firebaseData && Object.keys(firebaseData).length > 0) {
                 const isDifferent = JSON.stringify(hanaponAllData) !== JSON.stringify(firebaseData);
                 if (isDifferent) {
+                    if (Date.now() - hanaponLastEditTime < 2000) return; // 防止編集中の上書き
+
                     hanaponAllData = firebaseData;
                     localStorage.setItem(HANAPON_STORAGE_KEY, JSON.stringify(hanaponAllData));
 
-                    const isTyping = document.activeElement &&
-                        document.activeElement.classList.contains('hanapon-input');
-
-                    if (hanaponViewContainer.style.display === 'block' && !isTyping) {
+                    if (hanaponViewContainer.style.display === 'block') {
                         renderHanapon();
-                    } else if (hanaponViewContainer.style.display === 'block') {
-                        recalculateHanapon();
                     }
                 }
             } else if (isFirstHanaponLoad && Object.keys(hanaponAllData).length > 0) {
@@ -3980,6 +3975,7 @@ function renderHanaponSection(sectionId, monthData, typesDef) {
 }
 
 function updateHanaponCell(input) {
+    hanaponLastEditTime = Date.now();
     const typeKey = input.dataset.type;
     const day = input.dataset.day;
     const field = input.dataset.field;
@@ -4160,6 +4156,7 @@ const SNOWSPRINT_STORAGE_KEY = 'snowsprintInventoryData';
 const SNOWSPRINT_DB_PATH = `${SECRET_KEY}/${isProduction ? 'snowsprint_inventory' : 'snowsprint_inventory_dev'}`;
 
 let snowsprintAllData = {};
+let snowsprintLastEditTime = 0;
 let snowsprintCurrentYear = new Date().getFullYear();
 let snowsprintCurrentMonth = new Date().getMonth() + 1;
 let isFirstSnowsprintLoad = true;
@@ -6668,14 +6665,13 @@ function initSnowsprint() {
             if (firebaseData && Object.keys(firebaseData).length > 0) {
                 const isDifferent = JSON.stringify(snowsprintAllData) !== JSON.stringify(firebaseData);
                 if (isDifferent) {
+                    if (Date.now() - snowsprintLastEditTime < 2000) return; // 防止編集中の上書き
+
                     snowsprintAllData = firebaseData;
                     localStorage.setItem(SNOWSPRINT_STORAGE_KEY, JSON.stringify(snowsprintAllData));
                     
-                    const isTyping = document.activeElement && document.activeElement.classList.contains('snowsprint-input');
-                    if (snowsprintViewContainer.style.display === 'block' && !isTyping) {
+                    if (snowsprintViewContainer.style.display === 'block') {
                         renderSnowsprint();
-                    } else if (snowsprintViewContainer.style.display === 'block') {
-                        recalculateSnowsprint();
                     }
                 }
             } else if (isFirstSnowsprintLoad && Object.keys(snowsprintAllData).length > 0) {
@@ -6971,6 +6967,7 @@ function renderSnowsprintGeneric(headId, bodyId, footId, configGroups, category)
     foot.innerHTML = footHtml;
 
     body.querySelectorAll('.snowsprint-input').forEach(el => {
+        el.addEventListener('input', () => { snowsprintLastEditTime = Date.now(); });
         el.addEventListener('change', handleSnowsprintInput);
     });
     carryRow = null; bodyRows = null; footHtml = null;
