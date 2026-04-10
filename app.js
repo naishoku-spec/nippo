@@ -3016,7 +3016,7 @@ function initSliver() {
     }
 
     // Ensure current month exists
-    ensureSliverMonth(sliverCurrentYear, sliverCurrentMonth);
+    ensureSliverMonth(sliverCurrentYear, sliverCurrentMonth, false);
 
     // Setup month selector
     setupSliverMonthSelector();
@@ -3031,6 +3031,7 @@ function initSliver() {
                     if (Date.now() - sliverLastEditTime < 2000) return; // 防止編集中の上書き
 
                     sliverAllData = firebaseData;
+                    ensureSliverMonth(sliverCurrentYear, sliverCurrentMonth, true);
                     localStorage.setItem(SLIVER_STORAGE_KEY, JSON.stringify(sliverAllData));
 
                     if (sliverViewContainer.style.display === 'block') {
@@ -3045,7 +3046,7 @@ function initSliver() {
     }
 }
 
-function ensureSliverMonth(year, month) {
+function ensureSliverMonth(year, month, shouldSave = true) {
     const key = `${year}-${month}`;
     if (!sliverAllData[key]) {
         // Try to calculate carryover from previous month
@@ -3072,7 +3073,7 @@ function ensureSliverMonth(year, month) {
         });
 
         sliverAllData[key] = newMonth;
-        saveSliverData();
+        if (shouldSave) saveSliverData();
     }
 }
 
@@ -3664,7 +3665,7 @@ function initHanapon() {
     }
 
     // Ensure current month exists
-    ensureHanaponMonth(hanaponCurrentYear, hanaponCurrentMonth);
+    ensureHanaponMonth(hanaponCurrentYear, hanaponCurrentMonth, false);
 
     // Setup month selector
     setupHanaponMonthSelector();
@@ -3679,6 +3680,7 @@ function initHanapon() {
                     if (Date.now() - hanaponLastEditTime < 2000) return; // 防止編集中の上書き
 
                     hanaponAllData = firebaseData;
+                    ensureHanaponMonth(hanaponCurrentYear, hanaponCurrentMonth, true);
                     localStorage.setItem(HANAPON_STORAGE_KEY, JSON.stringify(hanaponAllData));
 
                     if (hanaponViewContainer.style.display === 'block') {
@@ -3693,7 +3695,7 @@ function initHanapon() {
     }
 }
 
-function ensureHanaponMonth(year, month) {
+function ensureHanaponMonth(year, month, shouldSave = true) {
     const key = `${year}-${month}`;
     if (!hanaponAllData[key]) {
         // Calculate carryover from previous month
@@ -3718,7 +3720,7 @@ function ensureHanaponMonth(year, month) {
         });
 
         hanaponAllData[key] = newMonth;
-        saveHanaponData();
+        if (shouldSave) saveHanaponData();
     }
 }
 
@@ -6654,7 +6656,7 @@ function initSnowsprint() {
         localStorage.setItem(SNOWSPRINT_STORAGE_KEY, JSON.stringify(snowsprintAllData));
     }
 
-    ensureSnowsprintMonth(snowsprintCurrentYear, snowsprintCurrentMonth);
+    ensureSnowsprintMonth(snowsprintCurrentYear, snowsprintCurrentMonth, false);
     // Initial catch-up propagation
     propagateSnowSprintCarryover(snowsprintCurrentYear, snowsprintCurrentMonth);
     setupSnowsprintMonthSelector();
@@ -6668,6 +6670,7 @@ function initSnowsprint() {
                     if (Date.now() - snowsprintLastEditTime < 2000) return; // 防止編集中の上書き
 
                     snowsprintAllData = firebaseData;
+                    ensureSnowsprintMonth(snowsprintCurrentYear, snowsprintCurrentMonth, true);
                     localStorage.setItem(SNOWSPRINT_STORAGE_KEY, JSON.stringify(snowsprintAllData));
                     
                     if (snowsprintViewContainer.style.display === 'block') {
@@ -6682,7 +6685,7 @@ function initSnowsprint() {
     }
 }
 
-function ensureSnowsprintMonth(year, month) {
+function ensureSnowsprintMonth(year, month, shouldSave = true) {
     const key = `${year}-${month}`;
     if (!snowsprintAllData[key]) {
         let prevY = year;
@@ -6728,7 +6731,7 @@ function ensureSnowsprintMonth(year, month) {
         
         resetDaysAndCalculateCarry(newData, prevData);
         snowsprintAllData[key] = newData;
-        saveSnowsprintData();
+        if (shouldSave) saveSnowsprintData();
     }
 }
 
