@@ -54,18 +54,11 @@ if (database) {
             });
             // ------------------------------------
             
-            if (firebaseRecords.length > 0 && records.length === 0) {
+            if (firebaseRecords.length > 0) {
                 records = firebaseRecords;
                 localStorage.setItem(LS_KEY, JSON.stringify(records));
-            } else if (firebaseRecords.length === 0 && records.length > 0) {
+            } else if (records.length > 0) {
                 database.ref(DB_PATH).set(records);
-            } else if (firebaseRecords.length > 0 && records.length > 0) {
-                if (firebaseRecords.length >= records.length) {
-                    records = firebaseRecords;
-                    localStorage.setItem(LS_KEY, JSON.stringify(records));
-                } else {
-                    database.ref(DB_PATH).set(records);
-                }
             }
             if (patched) database.ref(DB_PATH).set(records);
             if (typeof renderRecords === 'function') renderRecords();

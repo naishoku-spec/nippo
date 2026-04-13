@@ -4159,6 +4159,7 @@ const SNOWSPRINT_DB_PATH = `${SECRET_KEY}/${isProduction ? 'snowsprint_inventory
 
 let snowsprintAllData = {};
 let snowsprintLastEditTime = 0;
+let snowsprintSaveTimer = null;
 let snowsprintCurrentYear = new Date().getFullYear();
 let snowsprintCurrentMonth = new Date().getMonth() + 1;
 let isFirstSnowsprintLoad = true;
@@ -6823,8 +6824,14 @@ function handleSnowsprintInput(e) {
         }
     }
     
-    saveSnowsprintData();
-    propagateSnowSprintCarryover(snowsprintCurrentYear, snowsprintCurrentMonth);
+    clearTimeout(snowsprintSaveTimer);
+    snowsprintSaveTimer = setTimeout(() => {
+        saveSnowsprintData();
+        propagateSnowSprintCarryover(snowsprintCurrentYear, snowsprintCurrentMonth);
+    }, 500);
+}
+
+function handleSnowsprintChange(e) {
     recalculateSnowsprint();
 }
 
@@ -6970,8 +6977,11 @@ function renderSnowsprintGeneric(headId, bodyId, footId, configGroups, category)
     foot.innerHTML = footHtml;
 
     body.querySelectorAll('.snowsprint-input').forEach(el => {
-        el.addEventListener('input', () => { snowsprintLastEditTime = Date.now(); });
-        el.addEventListener('change', handleSnowsprintInput);
+        el.addEventListener('input', (e) => { 
+            snowsprintLastEditTime = Date.now(); 
+            handleSnowsprintInput(e);
+        });
+        el.addEventListener('change', handleSnowsprintChange);
     });
     carryRow = null; bodyRows = null; footHtml = null;
 }
@@ -7090,7 +7100,7 @@ function propagateSnowSprintCarryover(year, month) {
         curY = nextY;
         curM = nextM;
     }
-    saveSnowsprintData();
+    localStorage.setItem(SNOWSPRINT_STORAGE_KEY, JSON.stringify(snowsprintAllData));
 }
 
 // ==========================================
