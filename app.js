@@ -1784,7 +1784,40 @@ const shiftViewContainer = document.getElementById('shift-view-container');
 const viewShiftBtn = document.getElementById('view-shift');
 
 // Initialize
+// Helpers for PC and Mobile input handling
+function isMobileDevice() {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+}
+
+function normalizeTime(val) {
+    val = (val || '').trim();
+    if (!val) return '';
+    // Convert 845 or 0845 to 08:45
+    if (/^\d{3,4}$/.test(val)) {
+        if (val.length === 3) val = '0' + val;
+        return val.substring(0, 2) + ':' + val.substring(2);
+    }
+    return val;
+}
+
+// Initialize
 function init() {
+    const isMobile = isMobileDevice();
+    if (!isMobile) {
+        // PC版での時間入力を使いやすくするためにtextタイプに変更し、全選択・自動整形を適用
+        ['start-time', 'end-time'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.type = 'text';
+                el.placeholder = 'HH:mm';
+                el.setAttribute('onfocus', 'this.select()');
+                el.addEventListener('blur', function() {
+                    this.value = normalizeTime(this.value);
+                });
+            }
+        });
+    }
+
     // Initialize Flatpickr for better styling control (like weekend colors)
     flatpickr(datePicker, {
         locale: "ja",
@@ -2083,13 +2116,21 @@ function renderMonthlyRecords() {
 function handleAddRecord(e) {
     e.preventDefault();
 
+    const startTimeInput = document.getElementById('start-time');
+    const endTimeInput = document.getElementById('end-time');
+
+    if (!isMobileDevice()) {
+        startTimeInput.value = normalizeTime(startTimeInput.value);
+        endTimeInput.value = normalizeTime(endTimeInput.value);
+    }
+
     const record = {
         id: Date.now() + Math.random(),
         date: currentDate,
         machine: document.getElementById('machine').value,
         product: document.getElementById('product').value,
-        startTime: document.getElementById('start-time').value,
-        endTime: document.getElementById('end-time').value,
+        startTime: startTimeInput.value,
+        endTime: endTimeInput.value,
         count: parseInt(document.getElementById('count').value || 0),
         orderCount: 0
     };
@@ -2417,6 +2458,7 @@ function renderRecords() {
         const { h, m } = calculateDuration(record.startTime, record.endTime);
         const tr = document.createElement('tr');
 
+        const isMobile = isMobileDevice();
         tr.innerHTML = `
             <td class="machine-cell"><span class="machine-badge">${record.machine}</span></td>
             <td class="product-cell">
@@ -2425,12 +2467,16 @@ function renderRecords() {
                 </select>
             </td>
             <td class="time-cell">
-                <input type="time" class="inline-input" value="${record.startTime}" 
-                       onchange="updateRecord(${record.id}, 'startTime', this.value); this.closest('tr').querySelector('.duration-text').innerText = getDurationLabel('${record.id}', this.value, null)">
+                <input type="${isMobile ? 'time' : 'text'}" class="inline-input" value="${record.startTime}" 
+                       ${isMobile ? '' : 'placeholder="HH:mm" onfocus="this.select()"'}
+                       ${isMobile ? `onchange="updateRecord(${record.id}, 'startTime', this.value); this.closest('tr').querySelector('.duration-text').innerText = getDurationLabel('${record.id}', this.value, null)"` : 
+                                   `onblur="this.value = normalizeTime(this.value); updateRecord(${record.id}, 'startTime', this.value); this.closest('tr').querySelector('.duration-text').innerText = getDurationLabel('${record.id}', this.value, null)"`} >
             </td>
             <td class="time-cell">
-                <input type="time" class="inline-input" value="${record.endTime}" 
-                       onchange="updateRecord(${record.id}, 'endTime', this.value); this.closest('tr').querySelector('.duration-text').innerText = getDurationLabel('${record.id}', null, this.value)">
+                <input type="${isMobile ? 'time' : 'text'}" class="inline-input" value="${record.endTime}" 
+                       ${isMobile ? '' : 'placeholder="HH:mm" onfocus="this.select()"'}
+                       ${isMobile ? `onchange="updateRecord(${record.id}, 'endTime', this.value); this.closest('tr').querySelector('.duration-text').innerText = getDurationLabel('${record.id}', null, this.value)"` : 
+                                   `onblur="this.value = normalizeTime(this.value); updateRecord(${record.id}, 'endTime', this.value); this.closest('tr').querySelector('.duration-text').innerText = getDurationLabel('${record.id}', null, this.value)"`} >
             </td>
             <td class="duration-cell" style="font-size: 0.8rem; color: var(--text-muted);">
                 <span class="duration-text">${h}時間 ${m}分</span>
@@ -2538,6 +2584,8 @@ window.deleteRecord = deleteRecord;
 window.clearRow = clearRow;
 window.getDurationLabel = getDurationLabel;
 window.switchView = switchView;
+window.isMobileDevice = isMobileDevice;
+window.normalizeTime = normalizeTime;
 
 // ==========================================
 // ========== Roll Stock Management ==========
