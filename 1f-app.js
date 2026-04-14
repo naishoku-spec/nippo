@@ -62,22 +62,30 @@ if (database) {
                 }
             }
             
-            isFirebaseSynced = true; // Data is now safely pulled, OK to write
-            
-            // Initial checks and render
+            isFirebaseSynced = true; 
             ensureDayRecords(currentDate);
             renderRecords();
             if (monthViewContainer && monthViewContainer.style.display === 'block') renderMonthlyRecords();
         } else {
             // Live updates from other devices
             if (firebaseRecords.length > 0) {
-                records = firebaseRecords;
-                localStorage.setItem(LS_KEY, JSON.stringify(records));
-                renderRecords();
-                if (monthViewContainer && monthViewContainer.style.display === 'block') renderMonthlyRecords();
+                // Ensure consistent ordering for comparison
+                const sortedFirebase = firebaseRecords.slice().sort((a, b) => a.date.localeCompare(b.date) || a.machine.localeCompare(b.machine));
+                const sortedLocal = records.slice().sort((a, b) => a.date.localeCompare(b.date) || a.machine.localeCompare(b.machine));
+
+
+                // Only update if the data is actually different to avoid unnecessary jumping
+                if (JSON.stringify(sortedLocal) !== JSON.stringify(sortedFirebase)) {
+                    records = firebaseRecords;
+                    localStorage.setItem(LS_KEY, JSON.stringify(records));
+                    renderRecords();
+                    if (monthViewContainer && monthViewContainer.style.display === 'block') renderMonthlyRecords();
+                }
             }
         }
     });
+
+
 
     // Sync centralized notes
     database.ref(NOTES_DB_PATH).on('value', (snapshot) => {
@@ -170,10 +178,16 @@ function init() {
     renderRecords();
     renderDailyNotes();
 
+    // Prevent data loss on refresh/close
+    window.addEventListener('beforeunload', () => {
+        saveRecords();
+        saveDailyNotes1f();
+    });
 
     // Mobile Menu Setup
     setupMobileMenu();
 }
+
 
 function setupMobileMenu() {
     const sidebar = document.getElementById('sidebar');
@@ -400,13 +414,17 @@ function ensureDayRecords(date) {
 function updateRecord(id, field, value) {
     const record = records.find(r => r.id == id);
     if (!record) return;
+    
     if (field === 'count') {
-        record[field] = parseInt(value) || 0;
+        const numVal = parseInt(value);
+        record[field] = isNaN(numVal) ? 0 : numVal;
     } else {
         record[field] = value;
     }
-    saveRecords(record); // Pass the specific record for granular sync
+    
+    saveRecords(); // Normal full sync
     calculateAndDisplayStats();
+    // No full render here to keep focus, but stats are updated
 }
 
 // Duration calculation
@@ -420,26 +438,18 @@ function calculateDuration(start, end) {
 }
 
 // Save logic: Granular updates to prevent multi-device conflicts
-function saveRecords(singleRecord = null) {
+function saveRecords() {
+    // Always save to localStorage immediately
     try {
         localStorage.setItem(LS_KEY, JSON.stringify(records));
     } catch (e) {
         console.error('LocalStorage save failed:', e);
     }
     
+    // Sync to Firebase using full sync for 1F (stabler and manageable data size)
     if (database && isFirebaseSynced) {
-        if (singleRecord && singleRecord.id) {
-            // Update only this specific record in Firebase
-            database.ref(DB_PATH + '/' + singleRecord.id).set(singleRecord)
-                .catch(err => console.error('Firebase granular save failed:', err));
-        } else {
-            // Full sync (seeding or major change)
-            // Convert array to object with IDs as keys for safer Firebase structure
-            const dataToSync = {};
-            records.forEach(r => { if(r.id) dataToSync[r.id] = r; });
-            database.ref(DB_PATH).set(dataToSync)
-                .catch(err => console.error('Firebase full sync failed:', err));
-        }
+        database.ref(DB_PATH).set(records)
+            .catch(err => console.error('Firebase save failed:', err));
     }
 }
 
@@ -478,8 +488,10 @@ function renderRecords() {
 
             <td class="count-cell">
                 <input type="number" class="inline-input" value="${record.count == 0 ? '' : record.count}"
+                       oninput="instantUpdateCount(${record.id}, this.value, this)"
                        onblur="updateRecord(${record.id}, 'count', this.value)">
             </td>
+
             <td class="total-cell" style="text-align: center; font-weight: 700; color: var(--accent); font-size: 0.85rem;">
                 ${cumTotal.toLocaleString()}
             </td>
@@ -666,6 +678,37 @@ window.isMobileDevice = isMobileDevice;
 window.normalizeTime = normalizeTime;
 window.clearRow = clearRow;
 window.getDurationLabel = getDurationLabel;
+
+// Instant update as typing (UI only, persistence happens on blur)
+window.instantUpdateCount = function(id, value, inputEl) {
+    const record = records.find(r => r.id == id);
+    if (!record) return;
+    
+    const numVal = parseInt(value);
+    record.count = isNaN(numVal) ? 0 : numVal;
+    
+    // Update the duration calculation (if applicable, though row doesn't show it anymore, stats use it)
+    // Update the cumulative total cell for this row
+    const tr = inputEl.closest('tr');
+    if (tr) {
+        const totalCell = tr.querySelector('.total-cell');
+        if (totalCell) {
+            const cumTotal = getCumulativeTotal(record.machine, currentDate);
+            totalCell.textContent = cumTotal.toLocaleString();
+        }
+    }
+    
+    // Update all global display elements (Summary cards, stats)
+    calculateAndDisplayStats();
+
+    // Debounce a full save to Firebase so it persists even if user doesn't blur soon
+    clearTimeout(window.instantSaveTimeout);
+    window.instantSaveTimeout = setTimeout(() => {
+        saveRecords();
+    }, 2000);
+};
+
+
 
 // Centralized Daily Notes Logic
 function renderDailyNotes() {
