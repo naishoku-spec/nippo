@@ -24,6 +24,9 @@ const DB_PATH = `${SECRET_KEY}/${isProduction ? '1f_nippo_records' : '1f_nippo_r
 const DB_CARRYOVER_PATH = `${SECRET_KEY}/${isProduction ? '1f_carryover' : '1f_carryover_dev'}`;
 const LS_KEY = isProduction ? '1f_nippo_records' : '1f_nippo_records_dev';
 const LS_CARRYOVER_KEY = isProduction ? '1f_carryover' : '1f_carryover_dev';
+const NOTES_LS_KEY = isProduction ? '1f_nippo_daily_notes' : '1f_nippo_daily_notes_dev';
+const NOTES_DB_PATH = `${SECRET_KEY}/${isProduction ? '1f_nippo_daily_notes' : '1f_nippo_daily_notes_dev'}`;
+
 
 console.log(`1F App: Running in ${isProduction ? 'PRODUCTION' : 'DEVELOPMENT'} mode. Data path: ${DB_PATH}`);
 
@@ -31,7 +34,10 @@ console.log(`1F App: Running in ${isProduction ? 'PRODUCTION' : 'DEVELOPMENT'} m
 let records = JSON.parse(localStorage.getItem(LS_KEY)) || [];
 let currentDate = new Date().toLocaleDateString('sv-SE');
 let isFirstLoad = true;
-let isFirebaseSynced = false; // Prevents overwriting cloud data before the first pull
+let isFirebaseSynced = false; 
+let dailyNotes = JSON.parse(localStorage.getItem(NOTES_LS_KEY)) || {};
+let noteSaveTimeout = null;
+
 
 // Real-time synchronization from Firebase
 if (database) {
@@ -72,7 +78,18 @@ if (database) {
             }
         }
     });
+
+    // Sync centralized notes
+    database.ref(NOTES_DB_PATH).on('value', (snapshot) => {
+        const firebaseNotes = snapshot.val();
+        if (firebaseNotes) {
+            dailyNotes = firebaseNotes;
+            localStorage.setItem(NOTES_LS_KEY, JSON.stringify(dailyNotes));
+            renderDailyNotes();
+        }
+    });
 }
+
 
 const MACHINES = ['R1', 'R2', 'R3', 'R4'];
 
@@ -107,20 +124,20 @@ function normalizeTime(val) {
 // Initialize
 function init() {
     const isMobile = isMobileDevice();
-    if (!isMobile) {
-        // PC版での時間入力を使いやすくするためにtextタイプに変更し、全選択・自動整形を適用
-        ['start-time-1f', 'end-time-1f'].forEach(id => {
-            const el = document.getElementById(id);
-            if (el) {
-                el.type = 'text';
-                el.placeholder = 'HH:mm';
-                el.setAttribute('onfocus', 'this.select()');
-                el.addEventListener('blur', function() {
-                    this.value = normalizeTime(this.value);
-                });
-            }
-        });
-    }
+    // 全てのデバイス（PC・スマホ）で時間入力を使いやすくするためにtextタイプとして扱い、自動整形を適用
+    ['start-time-1f', 'end-time-1f'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.type = 'text';
+            el.placeholder = 'HH:mm';
+            el.setAttribute('inputmode', 'numeric'); // 数字キーボードを出しやすくする
+            el.setAttribute('onfocus', 'this.select()');
+            el.addEventListener('blur', function() {
+                this.value = normalizeTime(this.value);
+            });
+        }
+    });
+
 
     datePicker.value = currentDate;
 
@@ -132,6 +149,7 @@ function init() {
             currentDate = dateStr;
             ensureDayRecords(currentDate);
             renderRecords();
+            renderDailyNotes();
             if (monthViewContainer.style.display === 'block') renderMonthlyRecords();
         },
         onDayCreate: function (dObj, dStr, fp, dayElem) {
@@ -150,6 +168,8 @@ function init() {
 
     ensureDayRecords(currentDate);
     renderRecords();
+    renderDailyNotes();
+
 
     // Mobile Menu Setup
     setupMobileMenu();
@@ -290,8 +310,8 @@ function renderMonthlyRecords() {
                 <td class="time-cell">${r.endTime || ''}</td>
                 <td style="font-size: 0.85rem; color: var(--text-muted);">${h}時間 ${m}分</td>
                 <td style="text-align: right; font-weight: 700; color: var(--primary);">${r.count > 0 ? r.count.toLocaleString() : ''}</td>
-                <td style="font-size: 0.8rem; color: var(--text-muted);">${r.notes || ''}</td>
             </tr>
+
         `;
     });
     dailyListEl.innerHTML = html || '<tr><td colspan="7" style="text-align:center; padding: 2rem;">記録がありません</td></tr>';
@@ -303,10 +323,9 @@ function handleAddRecord(e) {
     const startTimeInput = document.getElementById('start-time-1f');
     const endTimeInput = document.getElementById('end-time-1f');
 
-    if (!isMobileDevice()) {
-        startTimeInput.value = normalizeTime(startTimeInput.value);
-        endTimeInput.value = normalizeTime(endTimeInput.value);
-    }
+    startTimeInput.value = normalizeTime(startTimeInput.value);
+    endTimeInput.value = normalizeTime(endTimeInput.value);
+
 
     const record = {
         id: Date.now() + Math.random(),
@@ -314,14 +333,13 @@ function handleAddRecord(e) {
         machine: document.getElementById('machine-1f').value,
         startTime: startTimeInput.value,
         endTime: endTimeInput.value,
-        count: parseInt(document.getElementById('count-1f').value || 0),
-        notes: document.getElementById('notes-1f').value
+        count: parseInt(document.getElementById('count-1f').value || 0)
     };
     records.push(record);
     saveRecords(record);
     renderRecords();
     document.getElementById('count-1f').value = '';
-    document.getElementById('notes-1f').value = '';
+
 }
 
 // Japanese Holiday Calculation
@@ -445,20 +463,17 @@ function renderRecords() {
         const cumTotal = getCumulativeTotal(record.machine, currentDate);
         const tr = document.createElement('tr');
 
-        const isMobile = isMobileDevice();
         tr.innerHTML = `
             <td class="machine-cell"><span class="machine-badge machine-badge-${record.machine.toLowerCase()}">${record.machine}</span></td>
             <td class="time-cell">
-                <input type="${isMobile ? 'time' : 'text'}" class="inline-input" value="${record.startTime}"
-                       ${isMobile ? '' : 'placeholder="HH:mm" onfocus="this.select()"'}
-                       ${isMobile ? `onchange="updateRecord(${record.id}, 'startTime', this.value)"` : 
-                                   `onblur="this.value = normalizeTime(this.value); updateRecord(${record.id}, 'startTime', this.value)"`} >
+                <input type="text" class="inline-input" value="${record.startTime}"
+                       placeholder="HH:mm" inputmode="numeric" onfocus="this.select()"
+                       onblur="this.value = normalizeTime(this.value); updateRecord(${record.id}, 'startTime', this.value)" >
             </td>
             <td class="time-cell">
-                <input type="${isMobile ? 'time' : 'text'}" class="inline-input" value="${record.endTime}"
-                       ${isMobile ? '' : 'placeholder="HH:mm" onfocus="this.select()"'}
-                       ${isMobile ? `onchange="updateRecord(${record.id}, 'endTime', this.value)"` : 
-                                   `onblur="this.value = normalizeTime(this.value); updateRecord(${record.id}, 'endTime', this.value)"`} >
+                <input type="text" class="inline-input" value="${record.endTime}"
+                       placeholder="HH:mm" inputmode="numeric" onfocus="this.select()"
+                       onblur="this.value = normalizeTime(this.value); updateRecord(${record.id}, 'endTime', this.value)" >
             </td>
 
             <td class="count-cell">
@@ -468,11 +483,8 @@ function renderRecords() {
             <td class="total-cell" style="text-align: center; font-weight: 700; color: var(--accent); font-size: 0.85rem;">
                 ${cumTotal.toLocaleString()}
             </td>
-            <td class="notes-cell">
-                <input type="text" class="inline-input inline-notes" value="${record.notes || ''}" placeholder=""
-                       onblur="updateRecord(${record.id}, 'notes', this.value)">
-            </td>
         `;
+
         recordsList.appendChild(tr);
     });
 
@@ -654,5 +666,41 @@ window.isMobileDevice = isMobileDevice;
 window.normalizeTime = normalizeTime;
 window.clearRow = clearRow;
 window.getDurationLabel = getDurationLabel;
+
+// Centralized Daily Notes Logic
+function renderDailyNotes() {
+    const textarea = document.getElementById('day-note-text-1f');
+    if (textarea) {
+        textarea.value = dailyNotes[currentDate] || "";
+    }
+}
+
+window.saveDailyNotes1f = function() {
+    const textarea = document.getElementById('day-note-text-1f');
+    if (!textarea) return;
+    
+    const text = textarea.value.trim();
+    if (text) {
+        dailyNotes[currentDate] = text;
+    } else {
+        delete dailyNotes[currentDate];
+    }
+    
+    localStorage.setItem(NOTES_LS_KEY, JSON.stringify(dailyNotes));
+    
+    clearTimeout(noteSaveTimeout);
+    noteSaveTimeout = setTimeout(() => {
+        if (database) {
+            database.ref(NOTES_DB_PATH).set(dailyNotes).then(() => {
+                const saveStatus = document.getElementById('saveStatusNotes1f');
+                if (saveStatus) {
+                    saveStatus.textContent = "保存しました";
+                    setTimeout(() => saveStatus.textContent = "", 3000);
+                }
+            });
+        }
+    }, 1000);
+}
+
 
 init();
