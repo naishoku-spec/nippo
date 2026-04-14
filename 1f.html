@@ -114,11 +114,10 @@
                                     <th>機械</th>
                                     <th>開始時間</th>
                                     <th>終了時間</th>
-                                    <th>稼働時間</th>
+
                                     <th>カウント/日</th>
                                     <th>カウントTOTAL</th>
                                     <th>備考</th>
-                                    <th></th>
                                 </tr>
                             </thead>
                             <tbody id="records-list-1f"></tbody>
@@ -191,6 +190,28 @@
                         </div>
                         <button type="submit" class="btn btn-primary" style="margin-top: 1.25rem;">追加</button>
                     </form>
+
+                    <!-- Trash Section Added below New Entry Form -->
+                    <div class="trash-management-section" style="margin-top: 2rem; padding-top: 1.5rem; border-top: 1px dashed var(--border);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                            <h3 style="font-size: 1.1rem; color: var(--danger); display: flex; align-items: center; gap: 0.5rem;">
+                                <svg width="18" height="18" fill="currentColor" viewBox="0 0 16 16">
+                                    <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
+                                    <path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
+                                </svg>
+                                記録の削除
+                            </h3>
+                            <button id="toggleTrashBtn" onclick="toggleTrashArea()" style="background: none; border: 1px solid var(--border); border-radius: 6px; padding: 4px 12px; font-size: 0.85rem; cursor: pointer; color: var(--text-muted);">
+                                削除パネルを表示
+                            </button>
+                        </div>
+                        <div id="trash-panel" style="display: none; background: #fff5f5; border: 1px solid #feb2b2; border-radius: 8px; padding: 1rem;">
+                            <p style="font-size: 0.85rem; color: #c53030; margin-bottom: 0.75rem;">削除したいレコードを選択してください：</p>
+                            <div id="trash-list-container" style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                                <!-- Dynamic record chips -->
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 

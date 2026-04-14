@@ -687,7 +687,7 @@ input[type="number"] {
     }
 
     .count-cell::before {
-        content: "合計数";
+        content: "カウント";
         font-size: 0.6rem;
         font-weight: 700;
         color: var(--text-muted);
@@ -2183,3 +2183,8 @@ tr.weekend-holiday td:first-child .date-desktop {
     scrollbar-width: none;
 }
 
+@media (max-width: 600px) {
+    .no-mobile {
+        display: none !important;
+    }
+}

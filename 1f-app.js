@@ -31,10 +31,10 @@ console.log(`1F App: Running in ${isProduction ? 'PRODUCTION' : 'DEVELOPMENT'} m
 let records = JSON.parse(localStorage.getItem(LS_KEY)) || [];
 let currentDate = new Date().toLocaleDateString('sv-SE');
 let isFirstLoad = true;
+let isFirebaseSynced = false; // Prevents overwriting cloud data before the first pull
 
 // Real-time synchronization from Firebase
 if (database) {
-    // Sync records
     database.ref(DB_PATH).on('value', (snapshot) => {
         const firebaseData = snapshot.val();
         let firebaseRecords = [];
@@ -44,37 +44,31 @@ if (database) {
 
         if (isFirstLoad) {
             isFirstLoad = false;
-            // --- 1-TIME PATCH to fix R1 count ---
-            let patched = false;
-            firebaseRecords.forEach(r => {
-                if (r.machine === 'R1' && r.count === 1) {
-                    r.count = 0;
-                    patched = true;
-                }
-            });
-            // ------------------------------------
             
             if (firebaseRecords.length > 0) {
+                // Cloud has data: prioritize it
                 records = firebaseRecords;
                 localStorage.setItem(LS_KEY, JSON.stringify(records));
-            } else if (records.length > 0) {
-                database.ref(DB_PATH).set(records);
-            }
-            if (patched) database.ref(DB_PATH).set(records);
-            if (typeof renderRecords === 'function') renderRecords();
-        } else {
-            if (firebaseRecords.length > 0) {
-                // --- 1-TIME PATCH ---
-                firebaseRecords.forEach(r => {
-                    if (r.machine === 'R1' && r.count === 1) r.count = 0;
-                });
-                // --------------------
-                records = firebaseRecords;
-                localStorage.setItem(LS_KEY, JSON.stringify(records));
-                if (typeof renderRecords === 'function') {
-                    renderRecords();
-                    if (monthViewContainer && monthViewContainer.style.display === 'block') renderMonthlyRecords();
+            } else {
+                // Cloud is empty: seed it with local data if available
+                if (records.length > 0) {
+                    database.ref(DB_PATH).set(records);
                 }
+            }
+            
+            isFirebaseSynced = true; // Data is now safely pulled, OK to write
+            
+            // Initial checks and render
+            ensureDayRecords(currentDate);
+            renderRecords();
+            if (monthViewContainer && monthViewContainer.style.display === 'block') renderMonthlyRecords();
+        } else {
+            // Live updates from other devices
+            if (firebaseRecords.length > 0) {
+                records = firebaseRecords;
+                localStorage.setItem(LS_KEY, JSON.stringify(records));
+                renderRecords();
+                if (monthViewContainer && monthViewContainer.style.display === 'block') renderMonthlyRecords();
             }
         }
     });
@@ -324,7 +318,7 @@ function handleAddRecord(e) {
         notes: document.getElementById('notes-1f').value
     };
     records.push(record);
-    saveRecords();
+    saveRecords(record);
     renderRecords();
     document.getElementById('count-1f').value = '';
     document.getElementById('notes-1f').value = '';
@@ -393,7 +387,7 @@ function updateRecord(id, field, value) {
     } else {
         record[field] = value;
     }
-    saveRecords();
+    saveRecords(record); // Pass the specific record for granular sync
     calculateAndDisplayStats();
 }
 
@@ -407,19 +401,27 @@ function calculateDuration(start, end) {
     return { h: Math.floor(diff / 60), m: diff % 60, totalMinutes: diff };
 }
 
-// Save
-function saveRecords() {
+// Save logic: Granular updates to prevent multi-device conflicts
+function saveRecords(singleRecord = null) {
     try {
         localStorage.setItem(LS_KEY, JSON.stringify(records));
     } catch (e) {
         console.error('LocalStorage save failed:', e);
     }
-    if (database) {
-        database.ref(DB_PATH).set(records)
-            .then(() => {
-                // syncToGoogleSheets(records); // Disconnected
-            })
-            .catch(err => console.error('Firebase save failed:', err));
+    
+    if (database && isFirebaseSynced) {
+        if (singleRecord && singleRecord.id) {
+            // Update only this specific record in Firebase
+            database.ref(DB_PATH + '/' + singleRecord.id).set(singleRecord)
+                .catch(err => console.error('Firebase granular save failed:', err));
+        } else {
+            // Full sync (seeding or major change)
+            // Convert array to object with IDs as keys for safer Firebase structure
+            const dataToSync = {};
+            records.forEach(r => { if(r.id) dataToSync[r.id] = r; });
+            database.ref(DB_PATH).set(dataToSync)
+                .catch(err => console.error('Firebase full sync failed:', err));
+        }
     }
 }
 
@@ -458,9 +460,7 @@ function renderRecords() {
                        ${isMobile ? `onchange="updateRecord(${record.id}, 'endTime', this.value); this.closest('tr').querySelector('.duration-text').innerText = getDurationLabel('${record.id}', null, this.value)"` : 
                                    `onblur="this.value = normalizeTime(this.value); updateRecord(${record.id}, 'endTime', this.value); this.closest('tr').querySelector('.duration-text').innerText = getDurationLabel('${record.id}', null, this.value)"`} >
             </td>
-            <td class="duration-cell" style="font-size: 0.8rem; color: var(--text-muted);">
-                <span class="duration-text">${h}時間 ${m}分</span>
-            </td>
+
             <td class="count-cell">
                 <input type="number" class="inline-input" value="${record.count == 0 ? '' : record.count}"
                        onblur="updateRecord(${record.id}, 'count', this.value)">
@@ -472,28 +472,71 @@ function renderRecords() {
                 <input type="text" class="inline-input inline-notes" value="${record.notes || ''}" placeholder=""
                        onblur="updateRecord(${record.id}, 'notes', this.value)">
             </td>
-            <td class="actions-cell" style="text-align: center;">
-                <div style="display: flex; gap: 0.5rem; justify-content: center;">
-                    <button onclick="clearRow(${record.id})" style="background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 5px;" title="入力をリセット">
-                        <svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
-                            <path fill-rule="evenodd" d="M8 3a5 5 0 1 1-4.546 2.914.5.5 0 0 0-.908-.417A6 6 0 1 0 8 2z"/>
-                            <path d="M8 4.466V.534a.25.25 0 0 0-.41-.192L5.23 2.308a.25.25 0 0 0 0 .384l2.36 1.966A.25.25 0 0 0 8 4.466z"/>
-                        </svg>
-                    </button>
-                    <button onclick="deleteRecord(${record.id})" style="background: none; border: none; color: var(--danger); opacity: 0.6; cursor: pointer; padding: 5px;" title="項目を削除">
-                        <svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
-                            <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
-                            <path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
-                        </svg>
-                    </button>
-                </div>
-            </td>
         `;
         recordsList.appendChild(tr);
     });
 
     calculateAndDisplayStats();
+    renderTrashList();
 }
+
+// Trash Management Logic
+window.toggleTrashArea = function() {
+    const panel = document.getElementById('trash-panel');
+    const btn = document.getElementById('toggleTrashBtn');
+    if (!panel || !btn) return;
+    if (panel.style.display === 'none') {
+        panel.style.display = 'block';
+        btn.innerText = '削除パネルを閉じる';
+        renderTrashList();
+    } else {
+        panel.style.display = 'none';
+        btn.innerText = '削除パネルを表示';
+    }
+};
+
+function renderTrashList() {
+    const listContainer = document.getElementById('trash-list-container');
+    if (!listContainer) return;
+    
+    const dayRecords = records.filter(r => r.date === currentDate);
+    listContainer.innerHTML = '';
+    
+    if (dayRecords.length === 0) {
+        listContainer.innerHTML = '<p style="font-size: 0.85rem; color: var(--text-muted);">削除できる項目がありません。</p>';
+        return;
+    }
+    
+    dayRecords.forEach(record => {
+        const chip = document.createElement('div');
+        chip.style.cssText = `
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: white;
+            border: 1px solid #feb2b2;
+            border-radius: 20px;
+            padding: 4px 12px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            user-select: none;
+        `;
+        chip.innerHTML = `
+            <span style="font-weight: 600; color: #c53030;">${record.machine}</span>
+            <span style="color: #718096; max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${record.count > 0 ? record.count.toLocaleString() : '(0)'}</span>
+            <svg width="12" height="12" fill="#e53e3e" viewBox="0 0 16 16">
+                <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
+                <path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
+            </svg>
+        `;
+        chip.onmouseover = () => { chip.style.background = '#fff5f5'; chip.style.transform = 'translateY(-1px)'; };
+        chip.onmouseout = () => { chip.style.background = 'white'; chip.style.transform = 'none'; };
+        chip.onclick = () => deleteRecord(record.id);
+        listContainer.appendChild(chip);
+    });
+}
+
 
 // Duration label helper
 window.getDurationLabel = (id, newStart, newEnd) => {
@@ -588,8 +631,19 @@ function clearRow(id) {
 function deleteRecord(id) {
     if (confirm('この項目を削除してもよろしいですか？')) {
         records = records.filter(r => r.id != id);
-        saveRecords();
-        renderRecords();
+        localStorage.setItem(LS_KEY, JSON.stringify(records));
+        
+        if (database && isFirebaseSynced) {
+            database.ref(DB_PATH + '/' + id).remove()
+                .then(() => {
+                    renderRecords();
+                    if (monthViewContainer && monthViewContainer.style.display === 'block') renderMonthlyRecords();
+                })
+                .catch(err => console.error('Firebase remove failed:', err));
+        } else {
+            renderRecords();
+            if (monthViewContainer && monthViewContainer.style.display === 'block') renderMonthlyRecords();
+        }
     }
 }
 

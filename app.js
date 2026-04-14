@@ -1803,20 +1803,20 @@ function normalizeTime(val) {
 // Initialize
 function init() {
     const isMobile = isMobileDevice();
-    if (!isMobile) {
-        // PC版での時間入力を使いやすくするためにtextタイプに変更し、全選択・自動整形を適用
-        ['start-time', 'end-time'].forEach(id => {
-            const el = document.getElementById(id);
-            if (el) {
-                el.type = 'text';
-                el.placeholder = 'HH:mm';
-                el.setAttribute('onfocus', 'this.select()');
-                el.addEventListener('blur', function() {
-                    this.value = normalizeTime(this.value);
-                });
-            }
-        });
-    }
+    // 全てのデバイス（PC・スマホ）で時間入力を使いやすくするためにtextタイプとして扱い、自動整形を適用
+    ['start-time', 'end-time'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.type = 'text';
+            el.placeholder = 'HH:mm';
+            el.setAttribute('inputmode', 'numeric'); // 数字キーボードを出しやすくする
+            el.setAttribute('onfocus', 'this.select()');
+            el.addEventListener('blur', function() {
+                this.value = normalizeTime(this.value);
+            });
+        }
+    });
+
 
     // Initialize Flatpickr for better styling control (like weekend colors)
     flatpickr(datePicker, {
@@ -2119,10 +2119,9 @@ function handleAddRecord(e) {
     const startTimeInput = document.getElementById('start-time');
     const endTimeInput = document.getElementById('end-time');
 
-    if (!isMobileDevice()) {
-        startTimeInput.value = normalizeTime(startTimeInput.value);
-        endTimeInput.value = normalizeTime(endTimeInput.value);
-    }
+    startTimeInput.value = normalizeTime(startTimeInput.value);
+    endTimeInput.value = normalizeTime(endTimeInput.value);
+
 
     const record = {
         id: Date.now() + Math.random(),
@@ -2458,7 +2457,6 @@ function renderRecords() {
         const { h, m } = calculateDuration(record.startTime, record.endTime);
         const tr = document.createElement('tr');
 
-        const isMobile = isMobileDevice();
         tr.innerHTML = `
             <td class="machine-cell"><span class="machine-badge">${record.machine}</span></td>
             <td class="product-cell">
@@ -2466,47 +2464,85 @@ function renderRecords() {
                     ${PRODUCTS.map(p => `<option value="${p}" ${record.product === p ? 'selected' : ''}>${p || '選択してください...'}</option>`).join('')}
                 </select>
             </td>
-            <td class="time-cell">
-                <input type="${isMobile ? 'time' : 'text'}" class="inline-input" value="${record.startTime}" 
-                       ${isMobile ? '' : 'placeholder="HH:mm" onfocus="this.select()"'}
-                       ${isMobile ? `onchange="updateRecord(${record.id}, 'startTime', this.value); this.closest('tr').querySelector('.duration-text').innerText = getDurationLabel('${record.id}', this.value, null)"` : 
-                                   `onblur="this.value = normalizeTime(this.value); updateRecord(${record.id}, 'startTime', this.value); this.closest('tr').querySelector('.duration-text').innerText = getDurationLabel('${record.id}', this.value, null)"`} >
+                        <td class="time-cell">
+                <input type="text" class="inline-input" value="${record.startTime}" 
+                       placeholder="HH:mm" inputmode="numeric" onfocus="this.select()"
+                       onblur="this.value = normalizeTime(this.value); updateRecord(${record.id}, 'startTime', this.value); this.closest('tr').querySelector('.duration-text').innerText = getDurationLabel('${record.id}', this.value, null)" >
             </td>
             <td class="time-cell">
-                <input type="${isMobile ? 'time' : 'text'}" class="inline-input" value="${record.endTime}" 
-                       ${isMobile ? '' : 'placeholder="HH:mm" onfocus="this.select()"'}
-                       ${isMobile ? `onchange="updateRecord(${record.id}, 'endTime', this.value); this.closest('tr').querySelector('.duration-text').innerText = getDurationLabel('${record.id}', null, this.value)"` : 
-                                   `onblur="this.value = normalizeTime(this.value); updateRecord(${record.id}, 'endTime', this.value); this.closest('tr').querySelector('.duration-text').innerText = getDurationLabel('${record.id}', null, this.value)"`} >
+                <input type="text" class="inline-input" value="${record.endTime}" 
+                       placeholder="HH:mm" inputmode="numeric" onfocus="this.select()"
+                       onblur="this.value = normalizeTime(this.value); updateRecord(${record.id}, 'endTime', this.value); this.closest('tr').querySelector('.duration-text').innerText = getDurationLabel('${record.id}', null, this.value)" >
             </td>
-            <td class="duration-cell" style="font-size: 0.8rem; color: var(--text-muted);">
-                <span class="duration-text">${h}時間 ${m}分</span>
-            </td>
+
             <td class="count-cell">
                 <input type="number" class="inline-input" value="${record.count == 0 ? '' : record.count}" 
                        onblur="updateRecord(${record.id}, 'count', this.value)">
-            </td>
-            <td class="actions-cell" style="text-align: center;">
-                <div style="display: flex; gap: 0.5rem; justify-content: center;">
-                    <button onclick="clearRow(${record.id})" style="background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 5px;" title="入力をリセット">
-                        <svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
-                            <path fill-rule="evenodd" d="M8 3a5 5 0 1 1-4.546 2.914.5.5 0 0 0-.908-.417A6 6 0 1 0 8 2z"/>
-                            <path d="M8 4.466V.534a.25.25 0 0 0-.41-.192L5.23 2.308a.25.25 0 0 0 0 .384l2.36 1.966A.25.25 0 0 0 8 4.466z"/>
-                        </svg>
-                    </button>
-                    <button onclick="deleteRecord(${record.id})" style="background: none; border: none; color: var(--danger); opacity: 0.6; cursor: pointer; padding: 5px;" title="項目を削除">
-                        <svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
-                            <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
-                            <path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
-                        </svg>
-                    </button>
-                </div>
             </td>
         `;
         recordsList.appendChild(tr);
     });
 
     calculateAndDisplayStats();
+    renderTrashList();
 }
+
+// Trash Management Logic
+window.toggleTrashArea = function() {
+    const panel = document.getElementById('trash-panel');
+    const btn = document.getElementById('toggleTrashBtn');
+    if (panel.style.display === 'none') {
+        panel.style.display = 'block';
+        btn.innerText = '削除パネルを閉じる';
+        renderTrashList();
+    } else {
+        panel.style.display = 'none';
+        btn.innerText = '削除パネルを表示';
+    }
+};
+
+function renderTrashList() {
+    const listContainer = document.getElementById('trash-list-container');
+    if (!listContainer) return;
+    
+    const dayRecords = records.filter(r => r.date === currentDate);
+    listContainer.innerHTML = '';
+    
+    if (dayRecords.length === 0) {
+        listContainer.innerHTML = '<p style="font-size: 0.85rem; color: var(--text-muted);">削除できる項目がありません。</p>';
+        return;
+    }
+    
+    dayRecords.forEach(record => {
+        const chip = document.createElement('div');
+        chip.style.cssText = `
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: white;
+            border: 1px solid #feb2b2;
+            border-radius: 20px;
+            padding: 4px 12px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            user-select: none;
+        `;
+        chip.innerHTML = `
+            <span style="font-weight: 600; color: #c53030;">${record.machine}</span>
+            <span style="color: #718096; max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${record.product || '(未入力)'}</span>
+            <svg width="12" height="12" fill="#e53e3e" viewBox="0 0 16 16">
+                <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
+                <path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
+            </svg>
+        `;
+        chip.onmouseover = () => { chip.style.background = '#fff5f5'; chip.style.transform = 'translateY(-1px)'; };
+        chip.onmouseout = () => { chip.style.background = 'white'; chip.style.transform = 'none'; };
+        chip.onclick = () => deleteRecord(record.id);
+        listContainer.appendChild(chip);
+    });
+}
+
 
 // Helper to update duration text immediately after time change
 window.getDurationLabel = (id, newStart, newEnd) => {
