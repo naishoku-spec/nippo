@@ -2464,16 +2464,17 @@ function renderRecords() {
                     ${PRODUCTS.map(p => `<option value="${p}" ${record.product === p ? 'selected' : ''}>${p || '選択してください...'}</option>`).join('')}
                 </select>
             </td>
-                        <td class="time-cell">
+            <td class="time-cell">
                 <input type="text" class="inline-input" value="${record.startTime}" 
                        placeholder="HH:mm" inputmode="numeric" onfocus="this.select()"
-                       onblur="this.value = normalizeTime(this.value); updateRecord(${record.id}, 'startTime', this.value); this.closest('tr').querySelector('.duration-text').innerText = getDurationLabel('${record.id}', this.value, null)" >
+                       onblur="this.value = normalizeTime(this.value); updateRecord(${record.id}, 'startTime', this.value)" >
             </td>
             <td class="time-cell">
                 <input type="text" class="inline-input" value="${record.endTime}" 
                        placeholder="HH:mm" inputmode="numeric" onfocus="this.select()"
-                       onblur="this.value = normalizeTime(this.value); updateRecord(${record.id}, 'endTime', this.value); this.closest('tr').querySelector('.duration-text').innerText = getDurationLabel('${record.id}', null, this.value)" >
+                       onblur="this.value = normalizeTime(this.value); updateRecord(${record.id}, 'endTime', this.value)" >
             </td>
+
 
             <td class="count-cell">
                 <input type="number" class="inline-input" value="${record.count == 0 ? '' : record.count}" 

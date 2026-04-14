@@ -451,14 +451,14 @@ function renderRecords() {
             <td class="time-cell">
                 <input type="${isMobile ? 'time' : 'text'}" class="inline-input" value="${record.startTime}"
                        ${isMobile ? '' : 'placeholder="HH:mm" onfocus="this.select()"'}
-                       ${isMobile ? `onchange="updateRecord(${record.id}, 'startTime', this.value); this.closest('tr').querySelector('.duration-text').innerText = getDurationLabel('${record.id}', this.value, null)"` : 
-                                   `onblur="this.value = normalizeTime(this.value); updateRecord(${record.id}, 'startTime', this.value); this.closest('tr').querySelector('.duration-text').innerText = getDurationLabel('${record.id}', this.value, null)"`} >
+                       ${isMobile ? `onchange="updateRecord(${record.id}, 'startTime', this.value)"` : 
+                                   `onblur="this.value = normalizeTime(this.value); updateRecord(${record.id}, 'startTime', this.value)"`} >
             </td>
             <td class="time-cell">
                 <input type="${isMobile ? 'time' : 'text'}" class="inline-input" value="${record.endTime}"
                        ${isMobile ? '' : 'placeholder="HH:mm" onfocus="this.select()"'}
-                       ${isMobile ? `onchange="updateRecord(${record.id}, 'endTime', this.value); this.closest('tr').querySelector('.duration-text').innerText = getDurationLabel('${record.id}', null, this.value)"` : 
-                                   `onblur="this.value = normalizeTime(this.value); updateRecord(${record.id}, 'endTime', this.value); this.closest('tr').querySelector('.duration-text').innerText = getDurationLabel('${record.id}', null, this.value)"`} >
+                       ${isMobile ? `onchange="updateRecord(${record.id}, 'endTime', this.value)"` : 
+                                   `onblur="this.value = normalizeTime(this.value); updateRecord(${record.id}, 'endTime', this.value)"`} >
             </td>
 
             <td class="count-cell">
