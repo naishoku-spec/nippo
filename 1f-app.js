@@ -308,27 +308,25 @@ function renderMonthlyRecords() {
         if (r.date !== lastDate) {
             html += `
                 <tr class="date-group-divider">
-                    <td colspan="7" style="padding: 1rem;">
+                    <td colspan="6" style="padding: 1rem;">
                         ${r.date.split('-')[0]}年 ${r.date.split('-')[1]}月 ${r.date.split('-')[2]}日
                     </td>
                 </tr>
             `;
             lastDate = r.date;
         }
-        const { h, m } = calculateDuration(r.startTime, r.endTime);
         html += `
             <tr>
                 <td style="color: var(--text-muted); font-size: 0.85rem;">${r.date.split('-')[1]}/${r.date.split('-')[2]}</td>
                 <td class="machine-cell"><span class="machine-badge machine-badge-${r.machine.toLowerCase()}">${r.machine}</span></td>
                 <td class="time-cell">${r.startTime || ''}</td>
                 <td class="time-cell">${r.endTime || ''}</td>
-                <td style="font-size: 0.85rem; color: var(--text-muted);">${h}時間 ${m}分</td>
                 <td style="text-align: right; font-weight: 700; color: var(--primary);">${r.count > 0 ? r.count.toLocaleString() : ''}</td>
             </tr>
 
         `;
     });
-    dailyListEl.innerHTML = html || '<tr><td colspan="7" style="text-align:center; padding: 2rem;">記録がありません</td></tr>';
+    dailyListEl.innerHTML = html || '<tr><td colspan="6" style="text-align:center; padding: 2rem;">記録がありません</td></tr>';
 }
 
 // Add record

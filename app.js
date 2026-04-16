@@ -2082,15 +2082,13 @@ function renderMonthlyRecords() {
         if (r.date !== lastDate) {
             html += `
                 <tr class="date-group-divider">
-                    <td colspan="7" style="padding: 1rem;">
+                    <td colspan="6" style="padding: 1rem;">
                         ${r.date.split('-')[0]}年 ${r.date.split('-')[1]}月 ${r.date.split('-')[2]}日
                     </td>
                 </tr>
             `;
             lastDate = r.date;
         }
-
-        const { h, m } = calculateDuration(r.startTime, r.endTime);
 
         html += `
             <tr>
@@ -2099,9 +2097,6 @@ function renderMonthlyRecords() {
                 <td class="product-cell" style="font-weight: 600;">${r.product || '-'}</td>
                 <td class="time-cell">${r.startTime}</td>
                 <td class="time-cell">${r.endTime}</td>
-                <td style="font-size: 0.85rem; color: var(--text-muted);">
-                    ${h}時間 ${m}分
-                </td>
                 <td style="text-align: right; font-weight: 700; color: var(--primary);">
                     ${r.count.toLocaleString()}
                 </td>
@@ -2109,7 +2104,7 @@ function renderMonthlyRecords() {
         `;
     });
 
-    fullDetailedListEl.innerHTML = html || '<tr><td colspan="7" style="text-align:center; padding: 2rem;">記録がありません</td></tr>';
+    fullDetailedListEl.innerHTML = html || '<tr><td colspan="6" style="text-align:center; padding: 2rem;">記録がありません</td></tr>';
 }
 
 // Handle Quick Entry
@@ -4250,6 +4245,7 @@ let snowsprintCurrentMonth = new Date().getMonth() + 1;
 let isFirstSnowsprintLoad = true;
 let snowsprintActiveProduct = 0;
 let snowsprintActiveSize = 0;
+let snCommentCurrentCell = null;
 
 const SNOWSPRINT_TAB_CONFIG = [
     {
@@ -6982,11 +6978,13 @@ function renderSnowsprintGeneric(headId, bodyId, footId, configGroups, category)
     configGroups.forEach(group => {
         group.items.forEach(item => {
             const dataObj = getObj(group.id, item.id);
+            const hasCarryComment = (dataObj.carryover_comments || []).length > 0;
+            const carryCommentTip = hasCarryComment ? escapeHtmlAttr(dataObj.carryover_comments[dataObj.carryover_comments.length - 1].text) : '';
             // Three columns per item: empty, empty, and carryover input in the balance column
             carryRow += `
                 <td style="border: 1px solid var(--border);"></td>
                 <td style="border: 1px solid var(--border);"></td>
-                <td class="remaining-stock carry-cell" style="border: 1px solid var(--border); text-align: center;">
+                <td class="remaining-stock carry-cell${hasCarryComment ? ' sn-has-comment' : ''}" style="border: 1px solid var(--border); text-align: center; position: relative;" ${hasCarryComment ? 'title="' + carryCommentTip + '"' : ''}>
                     <input type="number" class="snowsprint-input carry-input" 
                         data-category="${category}" data-type1="${group.id}" data-type2="${item.id}" data-field="carryover"
                         value="${dataObj.carryover || 0}" min="0" style="width: 90%; background: transparent; border: none; font-weight: 800; color: var(--primary); text-align: center; padding: 2px;">
@@ -7033,10 +7031,14 @@ function renderSnowsprintGeneric(headId, bodyId, footId, configGroups, category)
                 const arr = dayData.arrival || '';
                 const usa = dayData.usage || '';
                 const bal = getSnowsprintBalance(dataObj, d);
+                const arrComments = dayData.arrival_comments || [];
+                const usaComments = dayData.usage_comments || [];
+                const hasArrComment = arrComments.length > 0;
+                const hasUsaComment = usaComments.length > 0;
                 
                 bodyRows += `
-                    <td style="border: 1px solid var(--border); padding: 0.25rem;"><input type="number" class="snowsprint-input stock-input" data-category="${category}" data-type1="${group.id}" data-type2="${item.id}" data-field="arrival" data-day="${d}" value="${arr}" min="0" style="width: 100%; border: none; padding: 4px; text-align: center;"></td>
-                    <td style="border: 1px solid var(--border); padding: 0.25rem;"><input type="number" class="snowsprint-input stock-input" data-category="${category}" data-type1="${group.id}" data-type2="${item.id}" data-field="usage" data-day="${d}" value="${usa}" min="0" style="width: 100%; border: none; padding: 4px; text-align: center;"></td>
+                    <td class="${hasArrComment ? 'sn-has-comment' : ''}" style="border: 1px solid var(--border); padding: 0.25rem; position: relative;" ${hasArrComment ? 'title="' + escapeHtmlAttr(arrComments[arrComments.length-1].text) + '"' : ''}><input type="number" class="snowsprint-input stock-input" data-category="${category}" data-type1="${group.id}" data-type2="${item.id}" data-field="arrival" data-day="${d}" value="${arr}" min="0" style="width: 100%; border: none; padding: 4px; text-align: center;"></td>
+                    <td class="${hasUsaComment ? 'sn-has-comment' : ''}" style="border: 1px solid var(--border); padding: 0.25rem; position: relative;" ${hasUsaComment ? 'title="' + escapeHtmlAttr(usaComments[usaComments.length-1].text) + '"' : ''}><input type="number" class="snowsprint-input stock-input" data-category="${category}" data-type1="${group.id}" data-type2="${item.id}" data-field="usage" data-day="${d}" value="${usa}" min="0" style="width: 100%; border: none; padding: 4px; text-align: center;"></td>
                     <td class="remaining-stock ${bal < STOCK_LOW_THRESHOLD ? 'low-stock' : ''}" style="border: 1px solid var(--border);">${bal}</td>
                 `;
             });
@@ -7068,6 +7070,23 @@ function renderSnowsprintGeneric(headId, bodyId, footId, configGroups, category)
         });
         el.addEventListener('change', handleSnowsprintChange);
     });
+
+    // Attach right-click (contextmenu) for comment popup on input cells
+    body.querySelectorAll('td').forEach(td => {
+        const input = td.querySelector('.snowsprint-input');
+        if (!input) return;
+        td.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            openSnowsprintComment({
+                category: input.dataset.category,
+                type1: input.dataset.type1,
+                type2: input.dataset.type2,
+                field: input.dataset.field,
+                day: input.dataset.day || null
+            }, td);
+        });
+    });
+
     carryRow = null; bodyRows = null; footHtml = null;
 }
 
@@ -7087,6 +7106,7 @@ function renderSnowsprintSizeTabs() {
 }
 
 function switchSnowsprintProduct(idx) {
+    closeSnowsprintComment();
     snowsprintActiveProduct = idx;
     snowsprintActiveSize = 0;
 
@@ -7101,6 +7121,7 @@ function switchSnowsprintProduct(idx) {
 window.switchSnowsprintProduct = switchSnowsprintProduct;
 
 function switchSnowsprintSize(idx) {
+    closeSnowsprintComment();
     snowsprintActiveSize = idx;
 
     // Update size tab active state
@@ -7113,6 +7134,7 @@ function switchSnowsprintSize(idx) {
 window.switchSnowsprintSize = switchSnowsprintSize;
 
 function renderSnowsprint() {
+    closeSnowsprintComment();
     const product = SNOWSPRINT_TAB_CONFIG[snowsprintActiveProduct];
     if (!product) return;
 
@@ -7132,6 +7154,232 @@ function renderSnowsprint() {
 
     renderSnowsprintGeneric('snTabHead', 'snTabBody', 'snTabFoot', sizeConfig.config, sizeConfig.category);
 }
+
+// ========================================================= //
+// ======= Snow Sprint Comment System (Sheets-style) ======= //
+// ========================================================= //
+
+function escapeHtmlAttr(str) {
+    return (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function getSnowsprintCellComments(category, type1, type2, field, day) {
+    try {
+        const key = `${snowsprintCurrentYear}-${snowsprintCurrentMonth}`;
+        const dataObj = snowsprintAllData[key][category][type1][type2];
+        if (field === 'carryover') {
+            return dataObj.carryover_comments || [];
+        }
+        return (dataObj.days && dataObj.days[day] && dataObj.days[day][`${field}_comments`]) || [];
+    } catch (e) {
+        return [];
+    }
+}
+
+function setSnowsprintCellComments(category, type1, type2, field, day, comments) {
+    const key = `${snowsprintCurrentYear}-${snowsprintCurrentMonth}`;
+    if (!snowsprintAllData[key]) return;
+    const secData = snowsprintAllData[key][category];
+    if (!secData || !secData[type1] || !secData[type1][type2]) return;
+    const dataObj = secData[type1][type2];
+
+    if (field === 'carryover') {
+        if (comments.length > 0) {
+            dataObj.carryover_comments = comments;
+        } else {
+            delete dataObj.carryover_comments;
+        }
+    } else {
+        if (!dataObj.days) dataObj.days = {};
+        if (!dataObj.days[day]) dataObj.days[day] = {};
+        if (comments.length > 0) {
+            dataObj.days[day][`${field}_comments`] = comments;
+        } else {
+            delete dataObj.days[day][`${field}_comments`];
+            // Clean up empty day objects (only if no arrival/usage data remains)
+            const remaining = Object.keys(dataObj.days[day]);
+            if (remaining.length === 0) {
+                delete dataObj.days[day];
+            }
+        }
+    }
+
+    snowsprintLastEditTime = Date.now();
+    saveSnowsprintData();
+}
+
+function getSnowsprintCommentCellLabel(cellInfo) {
+    const { category, type1, type2, field, day } = cellInfo;
+    const fieldLabels = { arrival: '入荷', usage: '使用数', carryover: '前月繰越' };
+    const fieldLabel = fieldLabels[field] || field;
+    const dayLabel = day ? `${snowsprintCurrentMonth}/${day}` : '';
+    // Build a readable label
+    let label = '';
+    if (dayLabel) label += dayLabel + ' ';
+    label += fieldLabel;
+    return label;
+}
+
+function openSnowsprintComment(cellInfo, anchorEl) {
+    snCommentCurrentCell = cellInfo;
+
+    const overlay = document.getElementById('snCommentOverlay');
+    const popup = document.getElementById('snCommentPopup');
+    const cellInfoEl = document.getElementById('snCommentCellInfo');
+    const input = document.getElementById('snCommentInput');
+
+    // Set cell info label
+    cellInfoEl.textContent = getSnowsprintCommentCellLabel(cellInfo);
+
+    // Render existing comments
+    renderSnowsprintCommentList();
+
+    // Position popup near the clicked cell
+    const rect = anchorEl.getBoundingClientRect();
+    const isMobile = window.innerWidth <= 600;
+
+    if (!isMobile) {
+        const popupWidth = 340;
+        let left = rect.right + 8;
+        let top = rect.top;
+
+        // Keep popup on screen
+        if (left + popupWidth > window.innerWidth) {
+            left = rect.left - popupWidth - 8;
+        }
+        if (left < 8) left = 8;
+        if (top + 400 > window.innerHeight) {
+            top = Math.max(8, window.innerHeight - 400);
+        }
+
+        popup.style.left = left + 'px';
+        popup.style.top = top + 'px';
+    }
+
+    // Show overlay and popup
+    overlay.classList.add('active');
+    popup.classList.add('active');
+
+    // Focus input
+    input.value = '';
+    setTimeout(() => input.focus(), 100);
+}
+
+function closeSnowsprintComment() {
+    const overlay = document.getElementById('snCommentOverlay');
+    const popup = document.getElementById('snCommentPopup');
+    if (overlay) overlay.classList.remove('active');
+    if (popup) popup.classList.remove('active');
+    snCommentCurrentCell = null;
+}
+
+function submitSnowsprintComment() {
+    if (!snCommentCurrentCell) return;
+    const input = document.getElementById('snCommentInput');
+    const text = input.value.trim();
+    if (!text) return;
+
+    const { category, type1, type2, field, day } = snCommentCurrentCell;
+    const comments = getSnowsprintCellComments(category, type1, type2, field, day);
+
+    comments.push({ text: text, time: Date.now() });
+    setSnowsprintCellComments(category, type1, type2, field, day, comments);
+
+    input.value = '';
+    renderSnowsprintCommentList();
+
+    // Update cell indicator without full re-render
+    updateSnowsprintCellIndicator(category, type1, type2, field, day);
+}
+
+function deleteSnowsprintComment(index) {
+    if (!snCommentCurrentCell) return;
+    const { category, type1, type2, field, day } = snCommentCurrentCell;
+    const comments = getSnowsprintCellComments(category, type1, type2, field, day);
+
+    comments.splice(index, 1);
+    setSnowsprintCellComments(category, type1, type2, field, day, comments);
+
+    renderSnowsprintCommentList();
+    updateSnowsprintCellIndicator(category, type1, type2, field, day);
+
+    // If no comments left, close popup
+    if (comments.length === 0) {
+        closeSnowsprintComment();
+    }
+}
+window.deleteSnowsprintComment = deleteSnowsprintComment;
+
+function updateSnowsprintCellIndicator(category, type1, type2, field, day) {
+    // Find the input matching these data attributes
+    const selector = field === 'carryover'
+        ? `.snowsprint-input[data-category="${category}"][data-type1="${type1}"][data-type2="${type2}"][data-field="carryover"]`
+        : `.snowsprint-input[data-category="${category}"][data-type1="${type1}"][data-type2="${type2}"][data-field="${field}"][data-day="${day}"]`;
+
+    const input = document.querySelector(selector);
+    if (!input) return;
+
+    const td = input.closest('td');
+    if (!td) return;
+
+    const comments = getSnowsprintCellComments(category, type1, type2, field, day);
+    if (comments.length > 0) {
+        td.classList.add('sn-has-comment');
+        td.title = comments[comments.length - 1].text;
+    } else {
+        td.classList.remove('sn-has-comment');
+        td.title = '';
+    }
+}
+
+function renderSnowsprintCommentList() {
+    if (!snCommentCurrentCell) return;
+    const listEl = document.getElementById('snCommentList');
+    const { category, type1, type2, field, day } = snCommentCurrentCell;
+    const comments = getSnowsprintCellComments(category, type1, type2, field, day);
+
+    if (comments.length === 0) {
+        listEl.innerHTML = '';
+        return;
+    }
+
+    listEl.innerHTML = comments.map((c, i) => {
+        const date = new Date(c.time);
+        const timeStr = `${date.getMonth()+1}/${date.getDate()} ${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;
+        return `
+            <div class="sn-comment-item">
+                <div class="sn-comment-item-header">
+                    <div class="sn-comment-author-area">
+                        <div class="sn-comment-avatar">U</div>
+                        <span class="sn-comment-author">ユーザー</span>
+                        <span class="sn-comment-time">${timeStr}</span>
+                    </div>
+                    <button class="sn-comment-delete" onclick="deleteSnowsprintComment(${i})" title="削除">🗑</button>
+                </div>
+                <div class="sn-comment-text">${escapeHtmlAttr(c.text)}</div>
+            </div>
+        `;
+    }).join('');
+}
+
+// Wire up comment popup event listeners
+(function initCommentPopup() {
+    document.getElementById('snCommentClose')?.addEventListener('click', closeSnowsprintComment);
+    document.getElementById('snCommentOverlay')?.addEventListener('click', closeSnowsprintComment);
+    document.getElementById('snCommentSubmit')?.addEventListener('click', submitSnowsprintComment);
+    document.getElementById('snCommentInput')?.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            submitSnowsprintComment();
+        }
+    });
+    // Close on Escape key
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && snCommentCurrentCell) {
+            closeSnowsprintComment();
+        }
+    });
+})();
 
 // Finally, start the application
 init();

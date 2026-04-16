@@ -372,7 +372,6 @@
                                     <th style="min-width: 200px;">製品名 / 稼働内容</th>
                                     <th style="width: 120px;">開始</th>
                                     <th style="width: 120px;">終了</th>
-                                    <th style="width: 140px;">稼働時間</th>
                                     <th style="width: 140px; text-align: right;">カウント</th>
                                 </tr>
                             </thead>
@@ -683,6 +682,25 @@
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Comment Popup (Google Sheets Style) -->
+    <div class="sn-comment-overlay" id="snCommentOverlay"></div>
+    <div class="sn-comment-popup" id="snCommentPopup">
+        <div class="sn-comment-header">
+            <div class="sn-comment-title">💬 コメント</div>
+            <button class="sn-comment-close" id="snCommentClose" aria-label="閉じる">✕</button>
+        </div>
+        <div class="sn-comment-cell-info" id="snCommentCellInfo"></div>
+        <div class="sn-comment-list" id="snCommentList">
+            <!-- Comments rendered here -->
+        </div>
+        <div class="sn-comment-input-area">
+            <textarea id="snCommentInput" class="sn-comment-textarea" placeholder="コメントを入力..." rows="2"></textarea>
+            <div class="sn-comment-actions">
+                <button class="sn-comment-btn sn-comment-btn-submit" id="snCommentSubmit">コメント</button>
             </div>
         </div>
     </div>
