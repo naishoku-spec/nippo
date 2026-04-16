@@ -1260,7 +1260,7 @@ span.flatpickr-weekday:nth-child(7n) {
 
 /* ========== Sliver Inventory Table Styles ========== */
 .sliver-table-wrapper {
-    overflow-x: auto !important;
+    overflow: visible !important;
     -webkit-overflow-scrolling: touch;
     width: 100%;
 }
