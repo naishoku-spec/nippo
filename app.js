@@ -7071,20 +7071,65 @@ function renderSnowsprintGeneric(headId, bodyId, footId, configGroups, category)
         el.addEventListener('change', handleSnowsprintChange);
     });
 
-    // Attach right-click (contextmenu) for comment popup on input cells
+    // Attach right-click (PC) and gestures (Mobile) for comment popup on input cells
     body.querySelectorAll('td').forEach(td => {
         const input = td.querySelector('.snowsprint-input');
         if (!input) return;
-        td.addEventListener('contextmenu', (e) => {
-            e.preventDefault();
-            openSnowsprintComment({
-                category: input.dataset.category,
-                type1: input.dataset.type1,
-                type2: input.dataset.type2,
-                field: input.dataset.field,
-                day: input.dataset.day || null
-            }, td);
+        
+        const getCellInfo = () => ({
+            category: input.dataset.category,
+            type1: input.dataset.type1,
+            type2: input.dataset.type2,
+            field: input.dataset.field,
+            day: input.dataset.day || null
         });
+
+        const handleOpen = (e) => {
+            if (e && e.preventDefault) e.preventDefault();
+            if (document.activeElement === input) {
+                input.blur();
+            }
+            openSnowsprintComment(getCellInfo(), td);
+        };
+
+        // --- PC Right Click ---
+        td.addEventListener('contextmenu', handleOpen);
+
+        // --- Mobile Gestures (Double Tap & Long Press) ---
+        let pressTimer = null;
+        let lastTap = 0;
+        
+        td.addEventListener('touchstart', (e) => {
+            if (e.touches && e.touches.length > 1) return; // Ignore multi-touch
+            
+            const currentTime = new Date().getTime();
+            const tapLength = currentTime - lastTap;
+            
+            if (tapLength > 0 && tapLength < 400) {
+                // Double tap detected
+                clearTimeout(pressTimer);
+                handleOpen(e);
+                lastTap = 0;
+                return;
+            }
+            lastTap = currentTime;
+
+            // Long press detected
+            pressTimer = setTimeout(() => {
+                if (window.navigator && window.navigator.vibrate) {
+                    window.navigator.vibrate(50);
+                }
+                handleOpen();
+            }, 600);
+        }, { passive: false });
+
+        const cancelPress = () => {
+            if (pressTimer) clearTimeout(pressTimer);
+        };
+
+        td.addEventListener('touchend', cancelPress);
+        td.addEventListener('touchmove', cancelPress);
+        td.addEventListener('touchcancel', cancelPress);
     });
 
     carryRow = null; bodyRows = null; footHtml = null;
