@@ -184,6 +184,37 @@
                         </div>
                     </main>
 
+                    <!-- Daily Summary for Specific Products -->
+                    <style>
+                        .daily-summary-grid {
+                            display: grid;
+                            grid-template-columns: repeat(3, 1fr);
+                            gap: 1rem;
+                        }
+                        @media (max-width: 600px) {
+                            .daily-summary-grid {
+                                grid-template-columns: 1fr;
+                            }
+                        }
+                    </style>
+                    <div class="card daily-summary-container" style="margin-bottom: 2rem;">
+                        <h3 style="font-size: 1.25rem; margin-bottom: 1rem; border-bottom: 2px solid var(--border); padding-bottom: 0.5rem;">特定製品 本日合計</h3>
+                        <div class="daily-summary-grid">
+                            <div style="background: rgba(99, 102, 241, 0.05); padding: 1.5rem; border-radius: 12px; border: 1px solid rgba(99, 102, 241, 0.1);">
+                                <div style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 0.5rem; font-weight: 600;">No.6</div>
+                                <div style="font-size: 2rem; font-weight: 800; color: var(--primary);" id="no6-total-count">0</div>
+                            </div>
+                            <div style="background: rgba(99, 102, 241, 0.05); padding: 1.5rem; border-radius: 12px; border: 1px solid rgba(99, 102, 241, 0.1);">
+                                <div style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 0.5rem; font-weight: 600;">鼻ぽん小</div>
+                                <div style="font-size: 2rem; font-weight: 800; color: var(--primary);" id="hanapon-s-total-count">0</div>
+                            </div>
+                            <div style="background: rgba(99, 102, 241, 0.05); padding: 1.5rem; border-radius: 12px; border: 1px solid rgba(99, 102, 241, 0.1);">
+                                <div style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 0.5rem; font-weight: 600;">鼻ぽん大</div>
+                                <div style="font-size: 2rem; font-weight: 800; color: var(--primary);" id="hanapon-l-total-count">0</div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Daily Notes Section (Added between J and new entry form) -->
                     <div class="card daily-notes-container">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">

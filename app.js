@@ -2554,6 +2554,7 @@ function calculateAndDisplayStats() {
     let totalCount = 0;
     let totalNo6 = 0;
     let totalHanaponSmall = 0;
+    let totalHanaponLarge = 0;
     let totalMinutes = 0;
     let activeEntries = 0;
 
@@ -2565,6 +2566,7 @@ function calculateAndDisplayStats() {
             const p = r.product.trim();
             if (p === 'No.6') totalNo6 += r.count;
             if (p === '鼻ぽん小') totalHanaponSmall += r.count;
+            if (p === '鼻ぽん大') totalHanaponLarge += r.count;
 
             const { totalMinutes: mins } = calculateDuration(r.startTime, r.endTime);
             totalMinutes += mins;
@@ -2577,6 +2579,8 @@ function calculateAndDisplayStats() {
     if (no6TotalEl) no6TotalEl.textContent = totalNo6.toLocaleString();
     const hanaponTotalEl = document.getElementById('hanapon-s-total-count');
     if (hanaponTotalEl) hanaponTotalEl.textContent = totalHanaponSmall.toLocaleString();
+    const hanaponLTotalEl = document.getElementById('hanapon-l-total-count');
+    if (hanaponLTotalEl) hanaponLTotalEl.textContent = totalHanaponLarge.toLocaleString();
 
     if (avgDurationEl) {
         if (activeEntries > 0) {
