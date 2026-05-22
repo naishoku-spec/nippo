@@ -1636,10 +1636,8 @@ let currentDate = new Date().toLocaleDateString('sv-SE'); // YYYY-MM-DD format
 let isFirstLoad = true;
 let isFirstNotesLoad = true;
 let noteSaveTimeout = null;
-let recordLastEditTime = 0; // Prevent Firebase from overwriting during active edits
 
 // Roll Stock State
-
 const ROLL_STORAGE_KEY = 'rollInventoryData';
 const ROLL_TYPES = ['film', 'plain', 'eog'];
 const ROLL_LABELS = { film: 'フィルム', plain: '無地', eog: 'EOG' };
@@ -1651,46 +1649,22 @@ let rollCurrentYear = new Date().getFullYear();
 let rollCurrentMonth = new Date().getMonth() + 1;
 let isFirstRollLoad = true;
 
-// Helper: Generate a stable key for each record (date + machine)
-function getRecordKey(record) {
-    return record.date + '_' + record.machine;
-}
-
 // Real-time synchronization from Firebase
 if (database) {
     // 1. Sync Daily Records
     database.ref(DB_PATH).on('value', (snapshot) => {
         const firebaseData = snapshot.val();
         let firebaseRecords = [];
-        let isLegacyArray = false;
-
         if (firebaseData) {
-            if (Array.isArray(firebaseData)) {
-                // Legacy array format — migrate to keyed object
-                firebaseRecords = firebaseData;
-                isLegacyArray = true;
-            } else {
-                firebaseRecords = Object.values(firebaseData);
-            }
+            firebaseRecords = Array.isArray(firebaseData) ? firebaseData : Object.values(firebaseData);
         }
 
         if (isFirstLoad) {
             if (firebaseRecords.length > 0) {
                 records = firebaseRecords;
                 localStorage.setItem(LS_KEY, JSON.stringify(records));
-
-                // Migrate legacy array to keyed object in Firebase
-                if (isLegacyArray) {
-                    console.log('Migrating Firebase data from array to keyed object...');
-                    const recordsObj = {};
-                    records.forEach(r => { recordsObj[getRecordKey(r)] = r; });
-                    database.ref(DB_PATH).set(recordsObj);
-                }
             } else if (records.length > 0) {
-                // Push local data to Firebase in keyed format
-                const recordsObj = {};
-                records.forEach(r => { recordsObj[getRecordKey(r)] = r; });
-                database.ref(DB_PATH).set(recordsObj);
+                database.ref(DB_PATH).set(records);
             }
             isFirstLoad = false;
             ensureDayRecords(currentDate);
@@ -1699,15 +1673,6 @@ if (database) {
             // Check if data is actually different to avoid redundant renders
             const isDifferent = JSON.stringify(records) !== JSON.stringify(firebaseRecords);
             if (isDifferent && firebaseRecords.length > 0) {
-                // Echo guard: after a local edit, skip sync for 2 seconds.
-                // With per-record saves this is safe — other devices' changes to OTHER records
-                // are saved independently and will sync after the guard window expires.
-                // This prevents the visual "row shift/duplicate" glitch caused by re-rendering
-                // while the user is still interacting with the table.
-                if (Date.now() - recordLastEditTime < 2000) {
-                    return;
-                }
-
                 records = firebaseRecords;
                 localStorage.setItem(LS_KEY, JSON.stringify(records));
 
@@ -1924,15 +1889,6 @@ function init() {
     window.addEventListener('beforeunload', (e) => {
         saveRecords();
         saveRollData();
-    });
-
-    // Prevent data loss on mobile when switching apps (blur may not fire)
-    document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'hidden') {
-            // Force save any pending changes when the app goes into the background
-            saveRecords();
-            saveRollData();
-        }
     });
 }
 
@@ -2174,7 +2130,7 @@ function handleAddRecord(e) {
     };
 
     records.push(record);
-    saveSingleRecord(record);
+    saveRecords();
     renderRecords();
 
     // Partially reset form
@@ -2323,19 +2279,12 @@ function ensureDayRecords(date) {
         }
     });
 
-    if (updated) {
-        // Save only the newly created records individually
-        const newRecords = records.filter(r => r.date === date && !existingMachines.includes(r.machine));
-        saveMultipleRecords(newRecords);
-    }
+    if (updated) saveRecords();
 }
 
 // Update a specific field in a record
-function updateRecord(key, field, value) {
-    recordLastEditTime = Date.now(); // Mark as actively editing to prevent Firebase overwrite
-    
-    // We now pass the unique string key (date_machine) instead of the randomly generated id to avoid precision/collision bugs
-    const record = records.find(r => getRecordKey(r) === key);
+function updateRecord(id, field, value) {
+    const record = records.find(r => r.id == id);
     if (!record) return;
 
     if (field === 'count' || field === 'orderCount') {
@@ -2359,7 +2308,7 @@ function updateRecord(key, field, value) {
         }
     }
 
-    saveSingleRecord(record);
+    saveRecords();
     calculateAndDisplayStats();
 }
 
@@ -2376,51 +2325,7 @@ function calculateDuration(start, end) {
     return { h, m, totalMinutes: diff };
 }
 
-// Save a single record to Firebase (per-record update — safe for multi-device)
-function saveSingleRecord(record) {
-    recordLastEditTime = Date.now();
-
-    // Always save full array to localStorage as backup
-    try {
-        localStorage.setItem(LS_KEY, JSON.stringify(records));
-    } catch (e) {
-        console.error('LocalStorage save failed:', e);
-    }
-
-    // Save only this record to Firebase using its unique key
-    if (database) {
-        const key = getRecordKey(record);
-        database.ref(DB_PATH + '/' + key).set(record)
-            .then(() => {
-            })
-            .catch((error) => {
-                console.error('Firebase single record save failed:', error);
-            });
-    }
-}
-
-// Save multiple records at once (used by ensureDayRecords for batch creation)
-function saveMultipleRecords(recordsToSave) {
-    // Save full array to localStorage
-    try {
-        localStorage.setItem(LS_KEY, JSON.stringify(records));
-    } catch (e) {
-        console.error('LocalStorage save failed:', e);
-    }
-
-    if (database && recordsToSave.length > 0) {
-        const updates = {};
-        recordsToSave.forEach(r => {
-            updates[getRecordKey(r)] = r;
-        });
-        database.ref(DB_PATH).update(updates)
-            .catch((error) => {
-                console.error('Firebase batch save failed:', error);
-            });
-    }
-}
-
-// Full save to LocalStorage and Firebase (fallback for beforeunload/visibilitychange)
+// Save to LocalStorage and Firebase (with enhanced reliability)
 function saveRecords() {
     // Always save to localStorage first (immediate backup)
     try {
@@ -2429,12 +2334,11 @@ function saveRecords() {
         console.error('LocalStorage save failed:', e);
     }
 
-    // Save as keyed object to Firebase
+    // Then sync to Firebase
     if (database) {
-        const recordsObj = {};
-        records.forEach(r => { recordsObj[getRecordKey(r)] = r; });
-        database.ref(DB_PATH).set(recordsObj)
+        database.ref(DB_PATH).set(records)
             .then(() => {
+                // syncToGoogleSheets(records); // Disconnected
             })
             .catch((error) => {
                 console.error('Firebase save failed:', error);
@@ -2551,26 +2455,25 @@ function renderRecords() {
         tr.innerHTML = `
             <td class="machine-cell"><span class="machine-badge">${record.machine}</span></td>
             <td class="product-cell">
-                <select class="inline-input" onchange="updateRecord('${getRecordKey(record)}', 'product', this.value)">
+                <select class="inline-input" onchange="updateRecord(${record.id}, 'product', this.value)">
                     ${PRODUCTS.map(p => `<option value="${p}" ${record.product === p ? 'selected' : ''}>${p || '選択してください...'}</option>`).join('')}
                 </select>
             </td>
             <td class="time-cell">
                 <input type="text" class="inline-input" value="${record.startTime}" 
                        placeholder="HH:mm" inputmode="numeric" onfocus="this.select()"
-                       onblur="this.value = normalizeTime(this.value); updateRecord('${getRecordKey(record)}', 'startTime', this.value)" >
+                       onblur="this.value = normalizeTime(this.value); updateRecord(${record.id}, 'startTime', this.value)" >
             </td>
             <td class="time-cell">
                 <input type="text" class="inline-input" value="${record.endTime}" 
                        placeholder="HH:mm" inputmode="numeric" onfocus="this.select()"
-                       onblur="this.value = normalizeTime(this.value); updateRecord('${getRecordKey(record)}', 'endTime', this.value)" >
+                       onblur="this.value = normalizeTime(this.value); updateRecord(${record.id}, 'endTime', this.value)" >
             </td>
 
 
             <td class="count-cell">
                 <input type="number" class="inline-input" value="${record.count == 0 ? '' : record.count}" 
-                       onblur="updateRecord('${getRecordKey(record)}', 'count', this.value)"
-                       onchange="updateRecord('${getRecordKey(record)}', 'count', this.value)">
+                       onblur="updateRecord(${record.id}, 'count', this.value)">
             </td>
         `;
         recordsList.appendChild(tr);
@@ -2697,22 +2600,15 @@ function clearRow(id) {
     if (!record) return;
     record.product = '';
     record.count = 0;
-    saveSingleRecord(record);
+    saveRecords();
     renderRecords();
 }
 
 // Delete a row
 function deleteRecord(id) {
     if (confirm('この項目を削除してもよろしいですか？')) {
-        const recordToDelete = records.find(r => r.id == id);
         records = records.filter(r => r.id != id);
-        // Save deletion by removing the key from Firebase
-        if (database && recordToDelete) {
-            const key = getRecordKey(recordToDelete);
-            database.ref(DB_PATH + '/' + key).remove()
-                .catch((error) => { console.error('Firebase delete failed:', error); });
-        }
-        try { localStorage.setItem(LS_KEY, JSON.stringify(records)); } catch(e) {}
+        saveRecords();
         renderRecords();
     }
 }
