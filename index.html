@@ -808,16 +808,16 @@
                                 <label>開始日</label>
                                 <div style="position: relative; display: flex; align-items: center; width: 100%;">
                                     <input type="text" id="task-start-date" placeholder="例: 6/1, 来週, 未定 など" style="width: 100%; padding: 0.6rem 2.5rem 0.6rem 1rem; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.95rem; font-family: inherit; color: var(--text-color); box-sizing: border-box;">
-                                    <input type="date" id="task-start-date-picker" style="position: absolute; right: 0; width: 0; height: 0; opacity: 0; pointer-events: none;" onchange="document.getElementById('task-start-date').value = this.value">
-                                    <span onclick="try { document.getElementById('task-start-date-picker').showPicker(); } catch(e) { document.getElementById('task-start-date-picker').click(); }" style="position: absolute; right: 12px; color: #3b82f6; font-size: 1.2rem; cursor: pointer; user-select: none; transition: color 0.2s;" onmouseenter="this.style.color='#2563eb';" onmouseleave="this.style.color='#3b82f6';">📅</span>
+                                    <span style="position: absolute; right: 12px; color: #3b82f6; font-size: 1.2rem; pointer-events: none; user-select: none;">📅</span>
+                                    <input type="date" id="task-start-date-picker" style="position: absolute; right: 8px; width: 32px; height: 32px; opacity: 0; cursor: pointer; border: none; padding: 0; margin: 0; z-index: 10;" onchange="document.getElementById('task-start-date').value = this.value">
                                 </div>
                             </div>
                             <div class="project-form-group">
                                 <label>期限</label>
                                 <div style="position: relative; display: flex; align-items: center; width: 100%;">
                                     <input type="text" id="task-due-date" placeholder="例: 6/30, 月末, ASAP など" style="width: 100%; padding: 0.6rem 2.5rem 0.6rem 1rem; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.95rem; font-family: inherit; color: var(--text-color); box-sizing: border-box;">
-                                    <input type="date" id="task-due-date-picker" style="position: absolute; right: 0; width: 0; height: 0; opacity: 0; pointer-events: none;" onchange="document.getElementById('task-due-date').value = this.value">
-                                    <span onclick="try { document.getElementById('task-due-date-picker').showPicker(); } catch(e) { document.getElementById('task-due-date-picker').click(); }" style="position: absolute; right: 12px; color: #3b82f6; font-size: 1.2rem; cursor: pointer; user-select: none; transition: color 0.2s;" onmouseenter="this.style.color='#2563eb';" onmouseleave="this.style.color='#3b82f6';">📅</span>
+                                    <span style="position: absolute; right: 12px; color: #3b82f6; font-size: 1.2rem; pointer-events: none; user-select: none;">📅</span>
+                                    <input type="date" id="task-due-date-picker" style="position: absolute; right: 8px; width: 32px; height: 32px; opacity: 0; cursor: pointer; border: none; padding: 0; margin: 0; z-index: 10;" onchange="document.getElementById('task-due-date').value = this.value">
                                 </div>
                             </div>
                         </div>
