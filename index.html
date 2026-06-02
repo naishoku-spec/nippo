@@ -80,6 +80,16 @@
                     </a>
                 </nav>
             </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-title">プロジェクト管理</div>
+                <nav class="sidebar-nav">
+                    <a href="javascript:void(0)" id="view-project" class="nav-item" onclick="switchView('project')">
+                        <span class="nav-icon">・</span>
+                        進捗管理表
+                    </a>
+                </nav>
+            </div>
         </aside>
 
         <!-- Sidebar Overlay -->
@@ -717,6 +727,105 @@
                             </div>
                         </div>
                     </div>
+                </div>
+            </div>
+
+            <!-- ========================================== -->
+            <!-- ========= Project Progress View ========== -->
+            <!-- ========================================== -->
+            <div id="project-view-container" style="display: none;">
+                <div class="project-dashboard-container">
+
+                    <!-- Project Navigation & Search -->
+                    <div class="board-nav-container">
+                        <div class="board-search-wrapper" onmouseenter="showBoardDropdown()" onmouseleave="hideBoardDropdown()">
+                            <input type="text" id="boardSearchInput" placeholder="🔍 プロジェクト名を検索..." onkeyup="filterBoards()" onfocus="showBoardDropdown()">
+                            <div id="boardDropdown" class="board-dropdown">
+                                <!-- Boards list populated by JS -->
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 0.5rem; margin-left: auto;">
+                            <button class="board-list-btn" onclick="showProjectListModal()">📋 <span class="hide-on-mobile">プロジェクト</span>一覧</button>
+                            <button class="board-create-btn" onclick="createNewBoard()">＋ 新規<span class="hide-on-mobile">プロジェクト</span></button>
+                        </div>
+                    </div>
+
+                    <div id="kanban-board-container" class="kanban-board">
+                        <!-- 動的にカラムとタスクが生成されます -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Project List Modal -->
+            <div class="project-modal-overlay" id="projectListModalOverlay">
+                <div class="project-modal" style="max-width: 700px;">
+                    <div class="project-modal-header">
+                        <h3>📋 プロジェクト一覧</h3>
+                        <button class="project-modal-close" onclick="hideProjectListModal()">✕</button>
+                    </div>
+                    <div class="project-list-container" id="projectListContainer" style="max-height: 60vh; overflow-y: auto; padding: 1rem;">
+                        <!-- JSで一覧をレンダリング -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Task Modal -->
+            <div class="project-modal-overlay" id="projectModalOverlay">
+                <div class="project-modal">
+                    <div class="project-modal-header">
+                        <h3 id="projectModalTitle">新規タスク追加</h3>
+                        <button class="project-modal-close" onclick="hideProjectModal()">✕</button>
+                    </div>
+                    <form id="project-form" class="project-form" onsubmit="handleTaskSubmit(event)">
+                        <input type="hidden" id="task-id">
+                        <input type="hidden" id="task-column-id">
+                        <div class="project-form-group">
+                            <label>タスク名</label>
+                            <input type="text" id="task-name" placeholder="例: 設計書の作成">
+                        </div>
+                        <div class="project-form-group" style="display: flex; flex-direction: column; flex: 1; min-height: 100px; margin-bottom: 0.75rem;">
+                            <label>内容</label>
+                            <textarea id="task-description" placeholder="タスクの詳細を入力..." style="width:100%; flex: 1; box-sizing:border-box; border:1px solid #cbd5e1; border-radius:8px; padding:0.6rem 0.8rem; font-size:0.95rem; font-family:inherit; color:var(--text-color); resize:none; transition:all 0.2s;"></textarea>
+                        </div>
+                        <div class="project-form-row">
+                            <div class="project-form-group">
+                                <label>担当者</label>
+                                <input type="text" id="task-assignee" placeholder="例: 山田">
+                            </div>
+                            <div class="project-form-group">
+                                <label>ステータス</label>
+                                <select id="task-status" style="width:100%; padding:0.6rem 1rem; border:1px solid #cbd5e1; border-radius:8px; font-size:0.95rem; font-family:inherit; color:var(--text-color); transition:all 0.2s; box-sizing:border-box;">
+                                    <option value="">無記入</option>
+                                    <option value="not_started">未着手</option>
+                                    <option value="in_progress">進行中</option>
+                                    <option value="on_hold">保留</option>
+                                    <option value="completed">完了</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="project-form-row">
+                            <div class="project-form-group">
+                                <label>開始日</label>
+                                <div style="position: relative; display: flex; align-items: center; width: 100%;">
+                                    <input type="text" id="task-start-date" placeholder="例: 6/1, 来週, 未定 など" style="width: 100%; padding: 0.6rem 2.5rem 0.6rem 1rem; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.95rem; font-family: inherit; color: var(--text-color); box-sizing: border-box;">
+                                    <input type="date" id="task-start-date-picker" style="position: absolute; right: 0; width: 0; height: 0; opacity: 0; pointer-events: none;" onchange="document.getElementById('task-start-date').value = this.value">
+                                    <span onclick="try { document.getElementById('task-start-date-picker').showPicker(); } catch(e) { document.getElementById('task-start-date-picker').click(); }" style="position: absolute; right: 12px; color: #3b82f6; font-size: 1.2rem; cursor: pointer; user-select: none; transition: color 0.2s;" onmouseenter="this.style.color='#2563eb';" onmouseleave="this.style.color='#3b82f6';">📅</span>
+                                </div>
+                            </div>
+                            <div class="project-form-group">
+                                <label>期限</label>
+                                <div style="position: relative; display: flex; align-items: center; width: 100%;">
+                                    <input type="text" id="task-due-date" placeholder="例: 6/30, 月末, ASAP など" style="width: 100%; padding: 0.6rem 2.5rem 0.6rem 1rem; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.95rem; font-family: inherit; color: var(--text-color); box-sizing: border-box;">
+                                    <input type="date" id="task-due-date-picker" style="position: absolute; right: 0; width: 0; height: 0; opacity: 0; pointer-events: none;" onchange="document.getElementById('task-due-date').value = this.value">
+                                    <span onclick="try { document.getElementById('task-due-date-picker').showPicker(); } catch(e) { document.getElementById('task-due-date-picker').click(); }" style="position: absolute; right: 12px; color: #3b82f6; font-size: 1.2rem; cursor: pointer; user-select: none; transition: color 0.2s;" onmouseenter="this.style.color='#2563eb';" onmouseleave="this.style.color='#3b82f6';">📅</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="project-modal-footer">
+                            <button type="button" class="project-btn-cancel" onclick="hideProjectModal()">キャンセル</button>
+                            <button type="submit" class="project-btn-save">保存</button>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>

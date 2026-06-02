@@ -1624,6 +1624,7 @@ const SECRET_KEY = 'nippo-report-secure-key-2026';
 const DB_PATH = `${SECRET_KEY}/${isProduction ? 'nippo_records' : 'nippo_records_dev'}`;
 const ROLL_DB_PATH = `${SECRET_KEY}/${isProduction ? 'roll_inventory' : 'roll_inventory_dev'}`;
 const NOTES_DB_PATH = `${SECRET_KEY}/${isProduction ? 'nippo_daily_notes' : 'nippo_daily_notes_dev'}`;
+const PROJECT_DB_PATH = `${SECRET_KEY}/${isProduction ? 'project_management' : 'project_management_dev'}`;
 const LS_KEY = isProduction ? 'nippo_records' : 'nippo_records_dev';
 const NOTES_LS_KEY = isProduction ? 'nippo_daily_notes' : 'nippo_daily_notes_dev';
 
@@ -1782,6 +1783,8 @@ const snowsprintViewContainer = document.getElementById('snowsprint-view-contain
 const viewSnowsprintBtn = document.getElementById('view-snowsprint');
 const shiftViewContainer = document.getElementById('shift-view-container');
 const viewShiftBtn = document.getElementById('view-shift');
+const projectViewContainer = document.getElementById('project-view-container');
+const viewProjectBtn = document.getElementById('view-project');
 
 // Initialize
 // Helpers for PC and Mobile input handling
@@ -1941,6 +1944,8 @@ function switchView(view) {
             titleHeader.textContent = 'スノースプリント資材';
         } else if (view === 'shift') {
             titleHeader.textContent = 'シフト表';
+        } else if (view === 'project') {
+            titleHeader.textContent = 'プロジェクト進捗管理';
         }
     }
 
@@ -1953,6 +1958,7 @@ function switchView(view) {
     if (viewHanaponBtn) viewHanaponBtn.classList.toggle('active', view === 'hanapon');
     if (viewSnowsprintBtn) viewSnowsprintBtn.classList.toggle('active', view === 'snowsprint');
     if (viewShiftBtn) viewShiftBtn.classList.toggle('active', view === 'shift');
+    if (viewProjectBtn) viewProjectBtn.classList.toggle('active', view === 'project');
 
     dayViewContainer.style.display = (view === 'day') ? 'block' : 'none';
     monthViewContainer.style.display = (view === 'month') ? 'block' : 'none';
@@ -1961,6 +1967,7 @@ function switchView(view) {
     hanaponViewContainer.style.display = (view === 'hanapon') ? 'block' : 'none';
     snowsprintViewContainer.style.display = (view === 'snowsprint') ? 'block' : 'none';
     shiftViewContainer.style.display = (view === 'shift') ? 'block' : 'none';
+    if (projectViewContainer) projectViewContainer.style.display = (view === 'project') ? 'block' : 'none';
 
     // Toggle header selectors visibility
     const stockMonthSelector = document.getElementById('monthSelectorStock');
@@ -2020,6 +2027,13 @@ function switchView(view) {
         if (snowsprintMonthSelector) snowsprintMonthSelector.style.display = 'none';
         if (dayDateSelector) dayDateSelector.style.display = 'block';
         if (prodViewToggle) prodViewToggle.style.display = 'flex';
+    } else if (view === 'project') {
+        if (stockMonthSelector) stockMonthSelector.style.display = 'none';
+        if (sliverMonthSelector) sliverMonthSelector.style.display = 'none';
+        if (hanaponMonthSelector) hanaponMonthSelector.style.display = 'none';
+        if (snowsprintMonthSelector) snowsprintMonthSelector.style.display = 'none';
+        if (dayDateSelector) dayDateSelector.style.display = 'none';
+        if (prodViewToggle) prodViewToggle.style.display = 'none';
     }
 
     // Header sub-toggle active states
@@ -7844,3 +7858,573 @@ function shiftGenerateTable() {
     }
 }
 window.shiftGenerateTable = shiftGenerateTable;
+
+// ==========================================
+// ====== Project Board Management ==========
+// ==========================================
+
+let boardsData = []; // Array of board (project) objects
+let currentBoardId = null;
+let isFirstBoardLoad = true;
+
+const BOARDS_STORAGE_KEY = 'nippo_boards_data';
+
+function initProjectManagement() {
+    // 1. ローカルストレージからの読み込み（確実なデータ復旧）
+    const localData = localStorage.getItem(BOARDS_STORAGE_KEY);
+    if (localData) {
+        try {
+            boardsData = JSON.parse(localData);
+            if (boardsData.length > 0 && !currentBoardId) {
+                currentBoardId = boardsData[0].id;
+            }
+            renderBoard();
+        } catch(e) {
+            console.error("Local storage parsing error", e);
+        }
+    }
+
+    if (!database) return;
+
+    // 2. Firebaseからの読み込みと同期
+    database.ref(PROJECT_DB_PATH).on('value', (snapshot) => {
+        const data = snapshot.val();
+        let firebaseBoards = [];
+        if (data) {
+            firebaseBoards = Array.isArray(data) ? data : Object.values(data);
+        }
+
+        if (isFirstBoardLoad) {
+            // もしFirebaseにデータが無く、ローカルにはデータがある場合は、ローカルを正としてFirebaseに同期する
+            if (firebaseBoards.length === 0 && boardsData.length > 0) {
+                saveBoardsToFirebase();
+            } else {
+                boardsData = firebaseBoards;
+                localStorage.setItem(BOARDS_STORAGE_KEY, JSON.stringify(boardsData));
+            }
+            
+            isFirstBoardLoad = false;
+            if (boardsData.length > 0 && !currentBoardId) {
+                currentBoardId = boardsData[0].id;
+            }
+            renderBoard();
+        } else {
+            const isDifferent = JSON.stringify(boardsData) !== JSON.stringify(firebaseBoards);
+            if (isDifferent) {
+                boardsData = firebaseBoards;
+                localStorage.setItem(BOARDS_STORAGE_KEY, JSON.stringify(boardsData));
+                renderBoard();
+            }
+        }
+    });
+}
+
+function saveBoardsToFirebase() {
+    // 必ずローカルストレージにも保存してデータ消失を防ぐ
+    localStorage.setItem(BOARDS_STORAGE_KEY, JSON.stringify(boardsData));
+
+    if (database) {
+        database.ref(PROJECT_DB_PATH).set(boardsData).catch(error => {
+            console.error('Board save failed:', error);
+        });
+    }
+}
+
+function getCurrentBoard() {
+    return boardsData.find(b => b.id === currentBoardId) || null;
+}
+
+// ---- Board (Project) CRUD ----
+
+window.createNewBoard = function() {
+    const name = prompt('新しいプロジェクト名を入力してください:');
+    if (!name || !name.trim()) return;
+
+    const newBoard = {
+        id: Date.now().toString() + '-' + Math.random().toString(36).substr(2, 9),
+        name: name.trim(),
+        columns: [
+            { id: 'col-' + Date.now() + '-1', title: '', tasks: [] }
+        ]
+    };
+
+    boardsData.push(newBoard);
+    currentBoardId = newBoard.id;
+    saveBoardsToFirebase();
+    renderBoard();
+};
+
+window.deleteBoard = function(boardId) {
+    if (!confirm('このプロジェクトを削除してもよろしいですか？\nすべてのカラムとタスクも削除されます。')) return;
+    boardsData = boardsData.filter(b => b.id !== boardId);
+    if (currentBoardId === boardId) {
+        currentBoardId = boardsData.length > 0 ? boardsData[0].id : null;
+    }
+    saveBoardsToFirebase();
+    renderBoard();
+};
+
+// ---- Project List Modal ----
+
+window.showProjectListModal = function() {
+    renderProjectList();
+    document.getElementById('projectListModalOverlay').classList.add('show');
+};
+
+window.hideProjectListModal = function() {
+    document.getElementById('projectListModalOverlay').classList.remove('show');
+};
+
+function renderProjectList() {
+    const container = document.getElementById('projectListContainer');
+    if (!container) return;
+
+    if (boardsData.length === 0) {
+        container.innerHTML = '<p style="text-align: center; color: #64748b; margin-top: 2rem;">プロジェクトがありません</p>';
+        return;
+    }
+
+    let html = '';
+    boardsData.forEach(board => {
+        let totalTasks = 0;
+        let completedTasks = 0;
+        
+        if (board.columns) {
+            board.columns.forEach(col => {
+                if (col.tasks) {
+                    totalTasks += col.tasks.length;
+                    completedTasks += col.tasks.filter(t => t.status === 'completed').length;
+                }
+            });
+        }
+        
+        const isActive = board.id === currentBoardId;
+        const activeClass = isActive ? 'active' : '';
+        
+        html += `
+            <div class="project-list-card ${activeClass}" onclick="switchBoardFromList('${board.id}')">
+                <div class="project-list-info">
+                    <h4>${board.name} ${isActive ? '<span style="font-size:0.75rem; color:var(--primary); background:#e0e7ff; padding:2px 6px; border-radius:4px; margin-left:8px; vertical-align:middle;">編集中</span>' : ''}</h4>
+                    <p>全 ${totalTasks} タスク / 完了 ${completedTasks} タスク</p>
+                </div>
+                <div class="project-list-actions">
+                    <button onclick="event.stopPropagation(); editBoardName('${board.id}')" title="名前を変更" style="color: #3b82f6;">✏️</button>
+                    <button onclick="event.stopPropagation(); deleteBoardFromList('${board.id}')" title="プロジェクトを削除">🗑️</button>
+                </div>
+            </div>
+        `;
+    });
+    container.innerHTML = html;
+}
+
+window.switchBoardFromList = function(boardId) {
+    selectBoard(boardId);
+    hideProjectListModal();
+};
+
+window.deleteBoardFromList = function(boardId) {
+    if (!confirm('このプロジェクトを削除してもよろしいですか？\nすべてのカラムとタスクも削除されます。')) return;
+    boardsData = boardsData.filter(b => b.id !== boardId);
+    if (currentBoardId === boardId) {
+        currentBoardId = boardsData.length > 0 ? boardsData[0].id : null;
+    }
+    saveBoardsToFirebase();
+    renderBoard();
+    renderProjectList();
+};
+
+window.editBoardName = function(boardId) {
+    const board = boardsData.find(b => b.id === boardId);
+    if (!board) return;
+    
+    const newName = prompt('プロジェクトの新しい名前を入力してください:', board.name);
+    if (newName && newName.trim() !== '' && newName.trim() !== board.name) {
+        board.name = newName.trim();
+        saveBoardsToFirebase();
+        renderBoard();
+        renderProjectList();
+    }
+};
+
+// ---- Search / Dropdown ----
+
+window.showBoardDropdown = function() {
+    const dd = document.getElementById('boardDropdown');
+    if (dd) {
+        populateBoardDropdown('');
+        dd.style.display = 'block';
+    }
+};
+
+window.hideBoardDropdown = function() {
+    setTimeout(() => {
+        const dd = document.getElementById('boardDropdown');
+        if (dd) dd.style.display = 'none';
+    }, 200);
+};
+
+window.filterBoards = function() {
+    const input = document.getElementById('boardSearchInput');
+    const query = input ? input.value.trim() : '';
+    populateBoardDropdown(query);
+    const dd = document.getElementById('boardDropdown');
+    if (dd) dd.style.display = 'block';
+};
+
+function populateBoardDropdown(query) {
+    const dd = document.getElementById('boardDropdown');
+    if (!dd) return;
+
+    const filtered = boardsData.filter(b =>
+        b.name.toLowerCase().includes(query.toLowerCase())
+    );
+
+    if (filtered.length === 0) {
+        dd.innerHTML = '<div class="board-dropdown-item" style="color: #94a3b8; cursor: default;">プロジェクトが見つかりません</div>';
+        return;
+    }
+
+    dd.innerHTML = filtered.map(b => `
+        <div class="board-dropdown-item" style="${b.id === currentBoardId ? 'font-weight:bold; color:#3b82f6;' : ''}" onclick="selectBoard('${b.id}')">
+            ${b.name}
+        </div>
+    `).join('');
+}
+
+window.selectBoard = function(boardId) {
+    currentBoardId = boardId;
+    const input = document.getElementById('boardSearchInput');
+    if (input) input.value = '';
+    const dd = document.getElementById('boardDropdown');
+    if (dd) dd.style.display = 'none';
+    renderBoard();
+};
+
+// ---- Column CRUD ----
+
+window.addColumn = function() {
+    const board = getCurrentBoard();
+    if (!board) return;
+
+    const newCol = {
+        id: 'col-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
+        title: '新しいカラム',
+        tasks: []
+    };
+    board.columns.push(newCol);
+    saveBoardsToFirebase();
+    renderBoard();
+};
+
+window.deleteColumn = function(colId) {
+    const board = getCurrentBoard();
+    if (!board) return;
+    const col = board.columns.find(c => c.id === colId);
+    const taskCount = col ? col.tasks.length : 0;
+    const msg = taskCount > 0
+        ? `このカラムには ${taskCount} 件のタスクがあります。削除してもよろしいですか？`
+        : 'このカラムを削除してもよろしいですか？';
+    if (!confirm(msg)) return;
+    board.columns = board.columns.filter(c => c.id !== colId);
+    saveBoardsToFirebase();
+    renderBoard();
+};
+
+window.onColumnTitleChange = function(colId, newTitle) {
+    const board = getCurrentBoard();
+    if (!board) return;
+    const col = board.columns.find(c => c.id === colId);
+    if (col) {
+        col.title = newTitle;
+        saveBoardsToFirebase();
+    }
+};
+
+// ---- Task CRUD ----
+
+window.showProjectModal = function(columnId) {
+    document.getElementById('project-form').reset();
+    document.getElementById('task-id').value = '';
+    document.getElementById('task-column-id').value = columnId || '';
+    document.getElementById('projectModalTitle').innerText = '新規タスク追加';
+    document.getElementById('projectModalOverlay').classList.add('show');
+};
+
+window.hideProjectModal = function() {
+    document.getElementById('projectModalOverlay').classList.remove('show');
+};
+
+window.editTask = function(colId, taskId) {
+    const board = getCurrentBoard();
+    if (!board) return;
+    const col = board.columns.find(c => c.id === colId);
+    if (!col) return;
+    const task = col.tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    document.getElementById('task-id').value = task.id;
+    document.getElementById('task-column-id').value = colId;
+    document.getElementById('task-name').value = task.name || '';
+    document.getElementById('task-description').value = task.description || '';
+    document.getElementById('task-assignee').value = task.assignee || '';
+    document.getElementById('task-status').value = task.status || 'not_started';
+
+    document.getElementById('task-start-date').value = task.startDate || '';
+    document.getElementById('task-start-date-picker').value = (task.startDate && !isNaN(new Date(task.startDate).getTime())) ? task.startDate : '';
+    document.getElementById('task-due-date').value = task.dueDate || '';
+    document.getElementById('task-due-date-picker').value = (task.dueDate && !isNaN(new Date(task.dueDate).getTime())) ? task.dueDate : '';
+
+    document.getElementById('projectModalTitle').innerText = 'タスク編集';
+    document.getElementById('projectModalOverlay').classList.add('show');
+};
+
+window.deleteTask = function(colId, taskId) {
+    if (!confirm('このタスクを削除してもよろしいですか？')) return;
+    const board = getCurrentBoard();
+    if (!board) return;
+    const col = board.columns.find(c => c.id === colId);
+    if (!col) return;
+    col.tasks = col.tasks.filter(t => t.id !== taskId);
+    saveBoardsToFirebase();
+    renderBoard();
+};
+
+window.handleTaskSubmit = function(e) {
+    e.preventDefault();
+
+    const board = getCurrentBoard();
+    if (!board) {
+        console.warn("No board found");
+        return;
+    }
+
+    const taskId = document.getElementById('task-id').value;
+    const columnId = document.getElementById('task-column-id').value;
+
+    const taskObj = {
+        name: document.getElementById('task-name').value.trim(),
+        description: document.getElementById('task-description').value.trim(),
+        assignee: document.getElementById('task-assignee').value.trim(),
+        status: document.getElementById('task-status').value,
+        startDate: document.getElementById('task-start-date').value,
+        dueDate: document.getElementById('task-due-date').value,
+    };
+
+    const col = board.columns.find(c => c.id === columnId);
+    if (!col) {
+        console.warn("Column not found for id:", columnId);
+        return;
+    }
+
+    // 古いデータ形式等で tasks 配列が存在しない場合のフェールセーフ
+    if (!col.tasks) {
+        col.tasks = [];
+    }
+
+    if (taskId) {
+        // Edit existing
+        const index = col.tasks.findIndex(t => t.id === taskId);
+        if (index > -1) {
+            col.tasks[index] = { ...col.tasks[index], ...taskObj };
+        }
+    } else {
+        // Add new
+        taskObj.id = Date.now().toString() + '-' + Math.random().toString(36).substr(2, 9);
+        col.tasks.push(taskObj);
+    }
+
+    try {
+        saveBoardsToFirebase();
+        renderBoard();
+        hideProjectModal();
+    } catch (err) {
+        console.error("Error saving task:", err);
+    }
+};
+
+// ---- Drag & Drop ----
+
+let draggedTaskId = null;
+let draggedFromColId = null;
+
+window.kanbanDragStart = function(event, taskId, colId) {
+    draggedTaskId = taskId;
+    draggedFromColId = colId;
+    event.target.classList.add('dragging');
+    event.dataTransfer.setData('text/plain', taskId);
+    event.dataTransfer.effectAllowed = 'move';
+};
+
+window.kanbanDragOver = function(event) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+};
+
+window.kanbanDrop = function(event, targetColId) {
+    event.preventDefault();
+    if (!draggedTaskId || !draggedFromColId) return;
+
+    const board = getCurrentBoard();
+    if (!board) return;
+
+    if (draggedFromColId === targetColId) {
+        draggedTaskId = null;
+        draggedFromColId = null;
+        return;
+    }
+
+    const srcCol = board.columns.find(c => c.id === draggedFromColId);
+    const destCol = board.columns.find(c => c.id === targetColId);
+    if (!srcCol || !destCol) return;
+
+    const taskIndex = srcCol.tasks.findIndex(t => t.id === draggedTaskId);
+    if (taskIndex === -1) return;
+
+    const [task] = srcCol.tasks.splice(taskIndex, 1);
+    destCol.tasks.push(task);
+
+    saveBoardsToFirebase();
+    renderBoard();
+
+    draggedTaskId = null;
+    draggedFromColId = null;
+    document.querySelectorAll('.kanban-card.dragging').forEach(el => el.classList.remove('dragging'));
+};
+
+document.addEventListener('dragend', (e) => {
+    if (e.target.classList && e.target.classList.contains('kanban-card')) {
+        e.target.classList.remove('dragging');
+    }
+});
+
+// ---- Render ----
+
+function renderBoard() {
+    const container = document.getElementById('kanban-board-container');
+    if (!container) return;
+    container.innerHTML = '';
+
+    const board = getCurrentBoard();
+
+    // Update search placeholder with current board name
+    const searchInput = document.getElementById('boardSearchInput');
+    if (searchInput && board) {
+        const isMobile = window.innerWidth <= 768;
+        searchInput.placeholder = isMobile ? '🔍 検索' : '🔍 ' + board.name + '（クリックで切り替え）';
+    } else if (searchInput) {
+        searchInput.placeholder = '🔍 プロジェクトを作成してください';
+    }
+
+    if (!board) {
+        container.innerHTML = '<div style="text-align: center; padding: 4rem 2rem; color: #94a3b8; font-size: 1.1rem;">プロジェクトがありません。<br>「＋ 新規プロジェクト」からプロジェクトを作成してください。</div>';
+        return;
+    }
+
+    // Status color map
+    const statusColors = {
+        'not_started': '#94a3b8', // グレー
+        'in_progress': '#3b82f6', // ブルー
+        'on_hold':     '#f59e0b', // オレンジ
+        'completed':   '#22c55e'  // グリーン
+    };
+    const statusLabels = {
+        'not_started': '未着手',
+        'in_progress': '進行中',
+        'on_hold':     '保留',
+        'completed':   '完了'
+    };
+
+    // Render columns
+    board.columns.forEach((col, colIndex) => {
+        const colorClass = 'col-color-' + (colIndex % 6);
+        const colEl = document.createElement('div');
+        colEl.className = `kanban-column ${colorClass}`;
+        colEl.setAttribute('ondragover', 'kanbanDragOver(event)');
+        colEl.setAttribute('ondrop', `kanbanDrop(event, '${col.id}')`);
+
+        const taskCount = col.tasks ? col.tasks.length : 0;
+
+        colEl.innerHTML = `
+            <div class="kanban-column-header">
+                <div style="display: flex; align-items: center; gap: 0.25rem; flex: 1;">
+                    <input type="text" class="kanban-column-title-input" value="${col.title}" placeholder="カラム名を入力" onblur="onColumnTitleChange('${col.id}', this.value)" onkeydown="if(event.key==='Enter'){this.blur();}">
+                    <span class="kanban-count">${taskCount}</span>
+                </div>
+                <button class="kanban-column-delete" onclick="deleteColumn('${col.id}')" title="カラムを削除">✕</button>
+            </div>
+            <button class="kanban-add-btn" onclick="showProjectModal('${col.id}')">＋ タスクを追加</button>
+            <div class="kanban-cards" id="cards-${col.id}"></div>
+        `;
+
+        container.appendChild(colEl);
+
+        // Render tasks
+        const cardsContainer = colEl.querySelector(`#cards-${col.id}`);
+        if (col.tasks && col.tasks.length > 0) {
+            col.tasks.forEach(task => {
+                const card = document.createElement('div');
+                card.className = 'kanban-card';
+                card.setAttribute('draggable', 'true');
+                card.setAttribute('ondragstart', `kanbanDragStart(event, '${task.id}', '${col.id}')`);
+                card.style.cursor = 'pointer';
+                card.onclick = (e) => {
+                    if (!e.target.closest('.kanban-column-delete')) {
+                        editTask(col.id, task.id);
+                    }
+                };
+
+                const dateText = (task.startDate || '') + (task.startDate && task.dueDate ? ' ~ ' : '') + (task.dueDate || '');
+                const taskStatus = task.status || '';
+                const statusColor = statusColors[taskStatus] || '';
+                const statusLabel = statusLabels[taskStatus] || '';
+                const descSnippet = task.description ? (task.description.length > 60 ? task.description.substring(0, 60) + '...' : task.description) : '';
+
+                const statusDotHtml = statusColor ? `<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${statusColor};"></span>` : `<span></span>`;
+                const statusBadgeHtml = (statusColor && statusLabel) ? `
+                    <div style="display:flex; justify-content:flex-end;">
+                        <span style="background-color: ${statusColor}; color: white; border-radius: 12px; padding: 0.15rem 0.6rem; font-size: 0.7rem; font-weight: bold;">${statusLabel}</span>
+                    </div>
+                ` : '';
+
+                card.innerHTML = `
+                    <div class="kanban-card-header" style="align-items: center; margin-bottom: 0.5rem; justify-content: space-between;">
+                        ${statusDotHtml}
+                        <button class="kanban-column-delete" onclick="event.stopPropagation(); deleteTask('${col.id}', '${task.id}')" title="タスクを削除" style="font-size: 0.9rem;">✕</button>
+                    </div>
+                    <div class="kanban-card-title" style="margin-bottom: 0.5rem; color: #334155;">${task.name || '名称未設定'}</div>
+                    ${descSnippet ? '<div style="font-size: 0.8rem; color: #64748b; margin-bottom: 0.5rem; line-height: 1.5; word-break: break-word;">' + descSnippet + '</div>' : ''}
+                    <div style="font-size: 0.75rem; color: #94a3b8; line-height: 1.6; margin-bottom: 0.5rem;">
+                        ${dateText ? '期間 : ' + dateText + '<br>' : ''}
+                        ${task.assignee ? '担当 : ' + task.assignee : ''}
+                    </div>
+                    ${statusBadgeHtml}
+                `;
+
+                cardsContainer.appendChild(card);
+            });
+        }
+    });
+
+    // Add "＋ カラムを追加" button at the end
+    const addColBtn = document.createElement('button');
+    addColBtn.className = 'kanban-add-column-btn';
+    addColBtn.textContent = '＋ カラムを追加';
+    addColBtn.onclick = addColumn;
+    container.appendChild(addColBtn);
+}
+
+function formatDateShort(dateString) {
+    if (!dateString) return '-';
+    const d = new Date(dateString);
+    if (isNaN(d.getTime())) return '-';
+    return `${d.getMonth() + 1}/${d.getDate()}`;
+}
+
+
+// ページ読み込み時にプロジェクト管理機能を初期化してデータを復元
+setTimeout(() => {
+    if (typeof initProjectManagement === 'function') {
+        initProjectManagement();
+    }
+}, 100);
+
