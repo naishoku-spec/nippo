@@ -3034,6 +3034,19 @@ td:hover .sn-comment-trigger,
 }
 
 @media (max-width: 768px) {
+    .project-modal {
+        width: 100% !important;
+        height: 100vh !important;
+        max-height: 100vh !important;
+        border-radius: 0 !important;
+        margin: 0 !important;
+    }
+
+    .project-form {
+        overflow-y: auto !important;
+        padding-bottom: 2rem !important;
+    }
+
     .project-form-row {
         flex-direction: column;
         gap: 1.5rem;
