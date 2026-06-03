@@ -738,15 +738,22 @@
 
                     <!-- Project Navigation & Search -->
                     <div class="board-nav-container">
-                        <div class="board-search-wrapper" onmouseenter="showBoardDropdown()" onmouseleave="hideBoardDropdown()">
-                            <input type="text" id="boardSearchInput" placeholder="🔍 プロジェクト名を検索..." onkeyup="filterBoards()" onfocus="showBoardDropdown()">
-                            <div id="boardDropdown" class="board-dropdown">
-                                <!-- Boards list populated by JS -->
+                        <div class="board-search-col-wrapper">
+                            <!-- Assignee Filter Container -->
+                            <div class="assignee-filter-container" id="assigneeFilterContainer"></div>
+                            <div class="board-search-wrapper" onmouseenter="showBoardDropdown()" onmouseleave="hideBoardDropdown()">
+                                <input type="text" id="boardSearchInput" placeholder="🔍 プロジェクト名を検索..." onkeyup="filterBoards()" onfocus="showBoardDropdown()">
+                                <div id="boardDropdown" class="board-dropdown">
+                                    <!-- Boards list populated by JS -->
+                                </div>
                             </div>
                         </div>
-                        <div style="display: flex; gap: 0.5rem; margin-left: auto;">
-                            <button class="board-list-btn" onclick="showProjectListModal()">📋 <span class="hide-on-mobile">プロジェクト</span>一覧</button>
-                            <button class="board-create-btn" onclick="createNewBoard()">＋ 新規<span class="hide-on-mobile">プロジェクト</span></button>
+                        <div class="board-title-buttons-wrapper">
+                            <div class="board-current-title" id="boardCurrentTitle"></div>
+                            <div class="board-buttons-group">
+                                <button class="board-list-btn" onclick="showProjectListModal()">📋 <span class="hide-on-mobile">プロジェクト</span>一覧</button>
+                                <button class="board-create-btn" onclick="createNewBoard()">＋ 新規<span class="hide-on-mobile">プロジェクト</span></button>
+                            </div>
                         </div>
                     </div>
 
@@ -799,6 +806,7 @@
                                     <option value="not_started">未着手</option>
                                     <option value="in_progress">進行中</option>
                                     <option value="on_hold">保留</option>
+                                    <option value="awaiting_reply">返答待ち</option>
                                     <option value="completed">完了</option>
                                 </select>
                             </div>

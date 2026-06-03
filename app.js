@@ -7865,6 +7865,7 @@ window.shiftGenerateTable = shiftGenerateTable;
 
 let boardsData = []; // Array of board (project) objects
 let currentBoardId = null;
+let currentAssigneeFilter = 'all';
 let isFirstBoardLoad = true;
 
 const BOARDS_STORAGE_KEY = 'nippo_boards_data';
@@ -8093,6 +8094,7 @@ function populateBoardDropdown(query) {
 
 window.selectBoard = function(boardId) {
     currentBoardId = boardId;
+    currentAssigneeFilter = 'all';
     const input = document.getElementById('boardSearchInput');
     if (input) input.value = '';
     const dd = document.getElementById('boardDropdown');
@@ -8306,6 +8308,12 @@ function renderBoard() {
 
     const board = getCurrentBoard();
 
+    // Update current project title
+    const titleEl = document.getElementById('boardCurrentTitle');
+    if (titleEl) {
+        titleEl.textContent = board ? board.name : '';
+    }
+
     // Update search placeholder with current board name
     const searchInput = document.getElementById('boardSearchInput');
     if (searchInput && board) {
@@ -8320,18 +8328,86 @@ function renderBoard() {
         return;
     }
 
+    // Render Assignee Filter Tabs
+    const filterContainer = document.getElementById('assigneeFilterContainer');
+    if (filterContainer) {
+        filterContainer.innerHTML = '';
+        if (board.columns) {
+            const uniqueAssignees = new Set();
+            let hasUnassignedTasks = false;
+            board.columns.forEach(col => {
+                if (col.tasks) {
+                    col.tasks.forEach(task => {
+                        if (task.assignee && task.assignee.trim()) {
+                            uniqueAssignees.add(task.assignee.trim());
+                        } else {
+                            hasUnassignedTasks = true;
+                        }
+                    });
+                }
+            });
+
+            // Validate current filter
+            if (currentAssigneeFilter !== 'all') {
+                if (currentAssigneeFilter === 'unassigned' && !hasUnassignedTasks) {
+                    currentAssigneeFilter = 'all';
+                } else if (currentAssigneeFilter !== 'unassigned' && !uniqueAssignees.has(currentAssigneeFilter)) {
+                    currentAssigneeFilter = 'all';
+                }
+            }
+
+            if (uniqueAssignees.size > 0 || hasUnassignedTasks) {
+                // All tab
+                const allTab = document.createElement('button');
+                allTab.className = `assignee-tab${currentAssigneeFilter === 'all' ? ' active' : ''}`;
+                allTab.textContent = 'すべて';
+                allTab.onclick = () => {
+                    currentAssigneeFilter = 'all';
+                    renderBoard();
+                };
+                filterContainer.appendChild(allTab);
+
+                // Assignee tabs
+                uniqueAssignees.forEach(assignee => {
+                    const tab = document.createElement('button');
+                    tab.className = `assignee-tab${currentAssigneeFilter === assignee ? ' active' : ''}`;
+                    tab.textContent = assignee;
+                    tab.onclick = () => {
+                        currentAssigneeFilter = assignee;
+                        renderBoard();
+                    };
+                    filterContainer.appendChild(tab);
+                });
+
+                // Unassigned tab
+                if (hasUnassignedTasks) {
+                    const unassignedTab = document.createElement('button');
+                    unassignedTab.className = `assignee-tab${currentAssigneeFilter === 'unassigned' ? ' active' : ''}`;
+                    unassignedTab.textContent = '未設定';
+                    unassignedTab.onclick = () => {
+                        currentAssigneeFilter = 'unassigned';
+                        renderBoard();
+                    };
+                    filterContainer.appendChild(unassignedTab);
+                }
+            }
+        }
+    }
+
     // Status color map
     const statusColors = {
         'not_started': '#94a3b8', // グレー
         'in_progress': '#3b82f6', // ブルー
         'on_hold':     '#f59e0b', // オレンジ
-        'completed':   '#22c55e'  // グリーン
+        'completed':   '#22c55e', // グリーン
+        'awaiting_reply': '#a855f7' // パープル
     };
     const statusLabels = {
         'not_started': '未着手',
         'in_progress': '進行中',
         'on_hold':     '保留',
-        'completed':   '完了'
+        'completed':   '完了',
+        'awaiting_reply': '返答待ち'
     };
 
     // Render columns
@@ -8342,7 +8418,18 @@ function renderBoard() {
         colEl.setAttribute('ondragover', 'kanbanDragOver(event)');
         colEl.setAttribute('ondrop', `kanbanDrop(event, '${col.id}')`);
 
-        const taskCount = col.tasks ? col.tasks.length : 0;
+        // Filter tasks by assignee
+        let filteredTasks = col.tasks || [];
+        if (currentAssigneeFilter !== 'all') {
+            filteredTasks = filteredTasks.filter(task => {
+                if (currentAssigneeFilter === 'unassigned') {
+                    return !task.assignee || !task.assignee.trim();
+                } else {
+                    return task.assignee && task.assignee.trim() === currentAssigneeFilter;
+                }
+            });
+        }
+        const taskCount = filteredTasks.length;
 
         colEl.innerHTML = `
             <div class="kanban-column-header">
@@ -8360,8 +8447,8 @@ function renderBoard() {
 
         // Render tasks
         const cardsContainer = colEl.querySelector(`#cards-${col.id}`);
-        if (col.tasks && col.tasks.length > 0) {
-            col.tasks.forEach(task => {
+        if (filteredTasks.length > 0) {
+            filteredTasks.forEach(task => {
                 const card = document.createElement('div');
                 card.className = 'kanban-card';
                 card.setAttribute('draggable', 'true');
