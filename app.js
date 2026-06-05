@@ -8108,10 +8108,18 @@ window.addColumn = function() {
     const board = getCurrentBoard();
     if (!board) return;
 
+    let nextColorIndex = 0;
+    if (board.columns && board.columns.length > 0) {
+        const lastCol = board.columns[board.columns.length - 1];
+        const lastColor = lastCol.colorIndex !== undefined ? lastCol.colorIndex : (board.columns.length - 1);
+        nextColorIndex = (lastColor + 1) % 6;
+    }
+
     const newCol = {
         id: 'col-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
         title: '新しいカラム',
-        tasks: []
+        tasks: [],
+        colorIndex: nextColorIndex
     };
     board.columns.push(newCol);
     saveBoardsToFirebase();
@@ -8122,11 +8130,14 @@ window.deleteColumn = function(colId) {
     const board = getCurrentBoard();
     if (!board) return;
     const col = board.columns.find(c => c.id === colId);
-    const taskCount = col ? col.tasks.length : 0;
-    const msg = taskCount > 0
-        ? `このカラムには ${taskCount} 件のタスクがあります。削除してもよろしいですか？`
-        : 'このカラムを削除してもよろしいですか？';
-    if (!confirm(msg)) return;
+    const taskCount = col && col.tasks ? col.tasks.length : 0;
+    
+    if (taskCount > 0) {
+        if (!confirm(`このカラムには ${taskCount} 件のタスクがあります。削除してもよろしいですか？`)) {
+            return;
+        }
+    }
+    
     board.columns = board.columns.filter(c => c.id !== colId);
     saveBoardsToFirebase();
     renderBoard();
@@ -8411,8 +8422,13 @@ function renderBoard() {
     };
 
     // Render columns
+    let needsSave = false;
     board.columns.forEach((col, colIndex) => {
-        const colorClass = 'col-color-' + (colIndex % 6);
+        if (col.colorIndex === undefined) {
+            col.colorIndex = colIndex % 6;
+            needsSave = true;
+        }
+        const colorClass = 'col-color-' + (col.colorIndex % 6);
         const colEl = document.createElement('div');
         colEl.className = `kanban-column ${colorClass}`;
         colEl.setAttribute('ondragover', 'kanbanDragOver(event)');
@@ -8455,7 +8471,7 @@ function renderBoard() {
                 card.setAttribute('ondragstart', `kanbanDragStart(event, '${task.id}', '${col.id}')`);
                 card.style.cursor = 'pointer';
                 card.onclick = (e) => {
-                    if (!e.target.closest('.kanban-column-delete')) {
+                    if (!e.target.closest('.kanban-card-delete') && !e.target.closest('.kanban-card-comments-btn')) {
                         editTask(col.id, task.id);
                     }
                 };
@@ -8468,15 +8484,23 @@ function renderBoard() {
 
                 const statusDotHtml = statusColor ? `<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${statusColor};"></span>` : `<span></span>`;
                 const statusBadgeHtml = (statusColor && statusLabel) ? `
-                    <div style="display:flex; justify-content:flex-end;">
+                    <div>
                         <span style="background-color: ${statusColor}; color: white; border-radius: 12px; padding: 0.15rem 0.6rem; font-size: 0.7rem; font-weight: bold;">${statusLabel}</span>
                     </div>
                 ` : '';
 
+                const commentCount = (task.comments && task.comments.length) ? task.comments.length : 0;
+                const hasComments = commentCount > 0;
+                const commentsBtnHtml = `
+                    <button class="kanban-card-comments-btn ${hasComments ? 'has-comments' : ''}" onclick="event.stopPropagation(); showTaskComments('${col.id}', '${task.id}')" title="コメント">
+                        💬 ${commentCount}
+                    </button>
+                `;
+
                 card.innerHTML = `
                     <div class="kanban-card-header" style="align-items: center; margin-bottom: 0.5rem; justify-content: space-between;">
                         ${statusDotHtml}
-                        <button class="kanban-column-delete" onclick="event.stopPropagation(); deleteTask('${col.id}', '${task.id}')" title="タスクを削除" style="font-size: 0.9rem;">✕</button>
+                        <button class="kanban-card-delete" onclick="event.stopPropagation(); deleteTask('${col.id}', '${task.id}')" title="タスクを削除">✕</button>
                     </div>
                     <div class="kanban-card-title" style="margin-bottom: 0.5rem; color: #334155;">${task.name || '名称未設定'}</div>
                     ${descSnippet ? '<div style="font-size: 0.8rem; color: #64748b; margin-bottom: 0.5rem; line-height: 1.5; word-break: break-word;">' + descSnippet + '</div>' : ''}
@@ -8484,7 +8508,10 @@ function renderBoard() {
                         ${dateText ? '期間 : ' + dateText + '<br>' : ''}
                         ${task.assignee ? '担当 : ' + task.assignee : ''}
                     </div>
-                    ${statusBadgeHtml}
+                    <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-top: 0.5rem;">
+                        ${commentsBtnHtml}
+                        ${statusBadgeHtml}
+                    </div>
                 `;
 
                 cardsContainer.appendChild(card);
@@ -8498,6 +8525,10 @@ function renderBoard() {
     addColBtn.textContent = '＋ カラムを追加';
     addColBtn.onclick = addColumn;
     container.appendChild(addColBtn);
+
+    if (needsSave) {
+        saveBoardsToFirebase();
+    }
 }
 
 function formatDateShort(dateString) {
@@ -8514,4 +8545,149 @@ setTimeout(() => {
         initProjectManagement();
     }
 }, 100);
+
+// ==== Task Comments ====
+let currentCommentTaskInfo = null;
+
+window.showTaskComments = function(colId, taskId) {
+    const board = getCurrentBoard();
+    if (!board) return;
+    const col = board.columns.find(c => c.id === colId);
+    if (!col) return;
+    const task = col.tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    // 古いコメント（IDがないもの）にIDを付与する処理
+    if (task.comments && task.comments.length > 0) {
+        let needsSave = false;
+        task.comments.forEach((c, idx) => {
+            if (!c.id) {
+                c.id = 'legacy-' + idx + '-' + Date.now();
+                needsSave = true;
+            }
+        });
+        if (needsSave) {
+            saveBoardsToFirebase();
+        }
+    }
+
+    currentCommentTaskInfo = { colId, taskId };
+
+    const titleEl = document.getElementById('taskCommentModalTitle');
+    if (titleEl) {
+        titleEl.textContent = '💬 ' + (task.name || '名称未設定');
+    }
+
+    renderTaskCommentsList(task.comments || []);
+
+    const submitBtn = document.getElementById('taskCommentSubmitBtn');
+    if (submitBtn) {
+        submitBtn.onclick = submitTaskComment;
+    }
+    
+    const inputEl = document.getElementById('taskCommentInput');
+    if (inputEl) {
+        inputEl.value = '';
+        inputEl.onkeydown = function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                submitTaskComment();
+            }
+        };
+    }
+
+    document.getElementById('taskCommentModalOverlay').classList.add('show');
+};
+
+window.hideTaskComments = function() {
+    const overlay = document.getElementById('taskCommentModalOverlay');
+    if (overlay) overlay.classList.remove('show');
+    currentCommentTaskInfo = null;
+};
+
+function renderTaskCommentsList(comments) {
+    const container = document.getElementById('taskCommentListContainer');
+    if (!container) return;
+    
+    if (!comments || comments.length === 0) {
+        container.innerHTML = '<div style="text-align: center; color: #94a3b8; padding: 2rem 0; font-size: 0.9rem;">まだコメントはありません</div>';
+        return;
+    }
+
+    let html = '';
+    comments.forEach(c => {
+        const dateObj = new Date(c.createdAt);
+        const dateStr = !isNaN(dateObj.getTime()) ? 
+            `${dateObj.getMonth() + 1}/${dateObj.getDate()} ${dateObj.getHours().toString().padStart(2, '0')}:${dateObj.getMinutes().toString().padStart(2, '0')}` : 
+            '';
+        
+        html += `
+            <div class="task-comment-item my-comment">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.25rem;">
+                    <div class="task-comment-meta" style="margin-bottom: 0;">${dateStr}</div>
+                    <button class="task-comment-delete-btn" onclick="deleteTaskComment('${currentCommentTaskInfo.colId}', '${currentCommentTaskInfo.taskId}', '${c.id}')" title="コメントを削除">✕</button>
+                </div>
+                <div class="task-comment-text">${c.text.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+    
+    setTimeout(() => {
+        container.scrollTop = container.scrollHeight;
+    }, 10);
+}
+
+window.deleteTaskComment = function(colId, taskId, commentId) {
+    if (!confirm('このコメントを削除してもよろしいですか？')) return;
+    
+    const board = getCurrentBoard();
+    if (!board) return;
+    const col = board.columns.find(c => c.id === colId);
+    if (!col) return;
+    const task = col.tasks.find(t => t.id === taskId);
+    if (!task || !task.comments) return;
+    
+    // 型の違い（数値と文字列）によるバグを防ぐため、String()でキャストして比較
+    task.comments = task.comments.filter(c => String(c.id) !== String(commentId));
+    
+    saveBoardsToFirebase();
+    renderBoard(); // Update the count on the card
+    
+    renderTaskCommentsList(task.comments);
+};
+
+window.submitTaskComment = function() {
+    if (!currentCommentTaskInfo) return;
+    
+    const inputEl = document.getElementById('taskCommentInput');
+    const text = inputEl ? inputEl.value.trim() : '';
+    
+    if (!text) return;
+    
+    const board = getCurrentBoard();
+    if (!board) return;
+    const col = board.columns.find(c => c.id === currentCommentTaskInfo.colId);
+    if (!col) return;
+    const task = col.tasks.find(t => t.id === currentCommentTaskInfo.taskId);
+    if (!task) return;
+    
+    if (!task.comments) {
+        task.comments = [];
+    }
+    
+    task.comments.push({
+        id: Date.now().toString(),
+        text: text,
+        createdAt: new Date().toISOString()
+    });
+    
+    saveBoardsToFirebase();
+    renderBoard();
+    
+    inputEl.value = '';
+    renderTaskCommentsList(task.comments);
+};
+
 

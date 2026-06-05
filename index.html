@@ -839,6 +839,27 @@
         </div>
     </div>
 
+    <!-- Task Comment Modal -->
+    <div class="task-comment-modal-overlay" id="taskCommentModalOverlay" onclick="if(event.target===this) hideTaskComments()">
+        <div class="task-comment-modal">
+            <div class="task-comment-header">
+                <h3 id="taskCommentModalTitle" style="margin: 0; font-size: 1.2rem; color: #1e293b;">コメント</h3>
+                <button class="project-btn-close" onclick="hideTaskComments()">✕</button>
+            </div>
+            
+            <div class="task-comment-list-container" id="taskCommentListContainer">
+                <!-- Comments rendered here -->
+            </div>
+            
+            <div class="task-comment-input-container">
+                <textarea id="taskCommentInput" class="task-comment-textarea" placeholder="新しいコメントを入力..." rows="3"></textarea>
+                <div style="display: flex; justify-content: flex-end; margin-top: 0.5rem;">
+                    <button id="taskCommentSubmitBtn" class="task-comment-submit-btn">コメントを追加</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Comment Popup (Google Sheets Style) -->
     <div class="sn-comment-overlay" id="snCommentOverlay"></div>
     <div class="sn-comment-popup" id="snCommentPopup">
