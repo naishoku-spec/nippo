@@ -7867,6 +7867,7 @@ let boardsData = []; // Array of board (project) objects
 let currentBoardId = null;
 let currentAssigneeFilter = 'all';
 let isFirstBoardLoad = true;
+let boardSavePending = false; // 保存直後のリスナー発火を無視するためのフラグ
 
 const BOARDS_STORAGE_KEY = 'nippo_boards_data';
 
@@ -7889,11 +7890,38 @@ function initProjectManagement() {
 
     // 2. Firebaseからの読み込みと同期
     database.ref(PROJECT_DB_PATH).on('value', (snapshot) => {
+        // 自分が保存した直後のリスナー発火は無視する（競合防止）
+        if (boardSavePending) {
+            boardSavePending = false;
+            return;
+        }
+
         const data = snapshot.val();
         let firebaseBoards = [];
         if (data) {
             firebaseBoards = Array.isArray(data) ? data : Object.values(data);
         }
+
+        // Firebaseから取得したデータのnull穴を除去（配列のインデックスずれ対策）
+        firebaseBoards = firebaseBoards.filter(b => b !== null && b !== undefined);
+
+        // 各タスクのcommentsがnullの場合を空配列に正規化
+        firebaseBoards.forEach(board => {
+            if (board.columns) {
+                board.columns.forEach(col => {
+                    if (col.tasks) {
+                        col.tasks = col.tasks.filter(t => t !== null && t !== undefined);
+                        col.tasks.forEach(task => {
+                            if (task.comments) {
+                                task.comments = task.comments.filter(c => c !== null && c !== undefined);
+                            } else {
+                                task.comments = [];
+                            }
+                        });
+                    }
+                });
+            }
+        });
 
         if (isFirstBoardLoad) {
             // もしFirebaseにデータが無く、ローカルにはデータがある場合は、ローカルを正としてFirebaseに同期する
@@ -7910,23 +7938,41 @@ function initProjectManagement() {
             }
             renderBoard();
         } else {
-            const isDifferent = JSON.stringify(boardsData) !== JSON.stringify(firebaseBoards);
-            if (isDifferent) {
-                boardsData = firebaseBoards;
-                localStorage.setItem(BOARDS_STORAGE_KEY, JSON.stringify(boardsData));
-                renderBoard();
-            }
+            // 他の端末からの更新を反映
+            boardsData = firebaseBoards;
+            localStorage.setItem(BOARDS_STORAGE_KEY, JSON.stringify(boardsData));
+            renderBoard();
         }
     });
 }
 
 function saveBoardsToFirebase() {
+    // 保存前にデータを正規化（null穴を除去）
+    boardsData = boardsData.filter(b => b !== null && b !== undefined);
+    boardsData.forEach(board => {
+        if (board.columns) {
+            board.columns = board.columns.filter(c => c !== null && c !== undefined);
+            board.columns.forEach(col => {
+                if (col.tasks) {
+                    col.tasks = col.tasks.filter(t => t !== null && t !== undefined);
+                    col.tasks.forEach(task => {
+                        if (task.comments) {
+                            task.comments = task.comments.filter(c => c !== null && c !== undefined);
+                        }
+                    });
+                }
+            });
+        }
+    });
+
     // 必ずローカルストレージにも保存してデータ消失を防ぐ
     localStorage.setItem(BOARDS_STORAGE_KEY, JSON.stringify(boardsData));
 
     if (database) {
+        boardSavePending = true; // リスナーの発火を1回無視する
         database.ref(PROJECT_DB_PATH).set(boardsData).catch(error => {
             console.error('Board save failed:', error);
+            boardSavePending = false;
         });
     }
 }
