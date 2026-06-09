@@ -1860,13 +1860,16 @@ function init() {
     // Initialize Snow Sprint Management
     initSnowsprint();
 
-    // Check URL parameters for view
+    // Initialize Project Management
+    initProjectManagement();
+
+    // Check URL parameters or localStorage for view
     const urlParams = new URLSearchParams(window.location.search);
-    const viewParam = urlParams.get('view');
-    if (viewParam && ['day', 'stock', 'sliver', 'hanapon', 'snowsprint', 'shift'].includes(viewParam)) {
+    const viewParam = urlParams.get('view') || localStorage.getItem('nippo_current_view');
+    if (viewParam && ['day', 'month', 'stock', 'sliver', 'hanapon', 'snowsprint', 'shift', 'project'].includes(viewParam)) {
         switchView(viewParam);
     } else {
-        // Default to stock view as requested for inventory management
+        // Default to stock view if nothing is saved
         switchView('stock');
     }
 
@@ -1929,6 +1932,14 @@ function setupMobileMenu() {
 }
 
 function switchView(view) {
+    // Save current view to localStorage so it persists across reloads
+    localStorage.setItem('nippo_current_view', view);
+    
+    // Update URL to match current view without reloading the page
+    const url = new URL(window.location);
+    url.searchParams.set('view', view);
+    window.history.replaceState({}, '', url);
+    
     // Update header title based on view
     const titleHeader = document.querySelector('.inventory-title-header');
     if (titleHeader) {
@@ -7445,8 +7456,7 @@ function renderSnowsprintCommentList() {
 })();
 
 // Finally, start the application
-init();
-
+// init() moved to the end of the file
 function propagateSnowSprintCarryover(year, month) {
     let curY = parseInt(year);
     let curM = parseInt(month);
@@ -7867,7 +7877,6 @@ let boardsData = []; // Array of board (project) objects
 let currentBoardId = null;
 let currentAssigneeFilter = 'all';
 let isFirstBoardLoad = true;
-let boardSavePending = false; // 保存直後のリスナー発火を無視するためのフラグ
 
 const BOARDS_STORAGE_KEY = 'nippo_boards_data';
 
@@ -7890,12 +7899,6 @@ function initProjectManagement() {
 
     // 2. Firebaseからの読み込みと同期
     database.ref(PROJECT_DB_PATH).on('value', (snapshot) => {
-        // 自分が保存した直後のリスナー発火は無視する（競合防止）
-        if (boardSavePending) {
-            boardSavePending = false;
-            return;
-        }
-
         const data = snapshot.val();
         let firebaseBoards = [];
         if (data) {
@@ -7938,10 +7941,27 @@ function initProjectManagement() {
             }
             renderBoard();
         } else {
-            // 他の端末からの更新を反映
-            boardsData = firebaseBoards;
-            localStorage.setItem(BOARDS_STORAGE_KEY, JSON.stringify(boardsData));
-            renderBoard();
+            // 他の端末からの更新を反映（内容が変わっている場合のみ）
+            const isDifferent = JSON.stringify(boardsData) !== JSON.stringify(firebaseBoards);
+            if (isDifferent) {
+                boardsData = firebaseBoards;
+                localStorage.setItem(BOARDS_STORAGE_KEY, JSON.stringify(boardsData));
+                renderBoard();
+
+                // もしコメントモーダルが開いていれば中身を最新化する
+                if (typeof currentCommentTaskInfo !== 'undefined' && currentCommentTaskInfo) {
+                    const b = getCurrentBoard();
+                    if (b) {
+                        const c = b.columns.find(col => col.id === currentCommentTaskInfo.colId);
+                        if (c) {
+                            const t = c.tasks.find(task => task.id === currentCommentTaskInfo.taskId);
+                            if (t) {
+                                renderTaskCommentsList(t.comments || []);
+                            }
+                        }
+                    }
+                }
+            }
         }
     });
 }
@@ -7969,10 +7989,8 @@ function saveBoardsToFirebase() {
     localStorage.setItem(BOARDS_STORAGE_KEY, JSON.stringify(boardsData));
 
     if (database) {
-        boardSavePending = true; // リスナーの発火を1回無視する
         database.ref(PROJECT_DB_PATH).set(boardsData).catch(error => {
             console.error('Board save failed:', error);
-            boardSavePending = false;
         });
     }
 }
@@ -8585,13 +8603,6 @@ function formatDateShort(dateString) {
 }
 
 
-// ページ読み込み時にプロジェクト管理機能を初期化してデータを復元
-setTimeout(() => {
-    if (typeof initProjectManagement === 'function') {
-        initProjectManagement();
-    }
-}, 100);
-
 // ==== Task Comments ====
 let currentCommentTaskInfo = null;
 
@@ -8735,5 +8746,8 @@ window.submitTaskComment = function() {
     inputEl.value = '';
     renderTaskCommentsList(task.comments);
 };
+
+// Start the application after all scripts and modules are defined
+init();
 
 
