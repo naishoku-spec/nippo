@@ -446,6 +446,11 @@ function saveRecords() {
     
     // Sync to Firebase using full sync for 1F (stabler and manageable data size)
     if (database && isFirebaseSynced) {
+        // 空データ保護: recordsが空配列の場合はFirebaseへの書き込みをブロック
+        if (Array.isArray(records) && records.length === 0) {
+            console.warn('BLOCKED: Attempted to save empty records array to Firebase (1F)');
+            return;
+        }
         database.ref(DB_PATH).set(records)
             .catch(err => console.error('Firebase save failed:', err));
     }

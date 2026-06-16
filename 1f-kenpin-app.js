@@ -344,7 +344,14 @@ function deleteRec(id) {
 
 function save() {
     localStorage.setItem(LS_KEY, JSON.stringify(records));
-    if (database) database.ref(DB_PATH).set(records);
+    if (database) {
+        // 空データ保護: recordsが空配列の場合はFirebaseへの書き込みをブロック
+        if (Array.isArray(records) && records.length === 0) {
+            console.warn('BLOCKED: Attempted to save empty records array to Firebase (1F Kenpin)');
+            return;
+        }
+        database.ref(DB_PATH).set(records);
+    }
 }
 
 let isKeyboardNavigating = false;

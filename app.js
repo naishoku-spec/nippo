@@ -1630,6 +1630,44 @@ const NOTES_LS_KEY = isProduction ? 'nippo_daily_notes' : 'nippo_daily_notes_dev
 
 console.log(`Running in ${isProduction ? 'PRODUCTION' : 'DEVELOPMENT'} mode. Data path: ${DB_PATH}, Roll path: ${ROLL_DB_PATH}`);
 
+// --- 自動バックアップ機能（1日1回ローカルストレージをスナップショット保存） ---
+function performDailyBackup() {
+    const BACKUP_PREFIX = 'nippo_auto_backup_';
+    const MAX_BACKUP_DAYS = 7;
+    const today = new Date().toLocaleDateString('sv-SE'); // YYYY-MM-DD
+    const backupKey = BACKUP_PREFIX + today;
+    
+    if (localStorage.getItem(backupKey)) return; // 今日すでにバックアップ済みならスキップ
+    
+    try {
+        const backupData = {
+            records: localStorage.getItem(LS_KEY), // 2F Manufacturing
+            dailyNotes: localStorage.getItem(NOTES_LS_KEY), // 2F Notes
+            roll: localStorage.getItem('rollInventoryData'),
+            sliver: localStorage.getItem('sliverInventoryData'),
+            hanapon: localStorage.getItem('hanaponInventoryData'),
+            snowsprint: localStorage.getItem('snowsprintInventoryData'),
+            project: localStorage.getItem('nippo_boards_data'),
+            records1f: localStorage.getItem(isProduction ? '1f_nippo_records' : '1f_nippo_records_dev'),
+            kenpin1f: localStorage.getItem(isProduction ? '1f_kenpin_records' : '1f_kenpin_records_dev')
+        };
+        localStorage.setItem(backupKey, JSON.stringify(backupData));
+        
+        // 古いバックアップを削除（7日分まで保持）
+        const keys = Object.keys(localStorage).filter(k => k.startsWith(BACKUP_PREFIX));
+        if (keys.length > MAX_BACKUP_DAYS) {
+            keys.sort();
+            const keysToDelete = keys.slice(0, keys.length - MAX_BACKUP_DAYS);
+            keysToDelete.forEach(k => localStorage.removeItem(k));
+        }
+        console.log("Daily backup of localStorage completed successfully.");
+    } catch (e) {
+        console.error("Failed to create daily local backup:", e);
+    }
+}
+performDailyBackup();
+// -------------------------------------------------------------------
+
 // State Management
 let records = JSON.parse(localStorage.getItem(LS_KEY)) || [];
 let dailyNotes = JSON.parse(localStorage.getItem(NOTES_LS_KEY)) || {};
@@ -1722,6 +1760,17 @@ if (database) {
             if (isDifferent) {
                 if (Date.now() - rollLastEditTime < 2000) return; // 防止編集中の上書き
 
+                // --- 安全対策：月ごとの大きなデータブロックが丸ごと消えている場合は、ローカルデータを維持・復旧 ---
+                let restored = false;
+                for (const k in rollAllData) {
+                    if (firebaseRollData[k] === undefined) {
+                        firebaseRollData[k] = rollAllData[k];
+                        database.ref(ROLL_DB_PATH).child(k).set(rollAllData[k]);
+                        restored = true;
+                    }
+                }
+                if (restored) console.warn("Safety Check: Restored missing months in rollAllData");
+
                 rollAllData = firebaseRollData;
                 localStorage.setItem(ROLL_STORAGE_KEY, JSON.stringify(rollAllData));
 
@@ -1730,7 +1779,8 @@ if (database) {
                 }
             }
         } else if (isFirstRollLoad && Object.keys(rollAllData).length > 0) {
-            // Push initial data to cloud if empty
+            // Firebaseが空でローカルにデータがある場合のみプッシュ
+            console.log('Roll: Firebase empty, pushing local data (' + Object.keys(rollAllData).length + ' months)');
             database.ref(ROLL_DB_PATH).set(rollAllData);
         }
         isFirstRollLoad = false;
@@ -1866,7 +1916,7 @@ function init() {
     // Check URL parameters or localStorage for view
     const urlParams = new URLSearchParams(window.location.search);
     const viewParam = urlParams.get('view') || localStorage.getItem('nippo_current_view');
-    if (viewParam && ['day', 'month', 'stock', 'sliver', 'hanapon', 'snowsprint', 'shift', 'project'].includes(viewParam)) {
+    if (viewParam && ['day', 'month', 'stock', 'sliver', 'hanapon', 'snowsprint', 'shift', 'project', 'backup'].includes(viewParam)) {
         switchView(viewParam);
     } else {
         // Default to stock view if nothing is saved
@@ -1957,6 +2007,8 @@ function switchView(view) {
             titleHeader.textContent = 'シフト表';
         } else if (view === 'project') {
             titleHeader.textContent = 'プロジェクト進捗管理';
+        } else if (view === 'backup') {
+            titleHeader.textContent = 'バックアップ・復元';
         }
     }
 
@@ -1970,6 +2022,8 @@ function switchView(view) {
     if (viewSnowsprintBtn) viewSnowsprintBtn.classList.toggle('active', view === 'snowsprint');
     if (viewShiftBtn) viewShiftBtn.classList.toggle('active', view === 'shift');
     if (viewProjectBtn) viewProjectBtn.classList.toggle('active', view === 'project');
+    const viewBackupBtn = document.getElementById('view-backup');
+    if (viewBackupBtn) viewBackupBtn.classList.toggle('active', view === 'backup');
 
     dayViewContainer.style.display = (view === 'day') ? 'block' : 'none';
     monthViewContainer.style.display = (view === 'month') ? 'block' : 'none';
@@ -1979,6 +2033,10 @@ function switchView(view) {
     snowsprintViewContainer.style.display = (view === 'snowsprint') ? 'block' : 'none';
     shiftViewContainer.style.display = (view === 'shift') ? 'block' : 'none';
     if (projectViewContainer) projectViewContainer.style.display = (view === 'project') ? 'block' : 'none';
+    const backupViewContainer = document.getElementById('backup-view-container');
+    if (backupViewContainer) backupViewContainer.style.display = (view === 'backup') ? 'block' : 'none';
+
+    if (view === 'backup') renderBackupList();
 
     // Toggle header selectors visibility
     const stockMonthSelector = document.getElementById('monthSelectorStock');
@@ -2361,6 +2419,11 @@ function saveRecords() {
 
     // Then sync to Firebase
     if (database) {
+        // 空データ保護: recordsが空配列の場合はFirebaseへの書き込みをブロック
+        if (Array.isArray(records) && records.length === 0) {
+            console.warn('BLOCKED: Attempted to save empty records array to Firebase');
+            return;
+        }
         database.ref(DB_PATH).set(records)
             .then(() => {
                 // syncToGoogleSheets(records); // Disconnected
@@ -2752,6 +2815,11 @@ function updateRollSelectors() {
 function saveRollData() {
     localStorage.setItem(ROLL_STORAGE_KEY, JSON.stringify(rollAllData));
     if (database) {
+        // 空データ保護: データが空の場合はFirebaseへの書き込みをブロック
+        if (Object.keys(rollAllData).length === 0) {
+            console.warn('BLOCKED: Attempted to save empty rollAllData to Firebase');
+            return;
+        }
         database.ref(ROLL_DB_PATH).set(rollAllData);
     }
 
@@ -3139,6 +3207,17 @@ function initSliver() {
                 if (isDifferent) {
                     if (Date.now() - sliverLastEditTime < 2000) return; // 防止編集中の上書き
 
+                    // 安全対策：月データが丸ごと消えている場合はローカルから復旧
+                    let restored = false;
+                    for (const k in sliverAllData) {
+                        if (firebaseData[k] === undefined) {
+                            firebaseData[k] = sliverAllData[k];
+                            database.ref(SLIVER_DB_PATH).child(k).set(sliverAllData[k]);
+                            restored = true;
+                        }
+                    }
+                    if (restored) console.warn('Safety Check: Restored missing months in sliverAllData');
+
                     sliverAllData = firebaseData;
                     ensureSliverMonth(sliverCurrentYear, sliverCurrentMonth, true);
                     localStorage.setItem(SLIVER_STORAGE_KEY, JSON.stringify(sliverAllData));
@@ -3148,6 +3227,7 @@ function initSliver() {
                     }
                 }
             } else if (isFirstSliverLoad && Object.keys(sliverAllData).length > 0) {
+                console.log('Sliver: Firebase empty, pushing local data (' + Object.keys(sliverAllData).length + ' months)');
                 database.ref(SLIVER_DB_PATH).set(sliverAllData);
             }
             isFirstSliverLoad = false;
@@ -3263,6 +3343,11 @@ function saveSliverData() {
     }
 
     if (database) {
+        // 空データ保護
+        if (Object.keys(sliverAllData).length === 0) {
+            console.warn('BLOCKED: Attempted to save empty sliverAllData to Firebase');
+            return;
+        }
         database.ref(SLIVER_DB_PATH).set(sliverAllData)
             .catch((error) => console.error('Sliver Firebase save failed:', error));
     }
@@ -3788,6 +3873,17 @@ function initHanapon() {
                 if (isDifferent) {
                     if (Date.now() - hanaponLastEditTime < 2000) return; // 防止編集中の上書き
 
+                    // 安全対策：月データが丸ごと消えている場合はローカルから復旧
+                    let restored = false;
+                    for (const k in hanaponAllData) {
+                        if (firebaseData[k] === undefined) {
+                            firebaseData[k] = hanaponAllData[k];
+                            database.ref(HANAPON_DB_PATH).child(k).set(hanaponAllData[k]);
+                            restored = true;
+                        }
+                    }
+                    if (restored) console.warn('Safety Check: Restored missing months in hanaponAllData');
+
                     hanaponAllData = firebaseData;
                     ensureHanaponMonth(hanaponCurrentYear, hanaponCurrentMonth, true);
                     localStorage.setItem(HANAPON_STORAGE_KEY, JSON.stringify(hanaponAllData));
@@ -3908,6 +4004,11 @@ function saveHanaponData() {
     }
 
     if (database) {
+        // 空データ保護
+        if (Object.keys(hanaponAllData).length === 0) {
+            console.warn('BLOCKED: Attempted to save empty hanaponAllData to Firebase');
+            return;
+        }
         database.ref(HANAPON_DB_PATH).set(hanaponAllData)
             .catch((error) => console.error('Hanapon Firebase save failed:', error));
     }
@@ -6780,6 +6881,17 @@ function initSnowsprint() {
                 if (isDifferent) {
                     if (Date.now() - snowsprintLastEditTime < 2000) return; // 防止編集中の上書き
 
+                    // 安全対策：月データが丸ごと消えている場合はローカルから復旧
+                    let restored = false;
+                    for (const k in snowsprintAllData) {
+                        if (firebaseData[k] === undefined) {
+                            firebaseData[k] = snowsprintAllData[k];
+                            database.ref(SNOWSPRINT_DB_PATH).child(k).set(snowsprintAllData[k]);
+                            restored = true;
+                        }
+                    }
+                    if (restored) console.warn('Safety Check: Restored missing months in snowsprintAllData');
+
                     snowsprintAllData = firebaseData;
                     ensureSnowsprintMonth(snowsprintCurrentYear, snowsprintCurrentMonth, true);
                     localStorage.setItem(SNOWSPRINT_STORAGE_KEY, JSON.stringify(snowsprintAllData));
@@ -6893,6 +7005,11 @@ function setupSnowsprintMonthSelector() {
 function saveSnowsprintData() {
     localStorage.setItem(SNOWSPRINT_STORAGE_KEY, JSON.stringify(snowsprintAllData));
     if (database) {
+        // 空データ保護
+        if (Object.keys(snowsprintAllData).length === 0) {
+            console.warn('BLOCKED: Attempted to save empty snowsprintAllData to Firebase');
+            return;
+        }
         database.ref(SNOWSPRINT_DB_PATH).set(snowsprintAllData)
             .then(() => {
                 const el = document.getElementById('saveStatusSnowsprint');
@@ -7944,6 +8061,13 @@ function initProjectManagement() {
             // 他の端末からの更新を反映（内容が変わっている場合のみ）
             const isDifferent = JSON.stringify(boardsData) !== JSON.stringify(firebaseBoards);
             if (isDifferent) {
+                // 安全対策：全データが消えている場合はローカルから復旧
+                if (firebaseBoards.length === 0 && boardsData.length > 0) {
+                    console.warn('Safety Check: Restored missing boards from local storage');
+                    saveBoardsToFirebase();
+                    return; // ローカルデータで上書きしたのでそのまま終了
+                }
+
                 boardsData = firebaseBoards;
                 localStorage.setItem(BOARDS_STORAGE_KEY, JSON.stringify(boardsData));
                 renderBoard();
@@ -7989,6 +8113,11 @@ function saveBoardsToFirebase() {
     localStorage.setItem(BOARDS_STORAGE_KEY, JSON.stringify(boardsData));
 
     if (database) {
+        // 空データ保護
+        if (!boardsData || boardsData.length === 0) {
+            console.warn('BLOCKED: Attempted to save empty boardsData to Firebase');
+            return;
+        }
         database.ref(PROJECT_DB_PATH).set(boardsData).catch(error => {
             console.error('Board save failed:', error);
         });
@@ -8745,6 +8874,130 @@ window.submitTaskComment = function() {
     
     inputEl.value = '';
     renderTaskCommentsList(task.comments);
+};
+
+// ==========================================
+// Backup & Restore Logic
+// ==========================================
+window.renderBackupList = function() {
+    const container = document.getElementById('backup-list-container');
+    if (!container) return;
+
+    const BACKUP_PREFIX = 'nippo_auto_backup_';
+    const keys = Object.keys(localStorage)
+        .filter(k => k.startsWith(BACKUP_PREFIX))
+        .sort()
+        .reverse(); // Newest first
+
+    if (keys.length === 0) {
+        container.innerHTML = '<p style="color: #64748b; text-align: center; padding: 2rem;">バックアップデータがありません。明日以降、アプリを開いた際に自動作成されます。</p>';
+        return;
+    }
+
+    let html = '<div style="display: flex; flex-direction: column; gap: 1rem;">';
+    keys.forEach(key => {
+        const dateStr = key.replace(BACKUP_PREFIX, '');
+        const dataStr = localStorage.getItem(key);
+        let dataObj = {};
+        try {
+            dataObj = JSON.parse(dataStr) || {};
+        } catch(e) {}
+
+        html += `
+        <div style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 1.5rem; background: #f8fafc;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h4 style="margin: 0; font-size: 1.1rem; color: #0f172a;">📅 ${dateStr} のバックアップ</h4>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0.5rem; margin-bottom: 1.5rem;">
+                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                    <input type="checkbox" id="chk-roll-${dateStr}" value="roll" checked> ロール在庫
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                    <input type="checkbox" id="chk-sliver-${dateStr}" value="sliver" checked> スライバー在庫
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                    <input type="checkbox" id="chk-hanapon-${dateStr}" value="hanapon" checked> 鼻ぽん在庫
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                    <input type="checkbox" id="chk-snowsprint-${dateStr}" value="snowsprint" checked> スノースプリント
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                    <input type="checkbox" id="chk-project-${dateStr}" value="project" checked> 進捗管理表
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                    <input type="checkbox" id="chk-records-${dateStr}" value="records"> 2階製造・日報
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                    <input type="checkbox" id="chk-records1f-${dateStr}" value="records1f"> 1階プレス機
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                    <input type="checkbox" id="chk-kenpin1f-${dateStr}" value="kenpin1f"> 1階検品機
+                </label>
+            </div>
+            <div style="text-align: right;">
+                <button onclick="restoreFromBackup('${dateStr}')" style="background: #ef4444; color: white; border: none; padding: 0.6rem 1.2rem; border-radius: 6px; font-weight: 600; cursor: pointer; transition: background 0.2s;">
+                    選択した項目を復元する
+                </button>
+            </div>
+        </div>
+        `;
+    });
+    html += '</div>';
+    container.innerHTML = html;
+};
+
+window.restoreFromBackup = function(dateStr) {
+    const BACKUP_PREFIX = 'nippo_auto_backup_';
+    const key = BACKUP_PREFIX + dateStr;
+    const dataStr = localStorage.getItem(key);
+    if (!dataStr) return;
+    
+    let backupObj = {};
+    try { backupObj = JSON.parse(dataStr); } catch(e) { alert("バックアップデータの読み込みに失敗しました"); return; }
+
+    const checks = [
+        { id: `chk-roll-${dateStr}`, key: 'roll', db: ROLL_DB_PATH },
+        { id: `chk-sliver-${dateStr}`, key: 'sliver', db: SLIVER_DB_PATH },
+        { id: `chk-hanapon-${dateStr}`, key: 'hanapon', db: HANAPON_DB_PATH },
+        { id: `chk-snowsprint-${dateStr}`, key: 'snowsprint', db: SNOWSPRINT_DB_PATH },
+        { id: `chk-project-${dateStr}`, key: 'project', db: PROJECT_DB_PATH },
+        { id: `chk-records-${dateStr}`, key: 'records', db: DB_PATH },
+        { id: `chk-records-${dateStr}`, key: 'dailyNotes', db: NOTES_DB_PATH }, // 2階日報も一緒に復元
+        { id: `chk-records1f-${dateStr}`, key: 'records1f', db: `${SECRET_KEY}/${isProduction ? '1f_nippo_records' : '1f_nippo_records_dev'}` },
+        { id: `chk-kenpin1f-${dateStr}`, key: 'kenpin1f', db: `${SECRET_KEY}/${isProduction ? '1f_kenpin_records' : '1f_kenpin_records_dev'}` }
+    ];
+
+    const toRestore = checks.filter(c => document.getElementById(c.id)?.checked);
+    
+    if (toRestore.length === 0) {
+        alert("復元する項目を選択してください。");
+        return;
+    }
+
+    const itemsStr = toRestore.map(c => document.getElementById(c.id).parentElement.textContent.trim()).join('、');
+    if (!confirm(`本当に以下の項目を ${dateStr} の状態に復元しますか？\n現在のデータは失われます。\n\n復元対象: ${itemsStr}`)) {
+        return;
+    }
+
+    let promises = [];
+    toRestore.forEach(item => {
+        const rawData = backupObj[item.key];
+        if (rawData) {
+            try {
+                const parsed = JSON.parse(rawData);
+                promises.push(database.ref(item.db).set(parsed));
+            } catch(e) {
+                console.error("Parse error for " + item.key, e);
+            }
+        }
+    });
+
+    Promise.all(promises).then(() => {
+        alert("復元が完了しました。ページを再読み込みします。");
+        window.location.reload();
+    }).catch(err => {
+        alert("復元中にエラーが発生しました: " + err.message);
+    });
 };
 
 // Start the application after all scripts and modules are defined
