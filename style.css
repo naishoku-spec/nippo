@@ -1424,7 +1424,7 @@ span.flatpickr-weekday:nth-child(7n) {
     .sliver-table {
         min-width: 0 !important;
         width: 100% !important;
-        table-layout: auto !important; /* Let browser adjust column widths naturally */
+        table-layout: fixed !important; /* 均等に幅を割り当てる */
         font-size: 0.7rem !important; /* Slightly larger for better readability */
         border-collapse: collapse !important;
     }
@@ -1460,7 +1460,11 @@ span.flatpickr-weekday:nth-child(7n) {
     }
 
     /* Date column should be centered and thin */
-    .sliver-date-col, .date-cell {
+    .sliver-date-col {
+        display: none !important; /* スマホ版では日付・出庫日列を削除して広げる */
+    }
+    
+    .date-cell {
         width: 38px !important; /* Fixed width for the vertical date */
         padding: 0 !important;
         text-align: center !important;
@@ -3344,5 +3348,103 @@ td:hover .sn-comment-trigger,
         height: 100vh !important;
         max-height: 100vh !important;
         border-radius: 0 !important;
+    }
+}
+
+/* ========================================= */
+/* Backup & Restore View                     */
+/* ========================================= */
+
+.backup-layout {
+    display: flex;
+    gap: 2rem;
+    min-height: 500px;
+    align-items: flex-start;
+}
+
+.backup-sidebar {
+    width: 250px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    border-right: 1px solid var(--border);
+    padding-right: 1.5rem;
+}
+
+.backup-date-btn {
+    padding: 1rem 1.25rem;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    text-align: center;
+    background: transparent;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    color: var(--text-color);
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    font-size: 0.95rem;
+}
+
+.backup-date-btn:hover {
+    background: var(--bg-card-hover);
+}
+
+.backup-date-btn.active {
+    background: rgba(99, 102, 241, 0.08);
+    color: var(--primary);
+    border-color: rgba(99, 102, 241, 0.2);
+    font-weight: 700;
+}
+
+.backup-date-btn.active::after {
+    content: '▶';
+    font-size: 0.8rem;
+    color: var(--primary);
+}
+
+.backup-detail-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.backup-detail-card {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 1.5rem;
+    background: #ffffff;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+@media (max-width: 768px) {
+    .backup-layout {
+        flex-direction: column;
+        gap: 1.5rem;
+    }
+    
+    .backup-sidebar {
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+        padding-right: 0;
+        padding-bottom: 1rem;
+        flex-direction: row;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        gap: 0.75rem;
+    }
+    
+    .backup-date-btn {
+        flex-shrink: 0;
+        padding: 0.75rem 1rem;
+        border: 1px solid var(--border);
+        white-space: nowrap;
+    }
+    
+    .backup-date-btn.active::after {
+        display: none;
     }
 }

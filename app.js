@@ -2103,6 +2103,13 @@ function switchView(view) {
         if (snowsprintMonthSelector) snowsprintMonthSelector.style.display = 'none';
         if (dayDateSelector) dayDateSelector.style.display = 'none';
         if (prodViewToggle) prodViewToggle.style.display = 'none';
+    } else if (view === 'backup') {
+        if (stockMonthSelector) stockMonthSelector.style.display = 'none';
+        if (sliverMonthSelector) sliverMonthSelector.style.display = 'none';
+        if (hanaponMonthSelector) hanaponMonthSelector.style.display = 'none';
+        if (snowsprintMonthSelector) snowsprintMonthSelector.style.display = 'none';
+        if (dayDateSelector) dayDateSelector.style.display = 'none';
+        if (prodViewToggle) prodViewToggle.style.display = 'none';
     }
 
     // Header sub-toggle active states
@@ -3388,7 +3395,7 @@ function renderSliverSection(section, sectionData, typesDef) {
     thead.innerHTML = headerMain + headerSub;
 
     // Build carryover row
-    let carryHtml = `<tr style="background: rgba(var(--primary-rgb), 0.03);"><td style="font-weight:700; padding:0.5rem; white-space:nowrap; border: 1px solid var(--border);">
+    let carryHtml = `<tr style="background: rgba(var(--primary-rgb), 0.03);"><td class="sliver-date-col" style="font-weight:700; padding:0.5rem; white-space:nowrap; border: 1px solid var(--border);">
         <span class="carryover-text-desktop">前月繰越</span>
         <span class="carryover-text-mobile">繰越</span>
     </td>`;
@@ -3462,7 +3469,7 @@ function renderSliverSection(section, sectionData, typesDef) {
 
     // Footer - monthly totals
     let footHtml = '<tr style="background: var(--bg-main); border-top: 2px solid var(--border);">';
-    footHtml += '<td style="font-weight:700; padding:0.75rem; white-space:nowrap;">残数</td>';
+    footHtml += '<td class="sliver-date-col" style="font-weight:700; padding:0.75rem; white-space:nowrap;">残数</td>';
 
     typesDef.forEach((t, i) => {
         let totalIn = 0, totalMorn = 0, totalEve = 0;
@@ -4038,7 +4045,7 @@ function renderHanaponSection(sectionId, monthData, typesDef) {
 
     typesDef.forEach((t, i) => {
         let colSpan = t.hasCurerise ? 5 : 4;
-        if (window.innerWidth <= 600) {
+        if (window.matchMedia('(max-width: 600px)').matches) {
             colSpan -= 1; // Subtract 1 for hidden individual column on mobile
         }
         headerMain += `<th colspan="${colSpan}" class="sliver-group-${i === 0 ? 0 : 3}">${t.name}</th>`;
@@ -4054,7 +4061,7 @@ function renderHanaponSection(sectionId, monthData, typesDef) {
     thead.innerHTML = headerMain + headerSub;
 
     // Build carryover row
-    let carryHtml = `<tr style="background: rgba(var(--primary-rgb), 0.03);"><td style="font-weight:700; padding:0.5rem; white-space:nowrap; border: 1px solid var(--border);">
+    let carryHtml = `<tr style="background: rgba(var(--primary-rgb), 0.03);"><td class="sliver-date-col" style="font-weight:700; padding:0.5rem; white-space:nowrap; border: 1px solid var(--border);">
         <span class="carryover-text-desktop">前月繰越</span>
         <span class="carryover-text-mobile">繰越</span>
     </td>`;
@@ -4144,7 +4151,7 @@ function renderHanaponSection(sectionId, monthData, typesDef) {
 
     // Footer - monthly totals and Monthly Production
     let footHtml = '<tr style="background: var(--bg-main); border-top: 2px solid var(--border);">';
-    footHtml += '<td style="font-weight:700; padding:0.75rem; white-space:nowrap;">合計 / 残</td>';
+    footHtml += '<td class="sliver-date-col" style="font-weight:700; padding:0.75rem; white-space:nowrap;">合計 / 残</td>';
 
     const totalsObj = {};
 
@@ -4170,14 +4177,14 @@ function renderHanaponSection(sectionId, monthData, typesDef) {
     footHtml += '</tr>';
 
     // Footer - Monthly Production (Pieces)
-    let prodFootHtml = '<tr style="background: rgba(var(--primary-rgb), 0.05);">';
-    prodFootHtml += '<td style="font-weight:700; padding:0.75rem; white-space:nowrap; text-align: left;" colspan="1">月製造数</td>';
+    let prodFootHtml = '<tr class="hanapon-individual-col" style="background: rgba(var(--primary-rgb), 0.05);">';
+    prodFootHtml += '<td class="sliver-date-col" style="font-weight:700; padding:0.75rem; white-space:nowrap; text-align: left;" colspan="1">月製造数</td>';
 
     typesDef.forEach((t) => {
         const prod = totalsObj[t.key].prod;
         const totalPcs = prod * t.pcsPerCase;
         let skipSpan = t.hasCurerise ? 4 : 3;
-        if (window.innerWidth <= 600) skipSpan -= 1;
+        if (window.matchMedia('(max-width: 600px)').matches) skipSpan -= 1;
         prodFootHtml += `<td colspan="${skipSpan}"></td>`;
         prodFootHtml += `<td class="hanapon-individual-col" style="font-weight:800; color: #0284c7; font-family: monospace; white-space: nowrap;">${totalPcs.toLocaleString()}</td>`;
     });
@@ -4291,7 +4298,7 @@ function recalculateHanaponSection(sectionId, typesDef) {
     const tfoot = document.getElementById(`hanaponFoot${sectionId}`);
     if (tfoot) {
         let footHtml = '<tr style="background: var(--bg-main); border-top: 2px solid var(--border);">';
-        footHtml += '<td style="font-weight:700; padding:0.75rem; white-space:nowrap;">合計 / 残</td>';
+        footHtml += '<td class="sliver-date-col" style="font-weight:700; padding:0.75rem; white-space:nowrap;">合計 / 残</td>';
 
         typesDef.forEach((t) => {
             const sum = totalsObj[t.key] || { prod: 0, cure: 0, naishoku: 0, finalRem: 0 };
@@ -4303,13 +4310,13 @@ function recalculateHanaponSection(sectionId, typesDef) {
         });
         footHtml += '</tr>';
 
-        let prodFootHtml = '<tr style="background: rgba(var(--primary-rgb), 0.05);">';
-        prodFootHtml += '<td style="font-weight:700; padding:0.75rem; white-space:nowrap; text-align: left;" colspan="1">月製造数</td>';
+        let prodFootHtml = '<tr class="hanapon-individual-col" style="background: rgba(var(--primary-rgb), 0.05);">';
+        prodFootHtml += '<td class="sliver-date-col" style="font-weight:700; padding:0.75rem; white-space:nowrap; text-align: left;" colspan="1">月製造数</td>';
         typesDef.forEach((t) => {
             const sum = totalsObj[t.key] || { prod: 0 };
             const totalPcs = sum.prod * t.pcsPerCase;
             let skipSpan = t.hasCurerise ? 4 : 3;
-            if (window.innerWidth <= 600) skipSpan -= 1;
+            if (window.matchMedia('(max-width: 600px)').matches) skipSpan -= 1;
             prodFootHtml += `<td colspan="${skipSpan}"></td>`;
             prodFootHtml += `<td class="hanapon-individual-col" style="font-weight:800; color: #0284c7; font-family: monospace; white-space: nowrap;">${totalPcs.toLocaleString()}</td>`;
         });
@@ -8894,56 +8901,104 @@ window.renderBackupList = function() {
         return;
     }
 
-    let html = '<div style="display: flex; flex-direction: column; gap: 1rem;">';
+    // Build Layout Shell
+    let html = `
+    <div class="backup-layout">
+        <div class="backup-sidebar" id="backup-sidebar-list">
+    `;
+    
     keys.forEach(key => {
         const dateStr = key.replace(BACKUP_PREFIX, '');
-        const dataStr = localStorage.getItem(key);
-        let dataObj = {};
-        try {
-            dataObj = JSON.parse(dataStr) || {};
-        } catch(e) {}
-
-        html += `
-        <div style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 1.5rem; background: #f8fafc;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                <h4 style="margin: 0; font-size: 1.1rem; color: #0f172a;">📅 ${dateStr} のバックアップ</h4>
-            </div>
-            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0.5rem; margin-bottom: 1.5rem;">
-                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
-                    <input type="checkbox" id="chk-roll-${dateStr}" value="roll" checked> ロール在庫
-                </label>
-                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
-                    <input type="checkbox" id="chk-sliver-${dateStr}" value="sliver" checked> スライバー在庫
-                </label>
-                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
-                    <input type="checkbox" id="chk-hanapon-${dateStr}" value="hanapon" checked> 鼻ぽん在庫
-                </label>
-                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
-                    <input type="checkbox" id="chk-snowsprint-${dateStr}" value="snowsprint" checked> スノースプリント
-                </label>
-                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
-                    <input type="checkbox" id="chk-project-${dateStr}" value="project" checked> 進捗管理表
-                </label>
-                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
-                    <input type="checkbox" id="chk-records-${dateStr}" value="records"> 2階製造・日報
-                </label>
-                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
-                    <input type="checkbox" id="chk-records1f-${dateStr}" value="records1f"> 1階プレス機
-                </label>
-                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
-                    <input type="checkbox" id="chk-kenpin1f-${dateStr}" value="kenpin1f"> 1階検品機
-                </label>
-            </div>
-            <div style="text-align: right;">
-                <button onclick="restoreFromBackup('${dateStr}')" style="background: #ef4444; color: white; border: none; padding: 0.6rem 1.2rem; border-radius: 6px; font-weight: 600; cursor: pointer; transition: background 0.2s;">
-                    選択した項目を復元する
-                </button>
-            </div>
-        </div>
-        `;
+        html += `<button class="backup-date-btn" onclick="selectBackupDate('${dateStr}')" data-date="${dateStr}">📅 ${dateStr}</button>`;
     });
-    html += '</div>';
+
+    html += `
+        </div>
+        <div class="backup-detail-panel" id="backup-detail-panel">
+            <p style="color: #94a3b8; text-align: center; padding: 2rem;">左側から日付を選択してください</p>
+        </div>
+    </div>
+    `;
+    
     container.innerHTML = html;
+
+    // Automatically select the newest backup
+    const newestDate = keys[0].replace(BACKUP_PREFIX, '');
+    selectBackupDate(newestDate);
+};
+
+window.selectBackupDate = function(dateStr) {
+    // Update active state in sidebar
+    const buttons = document.querySelectorAll('.backup-date-btn');
+    buttons.forEach(btn => {
+        if (btn.getAttribute('data-date') === dateStr) {
+            btn.classList.add('active');
+        } else {
+            btn.classList.remove('active');
+        }
+    });
+
+    const panel = document.getElementById('backup-detail-panel');
+    if (!panel) return;
+
+    const BACKUP_PREFIX = 'nippo_auto_backup_';
+    const key = BACKUP_PREFIX + dateStr;
+    const dataStr = localStorage.getItem(key);
+    
+    if (!dataStr) {
+        panel.innerHTML = '<p style="color: #ef4444; text-align: center; padding: 2rem;">データが見つかりません。</p>';
+        return;
+    }
+
+    let dataObj = {};
+    try {
+        dataObj = JSON.parse(dataStr) || {};
+    } catch(e) {}
+
+    let detailHtml = `
+    <div class="backup-detail-card">
+        <h4 style="margin: 0 0 1.5rem 0; font-size: 1.25rem; color: #0f172a; display: flex; align-items: center; gap: 0.5rem;">
+            <span style="font-size: 1.5rem;">📅</span> ${dateStr} のバックアップデータ
+        </h4>
+        <p style="color: #64748b; margin-bottom: 1.5rem; font-size: 0.95rem;">
+            以下の項目から復元したいデータを選択し、「復元を実行する」ボタンを押してください。<br>
+            ※復元を実行すると、現在のデータが ${dateStr} の時点の状態に上書きされます。
+        </p>
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 8px; transition: background 0.2s;">
+                <input type="checkbox" id="chk-roll-${dateStr}" value="roll" checked> ロール在庫
+            </label>
+            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 8px; transition: background 0.2s;">
+                <input type="checkbox" id="chk-sliver-${dateStr}" value="sliver" checked> スライバー在庫
+            </label>
+            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 8px; transition: background 0.2s;">
+                <input type="checkbox" id="chk-hanapon-${dateStr}" value="hanapon" checked> 鼻ぽん在庫
+            </label>
+            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 8px; transition: background 0.2s;">
+                <input type="checkbox" id="chk-snowsprint-${dateStr}" value="snowsprint" checked> スノースプリント
+            </label>
+            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 8px; transition: background 0.2s;">
+                <input type="checkbox" id="chk-project-${dateStr}" value="project" checked> 進捗管理表
+            </label>
+            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 8px; transition: background 0.2s;">
+                <input type="checkbox" id="chk-records-${dateStr}" value="records"> 2階製造・日報
+            </label>
+            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 8px; transition: background 0.2s;">
+                <input type="checkbox" id="chk-records1f-${dateStr}" value="records1f"> 1階プレス機
+            </label>
+            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 8px; transition: background 0.2s;">
+                <input type="checkbox" id="chk-kenpin1f-${dateStr}" value="kenpin1f"> 1階検品機
+            </label>
+        </div>
+        <div style="text-align: right;">
+            <button onclick="restoreFromBackup('${dateStr}')" style="background: #ef4444; color: white; border: none; padding: 0.8rem 1.5rem; border-radius: 8px; font-weight: 600; cursor: pointer; transition: background 0.2s; box-shadow: 0 4px 6px rgba(239, 68, 68, 0.2);" onmouseover="this.style.background='#dc2626'" onmouseout="this.style.background='#ef4444'">
+                選択した項目を復元する
+            </button>
+        </div>
+    </div>
+    `;
+
+    panel.innerHTML = detailHtml;
 };
 
 window.restoreFromBackup = function(dateStr) {
