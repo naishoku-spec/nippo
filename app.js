@@ -3597,7 +3597,7 @@ function recalculateSliverSection(section) {
     const tfoot = document.getElementById(`sliverFoot${section.toUpperCase()}`);
     if (tfoot) {
         let footHtml = '<tr style="background: var(--bg-main); border-top: 2px solid var(--border);">';
-        footHtml += '<td style="font-weight:700; padding:0.75rem; white-space:nowrap;">残数</td>';
+        footHtml += '<td class="sliver-date-col" style="font-weight:700; padding:0.75rem; white-space:nowrap;">残数</td>';
         typesDef.forEach((t) => {
             const sum = totalsObj[t.key] || { incoming: 0, morning: 0, evening: 0, finalRem: 0 };
             footHtml += `<td style="font-weight:700">${sum.incoming || ''}</td>`;
