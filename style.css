@@ -3422,7 +3422,8 @@ td:hover .sn-comment-trigger,
 @media (max-width: 768px) {
     .backup-layout {
         flex-direction: column;
-        gap: 1.5rem;
+        gap: 1rem;
+        min-height: auto;
     }
     
     .backup-sidebar {
@@ -3447,4 +3448,45 @@ td:hover .sn-comment-trigger,
     .backup-date-btn.active::after {
         display: none;
     }
+
+    .backup-detail-panel {
+        width: 100%;
+        overflow-x: hidden;
+    }
+
+    .backup-detail-card {
+        padding: 0.75rem;
+        width: 100%;
+        box-sizing: border-box;
+        overflow: hidden;
+    }
+
+    #backup-view-container {
+        width: 100%;
+        box-sizing: border-box;
+        overflow-x: hidden;
+    }
+
+    .backup-checkbox-grid {
+        grid-template-columns: 1fr !important;
+        gap: 0.5rem !important;
+    }
+}
+
+/* タイムマシン履歴ボタンのスタイル */
+.backup-history-btn {
+    background: rgba(139, 92, 246, 0.06) !important;
+    border-color: rgba(139, 92, 246, 0.2) !important;
+    color: #7c3aed !important;
+}
+
+.backup-history-btn:hover {
+    background: rgba(139, 92, 246, 0.12) !important;
+}
+
+.backup-history-btn.active {
+    background: rgba(139, 92, 246, 0.15) !important;
+    border-color: rgba(139, 92, 246, 0.4) !important;
+    color: #6d28d9 !important;
+    font-weight: 700;
 }

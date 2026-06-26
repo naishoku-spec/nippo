@@ -1668,6 +1668,72 @@ function performDailyBackup() {
 performDailyBackup();
 // -------------------------------------------------------------------
 
+// --- タイムマシン方式：リアルタイム履歴バックアップ（過去3回分） ---
+const HISTORY_BACKUP_PREFIX = 'nippo_history_backup_';
+const MAX_HISTORY_SLOTS = 3; // 最新・1つ前・2つ前
+
+function saveHistoryBackup() {
+    try {
+        const now = new Date();
+        const timestamp = now.toLocaleDateString('sv-SE') + ' ' + now.toLocaleTimeString('sv-SE');
+        
+        const backupData = {
+            timestamp: timestamp,
+            records: localStorage.getItem(LS_KEY),
+            dailyNotes: localStorage.getItem(NOTES_LS_KEY),
+            roll: localStorage.getItem('rollInventoryData'),
+            sliver: localStorage.getItem('sliverInventoryData'),
+            hanapon: localStorage.getItem('hanaponInventoryData'),
+            snowsprint: localStorage.getItem('snowsprintInventoryData'),
+            project: localStorage.getItem('nippo_boards_data'),
+            records1f: localStorage.getItem(isProduction ? '1f_nippo_records' : '1f_nippo_records_dev'),
+            kenpin1f: localStorage.getItem(isProduction ? '1f_kenpin_records' : '1f_kenpin_records_dev')
+        };
+
+        // スライド処理: 3→削除、2→3、1→2、新規→1
+        localStorage.removeItem(HISTORY_BACKUP_PREFIX + '3');
+        const slot2 = localStorage.getItem(HISTORY_BACKUP_PREFIX + '2');
+        if (slot2) localStorage.setItem(HISTORY_BACKUP_PREFIX + '3', slot2);
+        const slot1 = localStorage.getItem(HISTORY_BACKUP_PREFIX + '1');
+        if (slot1) localStorage.setItem(HISTORY_BACKUP_PREFIX + '2', slot1);
+        localStorage.setItem(HISTORY_BACKUP_PREFIX + '1', JSON.stringify(backupData));
+
+        console.log("History backup saved at " + timestamp);
+    } catch (e) {
+        console.error("Failed to save history backup:", e);
+    }
+}
+
+// デバウンス処理：連続保存を間引いて2秒後にまとめて1回だけ履歴を作る
+let _historyDebounceTimer = null;
+let _historyPending = false;
+let _isPageUnloading = false;
+
+function triggerHistorySave() {
+    if (_isPageUnloading) return; // ページを閉じる瞬間の自動バックアップ連鎖を防ぐ
+    
+    _historyPending = true;
+    if (_historyDebounceTimer) clearTimeout(_historyDebounceTimer);
+    _historyDebounceTimer = setTimeout(() => {
+        if (_historyPending) {
+            saveHistoryBackup();
+            _historyPending = false;
+        }
+    }, 2000);
+}
+
+// ブラウザを閉じる直前に未保存の履歴を強制保存
+window.addEventListener('beforeunload', () => {
+    _isPageUnloading = true; // 以降の不要なトリガーをシャットアウト
+    if (_historyPending) {
+        if (_historyDebounceTimer) clearTimeout(_historyDebounceTimer);
+        saveHistoryBackup();
+        _historyPending = false;
+    }
+});
+// -------------------------------------------------------------------
+
+
 // State Management
 let records = JSON.parse(localStorage.getItem(LS_KEY)) || [];
 let dailyNotes = JSON.parse(localStorage.getItem(NOTES_LS_KEY)) || {};
@@ -2036,6 +2102,20 @@ function switchView(view) {
     const backupViewContainer = document.getElementById('backup-view-container');
     if (backupViewContainer) backupViewContainer.style.display = (view === 'backup') ? 'block' : 'none';
 
+    // バックアップ画面では main-container の制限を解除して左寄せにする
+    const mainContainer = document.querySelector('.main-container');
+    if (mainContainer) {
+        if (view === 'backup') {
+            mainContainer.style.maxWidth = 'none';
+            mainContainer.style.margin = '0';
+            mainContainer.style.padding = '0.5rem';
+        } else {
+            mainContainer.style.maxWidth = '';
+            mainContainer.style.margin = '';
+            mainContainer.style.padding = '';
+        }
+    }
+
     if (view === 'backup') renderBackupList();
 
     // Toggle header selectors visibility
@@ -2250,6 +2330,7 @@ window.saveDailyNotes = function() {
     
     // Save to local storage immediately
     localStorage.setItem(NOTES_LS_KEY, JSON.stringify(dailyNotes));
+    triggerHistorySave();
     
     // Debounce the Firebase save to avoid excessive writes
     clearTimeout(noteSaveTimeout);
@@ -2369,7 +2450,7 @@ function ensureDayRecords(date) {
         }
     });
 
-    if (updated) saveRecords();
+    if (updated) saveRecords(false); // 自動追加時は履歴を作動させない
 }
 
 // Update a specific field in a record
@@ -2416,10 +2497,11 @@ function calculateDuration(start, end) {
 }
 
 // Save to LocalStorage and Firebase (with enhanced reliability)
-function saveRecords() {
+function saveRecords(triggerHistory = true) {
     // Always save to localStorage first (immediate backup)
     try {
         localStorage.setItem(LS_KEY, JSON.stringify(records));
+        if (triggerHistory) triggerHistorySave();
     } catch (e) {
         console.error('LocalStorage save failed:', e);
     }
@@ -2821,6 +2903,7 @@ function updateRollSelectors() {
 
 function saveRollData() {
     localStorage.setItem(ROLL_STORAGE_KEY, JSON.stringify(rollAllData));
+    triggerHistorySave();
     if (database) {
         // 空データ保護: データが空の場合はFirebaseへの書き込みをブロック
         if (Object.keys(rollAllData).length === 0) {
@@ -2979,6 +3062,7 @@ let rollAutoSaveTimer = null;
 function autoSaveRoll() {
     // Save to local storage immediately
     localStorage.setItem(ROLL_STORAGE_KEY, JSON.stringify(rollAllData));
+    triggerHistorySave();
 
     // Throttle Firebase sync
     clearTimeout(rollAutoSaveTimer);
@@ -3081,6 +3165,7 @@ function propagateCarryover(year, month) {
         }
     }
     localStorage.setItem(ROLL_STORAGE_KEY, JSON.stringify(rollAllData));
+    triggerHistorySave();
 }
 
 function renderRollFooter(data, daysInMonth) {
@@ -3269,7 +3354,7 @@ function ensureSliverMonth(year, month, shouldSave = true) {
         });
 
         sliverAllData[key] = newMonth;
-        if (shouldSave) saveSliverData();
+        if (shouldSave) saveSliverData(false); // 自動作成時は履歴を作動させない
     }
 }
 
@@ -3342,9 +3427,10 @@ function setupSliverMonthSelector() {
     });
 }
 
-function saveSliverData() {
+function saveSliverData(triggerHistory = true) {
     try {
         localStorage.setItem(SLIVER_STORAGE_KEY, JSON.stringify(sliverAllData));
+        if (triggerHistory) triggerHistorySave();
     } catch (e) {
         console.error('Sliver localStorage save failed:', e);
     }
@@ -3530,6 +3616,7 @@ function updateSliverCell(input) {
 
     // Save to local storage immediately for fast local reflection
     localStorage.setItem(SLIVER_STORAGE_KEY, JSON.stringify(sliverAllData));
+    triggerHistorySave();
 
     // Show save status immediately
     const statusEl = document.getElementById('saveStatusSliver');
@@ -3647,6 +3734,7 @@ function propagateSliverCarryover(year, month) {
     }
 
     localStorage.setItem(SLIVER_STORAGE_KEY, JSON.stringify(sliverAllData));
+    triggerHistorySave();
 }
 
 // Expose sliver functions to global scope
@@ -3932,7 +4020,7 @@ function ensureHanaponMonth(year, month, shouldSave = true) {
         });
 
         hanaponAllData[key] = newMonth;
-        if (shouldSave) saveHanaponData();
+        if (shouldSave) saveHanaponData(false); // 自動作成時は履歴を作動させない
     }
 }
 
@@ -4003,9 +4091,10 @@ function setupHanaponMonthSelector() {
     });
 }
 
-function saveHanaponData() {
+function saveHanaponData(triggerHistory = true) {
     try {
         localStorage.setItem(HANAPON_STORAGE_KEY, JSON.stringify(hanaponAllData));
+        if (triggerHistory) triggerHistorySave();
     } catch (e) {
         console.error('Hanapon localStorage save failed:', e);
     }
@@ -4229,6 +4318,7 @@ function updateHanaponCell(input) {
     
     // Save to local storage immediately for fast local reflection
     localStorage.setItem(HANAPON_STORAGE_KEY, JSON.stringify(hanaponAllData));
+    triggerHistorySave();
 
     // Show save status
     const statusEl = document.getElementById('saveStatusHanapon');
@@ -4362,6 +4452,7 @@ function propagateHanaponCarryover(year, month) {
     }
 
     localStorage.setItem(HANAPON_STORAGE_KEY, JSON.stringify(hanaponAllData));
+    triggerHistorySave();
 }
 
 // Expose hanapon functions to global scope
@@ -6961,7 +7052,7 @@ function ensureSnowsprintMonth(year, month, shouldSave = true) {
         
         resetDaysAndCalculateCarry(newData, prevData);
         snowsprintAllData[key] = newData;
-        if (shouldSave) saveSnowsprintData();
+        if (shouldSave) saveSnowsprintData(false); // 自動作成時は履歴を作動させない
     }
 }
 
@@ -7011,6 +7102,7 @@ function setupSnowsprintMonthSelector() {
 
 function saveSnowsprintData() {
     localStorage.setItem(SNOWSPRINT_STORAGE_KEY, JSON.stringify(snowsprintAllData));
+    triggerHistorySave();
     if (database) {
         // 空データ保護
         if (Object.keys(snowsprintAllData).length === 0) {
@@ -8118,6 +8210,7 @@ function saveBoardsToFirebase() {
 
     // 必ずローカルストレージにも保存してデータ消失を防ぐ
     localStorage.setItem(BOARDS_STORAGE_KEY, JSON.stringify(boardsData));
+    triggerHistorySave();
 
     if (database) {
         // 空データ保護
@@ -8896,7 +8989,20 @@ window.renderBackupList = function() {
         .sort()
         .reverse(); // Newest first
 
-    if (keys.length === 0) {
+    // タイムマシン履歴の存在チェック
+    const HIST_PREFIX = 'nippo_history_backup_';
+    const historySlots = [];
+    for (let i = 1; i <= 3; i++) {
+        const data = localStorage.getItem(HIST_PREFIX + i);
+        if (data) {
+            try {
+                const parsed = JSON.parse(data);
+                historySlots.push({ slot: i, timestamp: parsed.timestamp || '不明' });
+            } catch(e) {}
+        }
+    }
+
+    if (keys.length === 0 && historySlots.length === 0) {
         container.innerHTML = '<p style="color: #64748b; text-align: center; padding: 2rem;">バックアップデータがありません。明日以降、アプリを開いた際に自動作成されます。</p>';
         return;
     }
@@ -8906,7 +9012,20 @@ window.renderBackupList = function() {
     <div class="backup-layout">
         <div class="backup-sidebar" id="backup-sidebar-list">
     `;
-    
+
+    // タイムマシン履歴ボタン
+    const historyLabels = { 1: '🕒 最新に戻す', 2: '🕒 1つ前に戻す', 3: '🕒 2つ前に戻す' };
+    if (historySlots.length > 0) {
+        historySlots.forEach(h => {
+            html += `<button class="backup-date-btn backup-history-btn" onclick="selectHistoryBackup(${h.slot})" data-date="history-${h.slot}" title="${h.timestamp}">${historyLabels[h.slot]}</button>`;
+        });
+        // 日付バックアップとの区切り線
+        if (keys.length > 0) {
+            html += `<div style="border-top: 1px solid #e2e8f0; margin: 0.5rem 0;"></div>`;
+        }
+    }
+
+    // 日付バックアップボタン（従来通り）
     keys.forEach(key => {
         const dateStr = key.replace(BACKUP_PREFIX, '');
         html += `<button class="backup-date-btn" onclick="selectBackupDate('${dateStr}')" data-date="${dateStr}">📅 ${dateStr}</button>`;
@@ -8922,9 +9041,150 @@ window.renderBackupList = function() {
     
     container.innerHTML = html;
 
-    // Automatically select the newest backup
-    const newestDate = keys[0].replace(BACKUP_PREFIX, '');
-    selectBackupDate(newestDate);
+    // 最も新しい履歴があれば自動選択、なければ最新の日付バックアップを自動選択
+    if (historySlots.length > 0) {
+        selectHistoryBackup(1);
+    } else if (keys.length > 0) {
+        const newestDate = keys[0].replace(BACKUP_PREFIX, '');
+        selectBackupDate(newestDate);
+    }
+};
+
+// タイムマシン履歴選択
+window.selectHistoryBackup = function(slot) {
+    // Update active state in sidebar
+    const buttons = document.querySelectorAll('.backup-date-btn');
+    buttons.forEach(btn => {
+        if (btn.getAttribute('data-date') === 'history-' + slot) {
+            btn.classList.add('active');
+        } else {
+            btn.classList.remove('active');
+        }
+    });
+
+    const panel = document.getElementById('backup-detail-panel');
+    if (!panel) return;
+
+    const HIST_PREFIX = 'nippo_history_backup_';
+    const dataStr = localStorage.getItem(HIST_PREFIX + slot);
+
+    if (!dataStr) {
+        panel.innerHTML = '<p style="color: #ef4444; text-align: center; padding: 2rem;">データが見つかりません。</p>';
+        return;
+    }
+
+    let dataObj = {};
+    try {
+        dataObj = JSON.parse(dataStr) || {};
+    } catch(e) {}
+
+    const historyLabels = { 1: '最新に戻す', 2: '1つ前に戻す', 3: '2つ前に戻す' };
+    const label = historyLabels[slot] || '履歴 ' + slot;
+    const timestamp = dataObj.timestamp || '不明';
+
+    let detailHtml = `
+    <div class="backup-detail-card">
+        <h4 style="margin: 0 0 1.5rem 0; font-size: 1.25rem; color: #0f172a; display: flex; align-items: center; gap: 0.5rem;">
+            <span style="font-size: 1.5rem;">🕒</span> ${label}
+        </h4>
+        <p style="color: #64748b; margin-bottom: 1.5rem; font-size: 0.95rem;">
+            入力や変更を行うたびに自動で保存されます。<br>
+            誤って変更・削除してしまった場合は「🕒 1つ前に戻す」のご使用をおすすめします。<br><br>
+            以下の項目から復元したいデータを選択し、「復元を実行する」ボタンを押してください。<br>
+            ※復元を実行すると、現在のデータがこの時点の状態に上書きされます。
+        </p>
+        <div class="backup-checkbox-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+            <label style="display: flex; align-items: center; justify-content: flex-start; gap: 0.75rem; cursor: pointer; padding: 0.75rem 1rem; border: 1px solid #e2e8f0; border-radius: 8px; transition: background 0.2s; white-space: nowrap;">
+                <input type="checkbox" id="chk-records1f-hist${slot}" value="records1f" style="width: 1.2rem; height: 1.2rem; margin: 0; padding: 0; flex-shrink: 0;"> 1階プレス機
+            </label>
+            <label style="display: flex; align-items: center; justify-content: flex-start; gap: 0.75rem; cursor: pointer; padding: 0.75rem 1rem; border: 1px solid #e2e8f0; border-radius: 8px; transition: background 0.2s; white-space: nowrap;">
+                <input type="checkbox" id="chk-kenpin1f-hist${slot}" value="kenpin1f" style="width: 1.2rem; height: 1.2rem; margin: 0; padding: 0; flex-shrink: 0;"> 1階検品機
+            </label>
+            <label style="display: flex; align-items: center; justify-content: flex-start; gap: 0.75rem; cursor: pointer; padding: 0.75rem 1rem; border: 1px solid #e2e8f0; border-radius: 8px; transition: background 0.2s; white-space: nowrap;">
+                <input type="checkbox" id="chk-records-hist${slot}" value="records" style="width: 1.2rem; height: 1.2rem; margin: 0; padding: 0; flex-shrink: 0;"> 2階製造・日報
+            </label>
+            <label style="display: flex; align-items: center; justify-content: flex-start; gap: 0.75rem; cursor: pointer; padding: 0.75rem 1rem; border: 1px solid #e2e8f0; border-radius: 8px; transition: background 0.2s; white-space: nowrap;">
+                <input type="checkbox" id="chk-roll-hist${slot}" value="roll" style="width: 1.2rem; height: 1.2rem; margin: 0; padding: 0; flex-shrink: 0;"> ロール在庫
+            </label>
+            <label style="display: flex; align-items: center; justify-content: flex-start; gap: 0.75rem; cursor: pointer; padding: 0.75rem 1rem; border: 1px solid #e2e8f0; border-radius: 8px; transition: background 0.2s; white-space: nowrap;">
+                <input type="checkbox" id="chk-sliver-hist${slot}" value="sliver" style="width: 1.2rem; height: 1.2rem; margin: 0; padding: 0; flex-shrink: 0;"> スライバー在庫
+            </label>
+            <label style="display: flex; align-items: center; justify-content: flex-start; gap: 0.75rem; cursor: pointer; padding: 0.75rem 1rem; border: 1px solid #e2e8f0; border-radius: 8px; transition: background 0.2s; white-space: nowrap;">
+                <input type="checkbox" id="chk-hanapon-hist${slot}" value="hanapon" style="width: 1.2rem; height: 1.2rem; margin: 0; padding: 0; flex-shrink: 0;"> 鼻ぽん在庫
+            </label>
+            <label style="display: flex; align-items: center; justify-content: flex-start; gap: 0.75rem; cursor: pointer; padding: 0.75rem 1rem; border: 1px solid #e2e8f0; border-radius: 8px; transition: background 0.2s; white-space: nowrap;">
+                <input type="checkbox" id="chk-snowsprint-hist${slot}" value="snowsprint" style="width: 1.2rem; height: 1.2rem; margin: 0; padding: 0; flex-shrink: 0;"> スノースプリント
+            </label>
+            <label style="display: flex; align-items: center; justify-content: flex-start; gap: 0.75rem; cursor: pointer; padding: 0.75rem 1rem; border: 1px solid #e2e8f0; border-radius: 8px; transition: background 0.2s; white-space: nowrap;">
+                <input type="checkbox" id="chk-project-hist${slot}" value="project" style="width: 1.2rem; height: 1.2rem; margin: 0; padding: 0; flex-shrink: 0;"> 進捗管理表
+            </label>
+        </div>
+        <div style="text-align: right;">
+            <button onclick="restoreFromHistory(${slot})" style="background: #ef4444; color: white; border: none; padding: 0.8rem 1.5rem; border-radius: 8px; font-weight: 600; cursor: pointer; transition: background 0.2s; box-shadow: 0 4px 6px rgba(239, 68, 68, 0.2);" onmouseover="this.style.background='#dc2626'" onmouseout="this.style.background='#ef4444'">
+                選択した項目を復元する
+            </button>
+        </div>
+    </div>
+    `;
+
+    panel.innerHTML = detailHtml;
+};
+
+// タイムマシン履歴からの復元
+window.restoreFromHistory = function(slot) {
+    const HIST_PREFIX = 'nippo_history_backup_';
+    const dataStr = localStorage.getItem(HIST_PREFIX + slot);
+    if (!dataStr) return;
+
+    let backupObj = {};
+    try { backupObj = JSON.parse(dataStr); } catch(e) { alert("バックアップデータの読み込みに失敗しました"); return; }
+
+    const suffix = 'hist' + slot;
+    const checks = [
+        { id: `chk-roll-${suffix}`, key: 'roll', db: ROLL_DB_PATH },
+        { id: `chk-sliver-${suffix}`, key: 'sliver', db: SLIVER_DB_PATH },
+        { id: `chk-hanapon-${suffix}`, key: 'hanapon', db: HANAPON_DB_PATH },
+        { id: `chk-snowsprint-${suffix}`, key: 'snowsprint', db: SNOWSPRINT_DB_PATH },
+        { id: `chk-project-${suffix}`, key: 'project', db: PROJECT_DB_PATH },
+        { id: `chk-records-${suffix}`, key: 'records', db: DB_PATH },
+        { id: `chk-records-${suffix}`, key: 'dailyNotes', db: NOTES_DB_PATH },
+        { id: `chk-records1f-${suffix}`, key: 'records1f', db: `${SECRET_KEY}/${isProduction ? '1f_nippo_records' : '1f_nippo_records_dev'}` },
+        { id: `chk-kenpin1f-${suffix}`, key: 'kenpin1f', db: `${SECRET_KEY}/${isProduction ? '1f_kenpin_records' : '1f_kenpin_records_dev'}` }
+    ];
+
+    const toRestore = checks.filter(c => document.getElementById(c.id)?.checked);
+
+    if (toRestore.length === 0) {
+        alert("復元する項目を選択してください。");
+        return;
+    }
+
+    const historyLabels = { 1: '最新の状態', 2: '1つ前の状態', 3: '2つ前の状態' };
+    const label = historyLabels[slot] || '履歴 ' + slot;
+    const itemsStr = toRestore.map(c => document.getElementById(c.id).parentElement.textContent.trim()).join('、');
+    if (!confirm(`本当に以下の項目を「${label}」に復元しますか？\n現在のデータは失われます。\n\n復元対象: ${itemsStr}`)) {
+        return;
+    }
+
+    let promises = [];
+    toRestore.forEach(item => {
+        const rawData = backupObj[item.key];
+        if (rawData) {
+            try {
+                const parsed = JSON.parse(rawData);
+                promises.push(database.ref(item.db).set(parsed));
+            } catch(e) {
+                console.error("Parse error for " + item.key, e);
+            }
+        }
+    });
+
+    Promise.all(promises).then(() => {
+        alert("復元が完了しました。ページを再読み込みします。");
+        window.location.reload();
+    }).catch(err => {
+        alert("復元中にエラーが発生しました: " + err.message);
+    });
 };
 
 window.selectBackupDate = function(dateStr) {
@@ -8964,30 +9224,30 @@ window.selectBackupDate = function(dateStr) {
             以下の項目から復元したいデータを選択し、「復元を実行する」ボタンを押してください。<br>
             ※復元を実行すると、現在のデータが ${dateStr} の時点の状態に上書きされます。
         </p>
-        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
-            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 8px; transition: background 0.2s;">
-                <input type="checkbox" id="chk-roll-${dateStr}" value="roll" checked> ロール在庫
+        <div class="backup-checkbox-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+            <label style="display: flex; align-items: center; justify-content: flex-start; gap: 0.75rem; cursor: pointer; padding: 0.75rem 1rem; border: 1px solid #e2e8f0; border-radius: 8px; transition: background 0.2s; white-space: nowrap;">
+                <input type="checkbox" id="chk-records1f-${dateStr}" value="records1f" style="width: 1.2rem; height: 1.2rem; margin: 0; padding: 0; flex-shrink: 0;"> 1階プレス機
             </label>
-            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 8px; transition: background 0.2s;">
-                <input type="checkbox" id="chk-sliver-${dateStr}" value="sliver" checked> スライバー在庫
+            <label style="display: flex; align-items: center; justify-content: flex-start; gap: 0.75rem; cursor: pointer; padding: 0.75rem 1rem; border: 1px solid #e2e8f0; border-radius: 8px; transition: background 0.2s; white-space: nowrap;">
+                <input type="checkbox" id="chk-kenpin1f-${dateStr}" value="kenpin1f" style="width: 1.2rem; height: 1.2rem; margin: 0; padding: 0; flex-shrink: 0;"> 1階検品機
             </label>
-            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 8px; transition: background 0.2s;">
-                <input type="checkbox" id="chk-hanapon-${dateStr}" value="hanapon" checked> 鼻ぽん在庫
+            <label style="display: flex; align-items: center; justify-content: flex-start; gap: 0.75rem; cursor: pointer; padding: 0.75rem 1rem; border: 1px solid #e2e8f0; border-radius: 8px; transition: background 0.2s; white-space: nowrap;">
+                <input type="checkbox" id="chk-records-${dateStr}" value="records" style="width: 1.2rem; height: 1.2rem; margin: 0; padding: 0; flex-shrink: 0;"> 2階製造・日報
             </label>
-            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 8px; transition: background 0.2s;">
-                <input type="checkbox" id="chk-snowsprint-${dateStr}" value="snowsprint" checked> スノースプリント
+            <label style="display: flex; align-items: center; justify-content: flex-start; gap: 0.75rem; cursor: pointer; padding: 0.75rem 1rem; border: 1px solid #e2e8f0; border-radius: 8px; transition: background 0.2s; white-space: nowrap;">
+                <input type="checkbox" id="chk-roll-${dateStr}" value="roll" style="width: 1.2rem; height: 1.2rem; margin: 0; padding: 0; flex-shrink: 0;"> ロール在庫
             </label>
-            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 8px; transition: background 0.2s;">
-                <input type="checkbox" id="chk-project-${dateStr}" value="project" checked> 進捗管理表
+            <label style="display: flex; align-items: center; justify-content: flex-start; gap: 0.75rem; cursor: pointer; padding: 0.75rem 1rem; border: 1px solid #e2e8f0; border-radius: 8px; transition: background 0.2s; white-space: nowrap;">
+                <input type="checkbox" id="chk-sliver-${dateStr}" value="sliver" style="width: 1.2rem; height: 1.2rem; margin: 0; padding: 0; flex-shrink: 0;"> スライバー在庫
             </label>
-            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 8px; transition: background 0.2s;">
-                <input type="checkbox" id="chk-records-${dateStr}" value="records"> 2階製造・日報
+            <label style="display: flex; align-items: center; justify-content: flex-start; gap: 0.75rem; cursor: pointer; padding: 0.75rem 1rem; border: 1px solid #e2e8f0; border-radius: 8px; transition: background 0.2s; white-space: nowrap;">
+                <input type="checkbox" id="chk-hanapon-${dateStr}" value="hanapon" style="width: 1.2rem; height: 1.2rem; margin: 0; padding: 0; flex-shrink: 0;"> 鼻ぽん在庫
             </label>
-            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 8px; transition: background 0.2s;">
-                <input type="checkbox" id="chk-records1f-${dateStr}" value="records1f"> 1階プレス機
+            <label style="display: flex; align-items: center; justify-content: flex-start; gap: 0.75rem; cursor: pointer; padding: 0.75rem 1rem; border: 1px solid #e2e8f0; border-radius: 8px; transition: background 0.2s; white-space: nowrap;">
+                <input type="checkbox" id="chk-snowsprint-${dateStr}" value="snowsprint" style="width: 1.2rem; height: 1.2rem; margin: 0; padding: 0; flex-shrink: 0;"> スノースプリント
             </label>
-            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 8px; transition: background 0.2s;">
-                <input type="checkbox" id="chk-kenpin1f-${dateStr}" value="kenpin1f"> 1階検品機
+            <label style="display: flex; align-items: center; justify-content: flex-start; gap: 0.75rem; cursor: pointer; padding: 0.75rem 1rem; border: 1px solid #e2e8f0; border-radius: 8px; transition: background 0.2s; white-space: nowrap;">
+                <input type="checkbox" id="chk-project-${dateStr}" value="project" style="width: 1.2rem; height: 1.2rem; margin: 0; padding: 0; flex-shrink: 0;"> 進捗管理表
             </label>
         </div>
         <div style="text-align: right;">
