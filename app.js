@@ -1631,41 +1631,114 @@ const NOTES_LS_KEY = isProduction ? 'nippo_daily_notes' : 'nippo_daily_notes_dev
 console.log(`Running in ${isProduction ? 'PRODUCTION' : 'DEVELOPMENT'} mode. Data path: ${DB_PATH}, Roll path: ${ROLL_DB_PATH}`);
 
 // --- 自動バックアップ機能（1日1回ローカルストレージをスナップショット保存） ---
-function performDailyBackup() {
-    const BACKUP_PREFIX = 'nippo_auto_backup_';
-    const MAX_BACKUP_DAYS = 7;
-    const today = new Date().toLocaleDateString('sv-SE'); // YYYY-MM-DD
-    const backupKey = BACKUP_PREFIX + today;
-    
-    if (localStorage.getItem(backupKey)) return; // 今日すでにバックアップ済みならスキップ
-    
+const AUTO_BACKUP_PREFIX = 'nippo_auto_backup_';
+const MAX_AUTO_BACKUP_DAYS = 7;
+const STARTUP_BACKUP_REFRESH_MS = 45000;
+const backupBootTime = Date.now();
+let dailyBackupRefreshTimer = null;
+
+function getLocalBackupSnapshot() {
+    return {
+        records: localStorage.getItem(LS_KEY),
+        dailyNotes: localStorage.getItem(NOTES_LS_KEY),
+        roll: localStorage.getItem('rollInventoryData'),
+        sliver: localStorage.getItem('sliverInventoryData'),
+        hanapon: localStorage.getItem('hanaponInventoryData'),
+        snowsprint: localStorage.getItem('snowsprintInventoryData'),
+        project: localStorage.getItem('nippo_boards_data'),
+        records1f: localStorage.getItem(isProduction ? '1f_nippo_records' : '1f_nippo_records_dev'),
+        kenpin1f: localStorage.getItem(isProduction ? '1f_kenpin_records' : '1f_kenpin_records_dev')
+    };
+}
+
+function hasBackupValue(value) {
+    if (typeof value !== 'string') return false;
+    const trimmed = value.trim();
+    if (!trimmed || trimmed === 'null' || trimmed === 'undefined') return false;
+
     try {
-        const backupData = {
-            records: localStorage.getItem(LS_KEY), // 2F Manufacturing
-            dailyNotes: localStorage.getItem(NOTES_LS_KEY), // 2F Notes
-            roll: localStorage.getItem('rollInventoryData'),
-            sliver: localStorage.getItem('sliverInventoryData'),
-            hanapon: localStorage.getItem('hanaponInventoryData'),
-            snowsprint: localStorage.getItem('snowsprintInventoryData'),
-            project: localStorage.getItem('nippo_boards_data'),
-            records1f: localStorage.getItem(isProduction ? '1f_nippo_records' : '1f_nippo_records_dev'),
-            kenpin1f: localStorage.getItem(isProduction ? '1f_kenpin_records' : '1f_kenpin_records_dev')
-        };
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) return parsed.length > 0;
+        if (parsed && typeof parsed === 'object') return Object.keys(parsed).length > 0;
+        return parsed !== null && parsed !== '';
+    } catch (e) {
+        return true;
+    }
+}
+
+function hasRestorableBackupValue(value) {
+    if (typeof value !== 'string') return false;
+    const trimmed = value.trim();
+    return !!trimmed && trimmed !== 'null' && trimmed !== 'undefined';
+}
+
+function getBackupPayloadScore(data) {
+    if (!data || typeof data !== 'object') return 0;
+    return Object.values(data).reduce((score, value) => {
+        if (!hasBackupValue(value)) return score;
+        return score + 1000 + String(value).length;
+    }, 0);
+}
+
+function shouldReplaceDailyBackup(existingStr, nextData, refreshExisting = false) {
+    if (!existingStr) return true;
+    if (!refreshExisting) return false;
+
+    let existingData = {};
+    try {
+        existingData = JSON.parse(existingStr) || {};
+    } catch (e) {
+        return true;
+    }
+
+    const nextScore = getBackupPayloadScore(nextData);
+    const existingScore = getBackupPayloadScore(existingData);
+    if (nextScore === 0) return false;
+    if (nextScore > existingScore) return true;
+
+    const stillStartingUp = Date.now() - backupBootTime < STARTUP_BACKUP_REFRESH_MS;
+    return stillStartingUp && nextScore >= existingScore && JSON.stringify(nextData) !== JSON.stringify(existingData);
+}
+
+function pruneOldDailyBackups() {
+    const keys = Object.keys(localStorage).filter(k => k.startsWith(AUTO_BACKUP_PREFIX));
+    if (keys.length <= MAX_AUTO_BACKUP_DAYS) return;
+
+    keys.sort();
+    keys.slice(0, keys.length - MAX_AUTO_BACKUP_DAYS).forEach(k => localStorage.removeItem(k));
+}
+
+function performDailyBackup(options = {}) {
+    const today = new Date().toLocaleDateString('sv-SE'); // YYYY-MM-DD
+    const backupKey = AUTO_BACKUP_PREFIX + today;
+
+    try {
+        const backupData = getLocalBackupSnapshot();
+        const existingBackup = localStorage.getItem(backupKey);
+        if (!shouldReplaceDailyBackup(existingBackup, backupData, options.refreshExisting === true)) return;
+
         localStorage.setItem(backupKey, JSON.stringify(backupData));
-        
-        // 古いバックアップを削除（7日分まで保持）
-        const keys = Object.keys(localStorage).filter(k => k.startsWith(BACKUP_PREFIX));
-        if (keys.length > MAX_BACKUP_DAYS) {
-            keys.sort();
-            const keysToDelete = keys.slice(0, keys.length - MAX_BACKUP_DAYS);
-            keysToDelete.forEach(k => localStorage.removeItem(k));
-        }
+        pruneOldDailyBackups();
         console.log("Daily backup of localStorage completed successfully.");
     } catch (e) {
         console.error("Failed to create daily local backup:", e);
     }
 }
-performDailyBackup();
+
+function scheduleDailyBackupRefresh() {
+    if (dailyBackupRefreshTimer) clearTimeout(dailyBackupRefreshTimer);
+    dailyBackupRefreshTimer = setTimeout(() => {
+        dailyBackupRefreshTimer = null;
+        performDailyBackup({ refreshExisting: true });
+
+        const backupViewContainer = document.getElementById('backup-view-container');
+        if (backupViewContainer?.style.display === 'block' && typeof renderBackupList === 'function') {
+            renderBackupList();
+        }
+    }, 500);
+}
+
+scheduleDailyBackupRefresh();
 // -------------------------------------------------------------------
 
 // --- タイムマシン方式：リアルタイム履歴バックアップ（過去3回分） ---
@@ -1723,12 +1796,27 @@ function triggerHistorySave() {
 }
 
 // ブラウザを閉じる直前に未保存の履歴を強制保存
-window.addEventListener('beforeunload', () => {
-    _isPageUnloading = true; // 以降の不要なトリガーをシャットアウト
+
+function flushPendingHistoryBackup(markUnloading = false) {
+    if (markUnloading) _isPageUnloading = true;
+    if (_historyDebounceTimer) {
+        clearTimeout(_historyDebounceTimer);
+        _historyDebounceTimer = null;
+    }
     if (_historyPending) {
-        if (_historyDebounceTimer) clearTimeout(_historyDebounceTimer);
         saveHistoryBackup();
         _historyPending = false;
+    }
+}
+
+window.addEventListener('beforeunload', () => flushPendingHistoryBackup(true));
+window.addEventListener('pagehide', () => flushPendingHistoryBackup(true));
+window.addEventListener('pageshow', () => { _isPageUnloading = false; });
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+        flushPendingHistoryBackup(false);
+    } else {
+        _isPageUnloading = false;
     }
 });
 // -------------------------------------------------------------------
@@ -1768,6 +1856,7 @@ if (database) {
             if (firebaseRecords.length > 0) {
                 records = firebaseRecords;
                 localStorage.setItem(LS_KEY, JSON.stringify(records));
+                scheduleDailyBackupRefresh();
             } else if (records.length > 0) {
                 database.ref(DB_PATH).set(records);
             }
@@ -1780,6 +1869,7 @@ if (database) {
             if (isDifferent && firebaseRecords.length > 0) {
                 records = firebaseRecords;
                 localStorage.setItem(LS_KEY, JSON.stringify(records));
+                scheduleDailyBackupRefresh();
 
                 // Only re-render if user is NOT currently focusing on an input in the table
                 const activeEl = document.activeElement;
@@ -1804,6 +1894,7 @@ if (database) {
             if (Object.keys(firebaseNotes).length > 0) {
                 dailyNotes = firebaseNotes;
                 localStorage.setItem(NOTES_LS_KEY, JSON.stringify(dailyNotes));
+                scheduleDailyBackupRefresh();
             } else if (Object.keys(dailyNotes).length > 0) {
                 database.ref(NOTES_DB_PATH).set(dailyNotes);
             }
@@ -1812,6 +1903,7 @@ if (database) {
         } else if (isDifferent) {
             dailyNotes = firebaseNotes;
             localStorage.setItem(NOTES_LS_KEY, JSON.stringify(dailyNotes));
+                scheduleDailyBackupRefresh();
             const activeEl = document.activeElement;
             if (activeEl && activeEl.id === 'day-note-text') return; // Do not overwrite if user is typing
             renderDailyNotes();
@@ -1839,6 +1931,7 @@ if (database) {
 
                 rollAllData = firebaseRollData;
                 localStorage.setItem(ROLL_STORAGE_KEY, JSON.stringify(rollAllData));
+                scheduleDailyBackupRefresh();
 
                 if (stockViewContainer.style.display === 'block') {
                     renderRollStock();
@@ -2116,7 +2209,10 @@ function switchView(view) {
         }
     }
 
-    if (view === 'backup') renderBackupList();
+    if (view === 'backup') {
+        performDailyBackup({ refreshExisting: true });
+        renderBackupList();
+    }
 
     // Toggle header selectors visibility
     const stockMonthSelector = document.getElementById('monthSelectorStock');
@@ -2330,6 +2426,7 @@ window.saveDailyNotes = function() {
     
     // Save to local storage immediately
     localStorage.setItem(NOTES_LS_KEY, JSON.stringify(dailyNotes));
+                scheduleDailyBackupRefresh();
     triggerHistorySave();
     
     // Debounce the Firebase save to avoid excessive writes
@@ -2501,6 +2598,7 @@ function saveRecords(triggerHistory = true) {
     // Always save to localStorage first (immediate backup)
     try {
         localStorage.setItem(LS_KEY, JSON.stringify(records));
+                scheduleDailyBackupRefresh();
         if (triggerHistory) triggerHistorySave();
     } catch (e) {
         console.error('LocalStorage save failed:', e);
@@ -2903,6 +3001,7 @@ function updateRollSelectors() {
 
 function saveRollData() {
     localStorage.setItem(ROLL_STORAGE_KEY, JSON.stringify(rollAllData));
+                scheduleDailyBackupRefresh();
     triggerHistorySave();
     if (database) {
         // 空データ保護: データが空の場合はFirebaseへの書き込みをブロック
@@ -3062,6 +3161,7 @@ let rollAutoSaveTimer = null;
 function autoSaveRoll() {
     // Save to local storage immediately
     localStorage.setItem(ROLL_STORAGE_KEY, JSON.stringify(rollAllData));
+                scheduleDailyBackupRefresh();
     triggerHistorySave();
 
     // Throttle Firebase sync
@@ -3165,6 +3265,7 @@ function propagateCarryover(year, month) {
         }
     }
     localStorage.setItem(ROLL_STORAGE_KEY, JSON.stringify(rollAllData));
+                scheduleDailyBackupRefresh();
     triggerHistorySave();
 }
 
@@ -3282,6 +3383,7 @@ function initSliver() {
     } else {
         sliverAllData = JSON.parse(JSON.stringify(SLIVER_INITIAL_DATA));
         localStorage.setItem(SLIVER_STORAGE_KEY, JSON.stringify(sliverAllData));
+                scheduleDailyBackupRefresh();
     }
 
     // Ensure current month exists
@@ -3313,6 +3415,7 @@ function initSliver() {
                     sliverAllData = firebaseData;
                     ensureSliverMonth(sliverCurrentYear, sliverCurrentMonth, true);
                     localStorage.setItem(SLIVER_STORAGE_KEY, JSON.stringify(sliverAllData));
+                scheduleDailyBackupRefresh();
 
                     if (sliverViewContainer.style.display === 'block') {
                         renderSliver();
@@ -3430,6 +3533,7 @@ function setupSliverMonthSelector() {
 function saveSliverData(triggerHistory = true) {
     try {
         localStorage.setItem(SLIVER_STORAGE_KEY, JSON.stringify(sliverAllData));
+                scheduleDailyBackupRefresh();
         if (triggerHistory) triggerHistorySave();
     } catch (e) {
         console.error('Sliver localStorage save failed:', e);
@@ -3616,6 +3720,7 @@ function updateSliverCell(input) {
 
     // Save to local storage immediately for fast local reflection
     localStorage.setItem(SLIVER_STORAGE_KEY, JSON.stringify(sliverAllData));
+                scheduleDailyBackupRefresh();
     triggerHistorySave();
 
     // Show save status immediately
@@ -3734,6 +3839,7 @@ function propagateSliverCarryover(year, month) {
     }
 
     localStorage.setItem(SLIVER_STORAGE_KEY, JSON.stringify(sliverAllData));
+                scheduleDailyBackupRefresh();
     triggerHistorySave();
 }
 
@@ -3951,6 +4057,7 @@ function initHanapon() {
     } else {
         hanaponAllData = JSON.parse(JSON.stringify(HANAPON_INITIAL_DATA));
         localStorage.setItem(HANAPON_STORAGE_KEY, JSON.stringify(hanaponAllData));
+                scheduleDailyBackupRefresh();
     }
 
     // Ensure current month exists
@@ -3982,6 +4089,7 @@ function initHanapon() {
                     hanaponAllData = firebaseData;
                     ensureHanaponMonth(hanaponCurrentYear, hanaponCurrentMonth, true);
                     localStorage.setItem(HANAPON_STORAGE_KEY, JSON.stringify(hanaponAllData));
+                scheduleDailyBackupRefresh();
 
                     if (hanaponViewContainer.style.display === 'block') {
                         renderHanapon();
@@ -4094,6 +4202,7 @@ function setupHanaponMonthSelector() {
 function saveHanaponData(triggerHistory = true) {
     try {
         localStorage.setItem(HANAPON_STORAGE_KEY, JSON.stringify(hanaponAllData));
+                scheduleDailyBackupRefresh();
         if (triggerHistory) triggerHistorySave();
     } catch (e) {
         console.error('Hanapon localStorage save failed:', e);
@@ -4318,6 +4427,7 @@ function updateHanaponCell(input) {
     
     // Save to local storage immediately for fast local reflection
     localStorage.setItem(HANAPON_STORAGE_KEY, JSON.stringify(hanaponAllData));
+                scheduleDailyBackupRefresh();
     triggerHistorySave();
 
     // Show save status
@@ -4452,6 +4562,7 @@ function propagateHanaponCarryover(year, month) {
     }
 
     localStorage.setItem(HANAPON_STORAGE_KEY, JSON.stringify(hanaponAllData));
+                scheduleDailyBackupRefresh();
     triggerHistorySave();
 }
 
@@ -6964,6 +7075,7 @@ function initSnowsprint() {
     } else {
         snowsprintAllData = JSON.parse(JSON.stringify(SNOWSPRINT_INITIAL_DATA));
         localStorage.setItem(SNOWSPRINT_STORAGE_KEY, JSON.stringify(snowsprintAllData));
+                scheduleDailyBackupRefresh();
     }
 
     ensureSnowsprintMonth(snowsprintCurrentYear, snowsprintCurrentMonth, false);
@@ -6993,6 +7105,7 @@ function initSnowsprint() {
                     snowsprintAllData = firebaseData;
                     ensureSnowsprintMonth(snowsprintCurrentYear, snowsprintCurrentMonth, true);
                     localStorage.setItem(SNOWSPRINT_STORAGE_KEY, JSON.stringify(snowsprintAllData));
+                scheduleDailyBackupRefresh();
                     
                     if (snowsprintViewContainer.style.display === 'block') {
                         renderSnowsprint();
@@ -7102,6 +7215,7 @@ function setupSnowsprintMonthSelector() {
 
 function saveSnowsprintData() {
     localStorage.setItem(SNOWSPRINT_STORAGE_KEY, JSON.stringify(snowsprintAllData));
+                scheduleDailyBackupRefresh();
     triggerHistorySave();
     if (database) {
         // 空データ保護
@@ -7723,6 +7837,7 @@ function propagateSnowSprintCarryover(year, month) {
         curM = nextM;
     }
     localStorage.setItem(SNOWSPRINT_STORAGE_KEY, JSON.stringify(snowsprintAllData));
+                scheduleDailyBackupRefresh();
 }
 
 // ==========================================
@@ -8149,6 +8264,7 @@ function initProjectManagement() {
             } else {
                 boardsData = firebaseBoards;
                 localStorage.setItem(BOARDS_STORAGE_KEY, JSON.stringify(boardsData));
+                scheduleDailyBackupRefresh();
             }
             
             isFirstBoardLoad = false;
@@ -8169,6 +8285,7 @@ function initProjectManagement() {
 
                 boardsData = firebaseBoards;
                 localStorage.setItem(BOARDS_STORAGE_KEY, JSON.stringify(boardsData));
+                scheduleDailyBackupRefresh();
                 renderBoard();
 
                 // もしコメントモーダルが開いていれば中身を最新化する
@@ -8210,6 +8327,7 @@ function saveBoardsToFirebase() {
 
     // 必ずローカルストレージにも保存してデータ消失を防ぐ
     localStorage.setItem(BOARDS_STORAGE_KEY, JSON.stringify(boardsData));
+                scheduleDailyBackupRefresh();
     triggerHistorySave();
 
     if (database) {
@@ -9155,19 +9273,30 @@ window.restoreFromHistory = function(slot) {
     const toRestore = checks.filter(c => document.getElementById(c.id)?.checked);
 
     if (toRestore.length === 0) {
-        alert("復元する項目を選択してください。");
+        alert("\u5fa9\u5143\u3059\u308b\u9805\u76ee\u3092\u9078\u629e\u3057\u3066\u304f\u3060\u3055\u3044\u3002");
+        return;
+    }
+
+    const restorableItems = toRestore.filter(item => hasRestorableBackupValue(backupObj[item.key]));
+    if (restorableItems.length === 0) {
+        alert("\u9078\u629e\u3057\u305f\u9805\u76ee\u306b\u306f\u5fa9\u5143\u3067\u304d\u308b\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u30c7\u30fc\u30bf\u304c\u3042\u308a\u307e\u305b\u3093\u3002\u5225\u306e\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u3092\u9078\u3093\u3067\u304f\u3060\u3055\u3044\u3002");
+        return;
+    }
+
+    if (!database) {
+        alert("\u30b5\u30fc\u30d0\u30fc\u63a5\u7d9a\u304c\u521d\u671f\u5316\u3055\u308c\u3066\u3044\u307e\u305b\u3093\u3002\u901a\u4fe1\u72b6\u614b\u3092\u78ba\u8a8d\u3057\u3066\u304b\u3089\u3082\u3046\u4e00\u5ea6\u304a\u8a66\u3057\u304f\u3060\u3055\u3044\u3002");
         return;
     }
 
     const historyLabels = { 1: '最新の状態', 2: '1つ前の状態', 3: '2つ前の状態' };
     const label = historyLabels[slot] || '履歴 ' + slot;
-    const itemsStr = toRestore.map(c => document.getElementById(c.id).parentElement.textContent.trim()).join('、');
+    const itemsStr = restorableItems.map(c => document.getElementById(c.id).parentElement.textContent.trim()).join('\u3001');
     if (!confirm(`本当に以下の項目を「${label}」に復元しますか？\n現在のデータは失われます。\n\n復元対象: ${itemsStr}`)) {
         return;
     }
 
     let promises = [];
-    toRestore.forEach(item => {
+    restorableItems.forEach(item => {
         const rawData = backupObj[item.key];
         if (rawData) {
             try {
@@ -9178,6 +9307,11 @@ window.restoreFromHistory = function(slot) {
             }
         }
     });
+
+    if (promises.length === 0) {
+        alert("\u5fa9\u5143\u3067\u304d\u308b\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u30c7\u30fc\u30bf\u304c\u3042\u308a\u307e\u305b\u3093\u3002\u5225\u306e\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u3092\u9078\u3093\u3067\u304f\u3060\u3055\u3044\u3002");
+        return;
+    }
 
     Promise.all(promises).then(() => {
         alert("復元が完了しました。ページを再読み込みします。");
@@ -9283,19 +9417,30 @@ window.restoreFromBackup = function(dateStr) {
     ];
 
     const toRestore = checks.filter(c => document.getElementById(c.id)?.checked);
-    
+
     if (toRestore.length === 0) {
-        alert("復元する項目を選択してください。");
+        alert("\u5fa9\u5143\u3059\u308b\u9805\u76ee\u3092\u9078\u629e\u3057\u3066\u304f\u3060\u3055\u3044\u3002");
         return;
     }
 
-    const itemsStr = toRestore.map(c => document.getElementById(c.id).parentElement.textContent.trim()).join('、');
+    const restorableItems = toRestore.filter(item => hasRestorableBackupValue(backupObj[item.key]));
+    if (restorableItems.length === 0) {
+        alert("\u9078\u629e\u3057\u305f\u9805\u76ee\u306b\u306f\u5fa9\u5143\u3067\u304d\u308b\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u30c7\u30fc\u30bf\u304c\u3042\u308a\u307e\u305b\u3093\u3002\u5225\u306e\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u3092\u9078\u3093\u3067\u304f\u3060\u3055\u3044\u3002");
+        return;
+    }
+
+    if (!database) {
+        alert("\u30b5\u30fc\u30d0\u30fc\u63a5\u7d9a\u304c\u521d\u671f\u5316\u3055\u308c\u3066\u3044\u307e\u305b\u3093\u3002\u901a\u4fe1\u72b6\u614b\u3092\u78ba\u8a8d\u3057\u3066\u304b\u3089\u3082\u3046\u4e00\u5ea6\u304a\u8a66\u3057\u304f\u3060\u3055\u3044\u3002");
+        return;
+    }
+
+    const itemsStr = restorableItems.map(c => document.getElementById(c.id).parentElement.textContent.trim()).join('\u3001');
     if (!confirm(`本当に以下の項目を ${dateStr} の状態に復元しますか？\n現在のデータは失われます。\n\n復元対象: ${itemsStr}`)) {
         return;
     }
 
     let promises = [];
-    toRestore.forEach(item => {
+    restorableItems.forEach(item => {
         const rawData = backupObj[item.key];
         if (rawData) {
             try {
@@ -9306,6 +9451,11 @@ window.restoreFromBackup = function(dateStr) {
             }
         }
     });
+
+    if (promises.length === 0) {
+        alert("\u5fa9\u5143\u3067\u304d\u308b\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u30c7\u30fc\u30bf\u304c\u3042\u308a\u307e\u305b\u3093\u3002\u5225\u306e\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u3092\u9078\u3093\u3067\u304f\u3060\u3055\u3044\u3002");
+        return;
+    }
 
     Promise.all(promises).then(() => {
         alert("復元が完了しました。ページを再読み込みします。");

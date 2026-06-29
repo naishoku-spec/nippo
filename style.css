@@ -3490,3 +3490,44 @@ td:hover .sn-comment-trigger,
     color: #6d28d9 !important;
     font-weight: 700;
 }
+
+
+/* Mobile usability fixes for Backup & Restore */
+@media (max-width: 768px) {
+    .backup-date-btn {
+        min-height: 44px;
+        touch-action: manipulation;
+    }
+
+    .backup-checkbox-grid label {
+        min-height: 44px;
+        line-height: 1.35 !important;
+        white-space: normal !important;
+        align-items: center !important;
+    }
+
+    .backup-checkbox-grid input[type="checkbox"] {
+        width: 22px !important;
+        height: 22px !important;
+    }
+
+    .backup-detail-card h4 {
+        font-size: 1rem !important;
+        line-height: 1.35 !important;
+        flex-wrap: wrap;
+    }
+
+    .backup-detail-card p {
+        font-size: 0.875rem !important;
+    }
+
+    .backup-detail-card > div:last-child {
+        text-align: center !important;
+    }
+
+    .backup-detail-card button {
+        width: 100%;
+        min-height: 48px;
+        touch-action: manipulation;
+    }
+}
