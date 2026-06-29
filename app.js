@@ -9120,7 +9120,7 @@ window.selectHistoryBackup = function(slot) {
             </label>
         </div>
         <div style="text-align: right;">
-            <button onclick="restoreFromHistory(${slot})" style="background: #ef4444; color: white; border: none; padding: 0.8rem 1.5rem; border-radius: 8px; font-weight: 600; cursor: pointer; transition: background 0.2s; box-shadow: 0 4px 6px rgba(239, 68, 68, 0.2);" onmouseover="this.style.background='#dc2626'" onmouseout="this.style.background='#ef4444'">
+            <button onclick="restoreFromHistory(${slot})" style="background: #ef4444; color: white; border: none; padding: 0.8rem 1.5rem; border-radius: 8px; font-weight: 600; cursor: pointer; box-shadow: 0 4px 6px rgba(239, 68, 68, 0.2);">
                 選択した項目を復元する
             </button>
         </div>
@@ -9141,15 +9141,15 @@ window.restoreFromHistory = function(slot) {
 
     const suffix = 'hist' + slot;
     const checks = [
-        { id: `chk-roll-${suffix}`, key: 'roll', db: ROLL_DB_PATH },
-        { id: `chk-sliver-${suffix}`, key: 'sliver', db: SLIVER_DB_PATH },
-        { id: `chk-hanapon-${suffix}`, key: 'hanapon', db: HANAPON_DB_PATH },
-        { id: `chk-snowsprint-${suffix}`, key: 'snowsprint', db: SNOWSPRINT_DB_PATH },
-        { id: `chk-project-${suffix}`, key: 'project', db: PROJECT_DB_PATH },
-        { id: `chk-records-${suffix}`, key: 'records', db: DB_PATH },
-        { id: `chk-records-${suffix}`, key: 'dailyNotes', db: NOTES_DB_PATH },
-        { id: `chk-records1f-${suffix}`, key: 'records1f', db: `${SECRET_KEY}/${isProduction ? '1f_nippo_records' : '1f_nippo_records_dev'}` },
-        { id: `chk-kenpin1f-${suffix}`, key: 'kenpin1f', db: `${SECRET_KEY}/${isProduction ? '1f_kenpin_records' : '1f_kenpin_records_dev'}` }
+        { id: `chk-roll-${suffix}`, key: 'roll', ls: ROLL_STORAGE_KEY, db: ROLL_DB_PATH },
+        { id: `chk-sliver-${suffix}`, key: 'sliver', ls: SLIVER_STORAGE_KEY, db: SLIVER_DB_PATH },
+        { id: `chk-hanapon-${suffix}`, key: 'hanapon', ls: HANAPON_STORAGE_KEY, db: HANAPON_DB_PATH },
+        { id: `chk-snowsprint-${suffix}`, key: 'snowsprint', ls: SNOWSPRINT_STORAGE_KEY, db: SNOWSPRINT_DB_PATH },
+        { id: `chk-project-${suffix}`, key: 'project', ls: 'nippo_boards_data', db: PROJECT_DB_PATH },
+        { id: `chk-records-${suffix}`, key: 'records', ls: LS_KEY, db: DB_PATH },
+        { id: `chk-records-${suffix}`, key: 'dailyNotes', ls: NOTES_LS_KEY, db: NOTES_DB_PATH },
+        { id: `chk-records1f-${suffix}`, key: 'records1f', ls: isProduction ? '1f_nippo_records' : '1f_nippo_records_dev', db: `${SECRET_KEY}/${isProduction ? '1f_nippo_records' : '1f_nippo_records_dev'}` },
+        { id: `chk-kenpin1f-${suffix}`, key: 'kenpin1f', ls: isProduction ? '1f_kenpin_records' : '1f_kenpin_records_dev', db: `${SECRET_KEY}/${isProduction ? '1f_kenpin_records' : '1f_kenpin_records_dev'}` }
     ];
 
     const toRestore = checks.filter(c => document.getElementById(c.id)?.checked);
@@ -9251,7 +9251,7 @@ window.selectBackupDate = function(dateStr) {
             </label>
         </div>
         <div style="text-align: right;">
-            <button onclick="restoreFromBackup('${dateStr}')" style="background: #ef4444; color: white; border: none; padding: 0.8rem 1.5rem; border-radius: 8px; font-weight: 600; cursor: pointer; transition: background 0.2s; box-shadow: 0 4px 6px rgba(239, 68, 68, 0.2);" onmouseover="this.style.background='#dc2626'" onmouseout="this.style.background='#ef4444'">
+            <button onclick="restoreFromBackup('${dateStr}')" style="background: #ef4444; color: white; border: none; padding: 0.8rem 1.5rem; border-radius: 8px; font-weight: 600; cursor: pointer; box-shadow: 0 4px 6px rgba(239, 68, 68, 0.2);">
                 選択した項目を復元する
             </button>
         </div>
