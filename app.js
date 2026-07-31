@@ -1647,7 +1647,8 @@ function getLocalBackupSnapshot() {
         snowsprint: localStorage.getItem('snowsprintInventoryData'),
         project: localStorage.getItem('nippo_boards_data'),
         records1f: localStorage.getItem(isProduction ? '1f_nippo_records' : '1f_nippo_records_dev'),
-        kenpin1f: localStorage.getItem(isProduction ? '1f_kenpin_records' : '1f_kenpin_records_dev')
+        kenpin1f: localStorage.getItem(isProduction ? '1f_kenpin_records' : '1f_kenpin_records_dev'),
+        saidan: localStorage.getItem(isProduction ? 'saidan_records' : 'saidan_records_dev')
     };
 }
 
@@ -1760,7 +1761,8 @@ function saveHistoryBackup() {
             snowsprint: localStorage.getItem('snowsprintInventoryData'),
             project: localStorage.getItem('nippo_boards_data'),
             records1f: localStorage.getItem(isProduction ? '1f_nippo_records' : '1f_nippo_records_dev'),
-            kenpin1f: localStorage.getItem(isProduction ? '1f_kenpin_records' : '1f_kenpin_records_dev')
+            kenpin1f: localStorage.getItem(isProduction ? '1f_kenpin_records' : '1f_kenpin_records_dev'),
+            saidan: localStorage.getItem(isProduction ? 'saidan_records' : 'saidan_records_dev')
         };
 
         // スライド処理: 3→削除、2→3、1→2、新規→1
@@ -9236,6 +9238,9 @@ window.selectHistoryBackup = function(slot) {
             <label style="display: flex; align-items: center; justify-content: flex-start; gap: 0.75rem; cursor: pointer; padding: 0.75rem 1rem; border: 1px solid #e2e8f0; border-radius: 8px; transition: background 0.2s; white-space: nowrap;">
                 <input type="checkbox" id="chk-project-hist${slot}" value="project" style="width: 1.2rem; height: 1.2rem; margin: 0; padding: 0; flex-shrink: 0;"> 進捗管理表
             </label>
+            <label style="display: flex; align-items: center; justify-content: flex-start; gap: 0.75rem; cursor: pointer; padding: 0.75rem 1rem; border: 1px solid #e2e8f0; border-radius: 8px; transition: background 0.2s; white-space: nowrap;">
+                <input type="checkbox" id="chk-saidan-hist${slot}" value="saidan" style="width: 1.2rem; height: 1.2rem; margin: 0; padding: 0; flex-shrink: 0;"> 裁断
+            </label>
         </div>
         <div style="text-align: right;">
             <button onclick="restoreFromHistory(${slot})" style="background: #ef4444; color: white; border: none; padding: 0.8rem 1.5rem; border-radius: 8px; font-weight: 600; cursor: pointer; box-shadow: 0 4px 6px rgba(239, 68, 68, 0.2);">
@@ -9267,7 +9272,8 @@ window.restoreFromHistory = function(slot) {
         { id: `chk-records-${suffix}`, key: 'records', ls: LS_KEY, db: DB_PATH },
         { id: `chk-records-${suffix}`, key: 'dailyNotes', ls: NOTES_LS_KEY, db: NOTES_DB_PATH },
         { id: `chk-records1f-${suffix}`, key: 'records1f', ls: isProduction ? '1f_nippo_records' : '1f_nippo_records_dev', db: `${SECRET_KEY}/${isProduction ? '1f_nippo_records' : '1f_nippo_records_dev'}` },
-        { id: `chk-kenpin1f-${suffix}`, key: 'kenpin1f', ls: isProduction ? '1f_kenpin_records' : '1f_kenpin_records_dev', db: `${SECRET_KEY}/${isProduction ? '1f_kenpin_records' : '1f_kenpin_records_dev'}` }
+        { id: `chk-kenpin1f-${suffix}`, key: 'kenpin1f', ls: isProduction ? '1f_kenpin_records' : '1f_kenpin_records_dev', db: `${SECRET_KEY}/${isProduction ? '1f_kenpin_records' : '1f_kenpin_records_dev'}` },
+        { id: `chk-saidan-${suffix}`, key: 'saidan', ls: isProduction ? 'saidan_records' : 'saidan_records_dev', db: `${SECRET_KEY}/${isProduction ? 'saidan_records' : 'saidan_records_dev'}` }
     ];
 
     const toRestore = checks.filter(c => document.getElementById(c.id)?.checked);
@@ -9383,6 +9389,9 @@ window.selectBackupDate = function(dateStr) {
             <label style="display: flex; align-items: center; justify-content: flex-start; gap: 0.75rem; cursor: pointer; padding: 0.75rem 1rem; border: 1px solid #e2e8f0; border-radius: 8px; transition: background 0.2s; white-space: nowrap;">
                 <input type="checkbox" id="chk-project-${dateStr}" value="project" style="width: 1.2rem; height: 1.2rem; margin: 0; padding: 0; flex-shrink: 0;"> 進捗管理表
             </label>
+            <label style="display: flex; align-items: center; justify-content: flex-start; gap: 0.75rem; cursor: pointer; padding: 0.75rem 1rem; border: 1px solid #e2e8f0; border-radius: 8px; transition: background 0.2s; white-space: nowrap;">
+                <input type="checkbox" id="chk-saidan-${dateStr}" value="saidan" style="width: 1.2rem; height: 1.2rem; margin: 0; padding: 0; flex-shrink: 0;"> 裁断
+            </label>
         </div>
         <div style="text-align: right;">
             <button onclick="restoreFromBackup('${dateStr}')" style="background: #ef4444; color: white; border: none; padding: 0.8rem 1.5rem; border-radius: 8px; font-weight: 600; cursor: pointer; box-shadow: 0 4px 6px rgba(239, 68, 68, 0.2);">
@@ -9413,7 +9422,8 @@ window.restoreFromBackup = function(dateStr) {
         { id: `chk-records-${dateStr}`, key: 'records', db: DB_PATH },
         { id: `chk-records-${dateStr}`, key: 'dailyNotes', db: NOTES_DB_PATH }, // 2階日報も一緒に復元
         { id: `chk-records1f-${dateStr}`, key: 'records1f', db: `${SECRET_KEY}/${isProduction ? '1f_nippo_records' : '1f_nippo_records_dev'}` },
-        { id: `chk-kenpin1f-${dateStr}`, key: 'kenpin1f', db: `${SECRET_KEY}/${isProduction ? '1f_kenpin_records' : '1f_kenpin_records_dev'}` }
+        { id: `chk-kenpin1f-${dateStr}`, key: 'kenpin1f', db: `${SECRET_KEY}/${isProduction ? '1f_kenpin_records' : '1f_kenpin_records_dev'}` },
+        { id: `chk-saidan-${dateStr}`, key: 'saidan', db: `${SECRET_KEY}/${isProduction ? 'saidan_records' : 'saidan_records_dev'}` }
     ];
 
     const toRestore = checks.filter(c => document.getElementById(c.id)?.checked);

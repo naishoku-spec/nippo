@@ -1,0 +1,979 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>裁断 - 日報管理</title>
+    <meta name="description" content="裁断の日報管理アプリ">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;600;700;800&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/ja.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+    <style>
+        /* ========================================
+           裁断ページ専用スタイル（アイデアC: 2段組レイアウト）
+           ======================================== */
+
+        .saidan-main-card {
+            background: var(--bg-card);
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            overflow: hidden;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+            margin-bottom: 2rem;
+        }
+
+        .saidan-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.25rem 1.75rem;
+            border-bottom: 1px solid var(--border);
+            background: linear-gradient(to right, rgba(99, 102, 241, 0.03), transparent);
+        }
+
+        .saidan-card-header h2 {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .saidan-card-header h2::before {
+            content: '';
+            display: inline-block;
+            width: 4px;
+            height: 24px;
+            background: linear-gradient(180deg, var(--primary), #818cf8);
+            border-radius: 2px;
+        }
+
+        /* 項目リストコンテナ */
+        .saidan-items-container {
+            padding: 1.25rem 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        /* 各レコードカード（2段構成） */
+        .saidan-item-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1rem 1.25rem;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .saidan-item-card:hover {
+            border-color: rgba(99, 102, 241, 0.3);
+            box-shadow: 0 4px 16px rgba(99, 102, 241, 0.08);
+            background: rgba(99, 102, 241, 0.01);
+        }
+
+        /* 1段目: 製品名・開始時間・終了時間・作業者 */
+        .saidan-row-top {
+            display: grid;
+            grid-template-columns: 60px 1fr 110px 110px 110px;
+            gap: 0.75rem;
+            align-items: center;
+        }
+
+        .row-number {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            background: linear-gradient(135deg, var(--primary), #818cf8);
+            color: white;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 0.8rem;
+            flex-shrink: 0;
+            margin: 0 auto;
+        }
+
+        /* 2段目: 備考欄 (幅100%) */
+        .saidan-row-bottom {
+            display: grid;
+            grid-template-columns: 60px 1fr;
+            gap: 0.75rem;
+            align-items: flex-start;
+            padding-top: 0.5rem;
+            border-top: 1px dashed rgba(226, 232, 240, 0.8);
+        }
+
+        .notes-label {
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            padding-top: 0.6rem;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            gap: 0.2rem;
+            width: 100%;
+        }
+
+        .saidan-inline-input {
+            width: 100%;
+            border: 1px solid var(--border);
+            background: var(--bg-main);
+            padding: 0.55rem 0.75rem;
+            font-size: 0.95rem;
+            font-family: inherit;
+            color: var(--text-main);
+            border-radius: 8px;
+            transition: all 0.2s ease;
+            outline: none;
+            box-sizing: border-box;
+        }
+
+        .saidan-inline-input:hover {
+            border-color: rgba(99, 102, 241, 0.3);
+            background: white;
+        }
+
+        .saidan-inline-input:focus {
+            background: white;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+
+        .saidan-inline-input.time-input {
+            text-align: center;
+            font-variant-numeric: tabular-nums;
+            font-weight: 500;
+        }
+
+        /* 備考欄用マルチラインテキストエリア */
+        .saidan-notes-textarea {
+            width: 100%;
+            min-height: 42px;
+            padding: 0.55rem 0.75rem;
+            border: 1px solid var(--border);
+            background: var(--bg-main);
+            border-radius: 8px;
+            font-family: inherit;
+            font-size: 0.95rem;
+            color: var(--text-main);
+            resize: vertical;
+            box-sizing: border-box;
+            line-height: 1.5;
+            transition: all 0.2s ease;
+            outline: none;
+        }
+
+        .saidan-notes-textarea:hover {
+            border-color: rgba(99, 102, 241, 0.3);
+            background: white;
+        }
+
+        .saidan-notes-textarea:focus {
+            background: white;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+
+        /* 項目ヘッダー（全体のラベル） */
+        .saidan-header-labels {
+            display: grid;
+            grid-template-columns: 60px 1fr 110px 110px 110px;
+            gap: 0.75rem;
+            padding: 0.75rem 2.75rem 0.25rem 2.75rem;
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+
+        .saidan-header-labels .center {
+            text-align: center;
+        }
+
+        /* 記録追加セクション */
+        .saidan-add-card {
+            background: var(--bg-card);
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            padding: 1.75rem 2.75rem;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+            margin-bottom: 2rem;
+        }
+
+        .saidan-add-header {
+            margin-bottom: 1.25rem;
+        }
+
+        .saidan-add-header h2 {
+            font-size: 1.125rem;
+            font-weight: 700;
+            margin-bottom: 0.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .saidan-add-header p {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+        }
+
+        .saidan-form-row-top {
+            display: grid;
+            grid-template-columns: 60px 1fr 110px 110px 110px;
+            gap: 0.75rem;
+            align-items: end;
+            margin-bottom: 0.75rem;
+        }
+
+        .saidan-form-row-bottom {
+            display: grid;
+            grid-template-columns: 60px 1fr auto;
+            gap: 0.75rem;
+            align-items: center;
+            padding-top: 0.75rem;
+            border-top: 1px dashed rgba(226, 232, 240, 0.8);
+        }
+
+        .saidan-form .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+
+        .saidan-form .form-group label {
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+
+        .saidan-form .form-group label.center {
+            text-align: center;
+            width: 100%;
+        }
+
+        .saidan-form-label-notes {
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        .saidan-form .form-group input {
+            width: 100%;
+            padding: 0.6rem 0.75rem;
+            border: 1.5px solid var(--border);
+            border-radius: 10px;
+            font-size: 0.95rem;
+            font-family: inherit;
+            color: var(--text-main);
+            background: var(--bg-main);
+            transition: all 0.2s ease;
+            box-sizing: border-box;
+        }
+
+        .saidan-form .form-group input.time-input {
+            text-align: center;
+        }
+
+        .saidan-form .form-group input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+            outline: none;
+        }
+
+        .saidan-btn-add {
+            background: linear-gradient(135deg, var(--primary) 0%, #818cf8 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            padding: 0.65rem 1.5rem;
+            font-size: 0.95rem;
+            font-weight: 700;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+            white-space: nowrap;
+            height: 42px;
+        }
+
+        .saidan-btn-add:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(79, 70, 229, 0.4);
+        }
+
+        .saidan-btn-add:active {
+            transform: translateY(0);
+        }
+
+        /* ゴミ箱セクション */
+        .saidan-trash-section {
+            margin-top: 1.5rem;
+            padding-top: 1.25rem;
+            border-top: 1px dashed var(--border);
+        }
+
+        .saidan-trash-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+        }
+
+        .saidan-trash-header h3 {
+            font-size: 1.05rem;
+            color: var(--danger);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .saidan-trash-toggle {
+            background: none;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 5px 12px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            color: var(--text-muted);
+            font-family: inherit;
+            transition: all 0.2s ease;
+        }
+
+        .saidan-trash-toggle:hover {
+            background: rgba(239, 68, 68, 0.05);
+            border-color: var(--danger);
+            color: var(--danger);
+        }
+
+        .saidan-trash-panel {
+            display: none;
+            background: #fff5f5;
+            border: 1px solid #feb2b2;
+            border-radius: 10px;
+            padding: 1rem;
+        }
+
+        .saidan-trash-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .saidan-trash-chip {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: white;
+            border: 1px solid #feb2b2;
+            border-radius: 20px;
+            padding: 4px 12px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            user-select: none;
+        }
+
+        .saidan-trash-chip:hover {
+            background: #fff5f5;
+            transform: translateY(-1px);
+        }
+
+        /* 保存ステータス */
+        .save-status {
+            font-size: 0.75rem;
+            color: var(--accent);
+            font-weight: 600;
+            transition: opacity 0.3s ease;
+        }
+
+        /* 月別集計用スタイル */
+        .monthly-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1.25rem;
+            margin-bottom: 2rem;
+        }
+
+        .monthly-stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .monthly-stat-label {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--text-muted);
+        }
+
+        .monthly-stat-value {
+            font-size: 2.25rem;
+            font-weight: 800;
+            color: var(--primary);
+            font-family: 'Outfit', sans-serif;
+            line-height: 1.1;
+        }
+
+        .monthly-products-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .monthly-product-item {
+            background: rgba(99, 102, 241, 0.04);
+            border: 1px solid rgba(99, 102, 241, 0.12);
+            border-radius: 12px;
+            padding: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .monthly-product-name {
+            font-weight: 700;
+            font-size: 0.95rem;
+            color: var(--text-main);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .monthly-product-count {
+            font-size: 1.25rem;
+            font-weight: 800;
+            color: var(--primary);
+            font-family: 'Outfit', sans-serif;
+        }
+
+        /* 日別テーブル（月別ビュー用） */
+        .saidan-month-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+
+        .saidan-month-table th {
+            background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+            color: #f1f5f9;
+            padding: 0.85rem 1rem;
+            font-weight: 700;
+            text-align: left;
+            border-bottom: 2px solid #0f172a;
+        }
+
+        .saidan-month-table td {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--border);
+            vertical-align: middle;
+        }
+
+        .saidan-month-table tr.date-group-row td {
+            background: rgba(99, 102, 241, 0.08);
+            font-weight: 700;
+            color: var(--primary);
+            padding: 0.6rem 1rem;
+        }
+
+        /* 月別テーブルのタップ可能な備考セル要素 */
+        .month-note-cell-content {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            cursor: pointer;
+            padding: 0.25rem 0.6rem;
+            border-radius: 6px;
+            background: rgba(99, 102, 241, 0.06);
+            transition: all 0.2s ease;
+            max-width: 100%;
+            box-sizing: border-box;
+        }
+
+        .month-note-cell-content:hover {
+            background: rgba(99, 102, 241, 0.15);
+        }
+
+        .note-text-snippet {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            max-width: 200px;
+        }
+
+        /* モーダルダイアログ */
+        .saidan-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(4px);
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+            box-sizing: border-box;
+        }
+
+        .saidan-modal-content {
+            background: white;
+            border-radius: 16px;
+            max-width: 480px;
+            width: 100%;
+            padding: 1.5rem;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+        }
+
+        .saidan-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .saidan-modal-header h3 {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--text-main);
+            margin: 0;
+        }
+
+        .saidan-modal-close {
+            background: none;
+            border: none;
+            font-size: 1.25rem;
+            cursor: pointer;
+            color: var(--text-muted);
+            padding: 0.2rem 0.5rem;
+            border-radius: 6px;
+        }
+
+        .saidan-modal-close:hover {
+            background: #f1f5f9;
+        }
+
+        .saidan-modal-body {
+            font-size: 0.95rem;
+            line-height: 1.6;
+            color: var(--text-main);
+            white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+
+        .mobile-only-text { display: none; }
+        .desktop-only-text { display: inline; }
+
+        /* 月別集計の日付列は常に非表示 */
+        .saidan-month-table .col-date { display: none !important; }
+
+        /* レスポンシブ (スマホ版のみの修正) */
+        @media (max-width: 768px) {
+            .mobile-only-text { display: inline; }
+            .desktop-only-text { display: none; }
+
+            /* スマホ版で月別集計の日付列を非表示 */
+            .saidan-month-table .col-date {
+                display: none !important;
+            }
+
+            /* スマホ版でヘッダータイトルをすべて改行なしの1行に統一 */
+            .saidan-month-table th {
+                white-space: nowrap !important;
+                padding: 0.6rem 0.35rem !important;
+                font-size: 0.75rem !important;
+            }
+
+            .saidan-month-table td {
+                padding: 0.5rem 0.35rem !important;
+                font-size: 0.8rem !important;
+            }
+
+            .saidan-row-top {
+                grid-template-columns: 36px 1fr 65px 65px 65px;
+                gap: 0.4rem;
+            }
+
+            .saidan-row-bottom {
+                grid-template-columns: 36px 1fr;
+                gap: 0.4rem;
+            }
+
+            .saidan-header-labels {
+                grid-template-columns: 36px 1fr 65px 65px 65px;
+                gap: 0.4rem;
+                /* items-container(1rem) + item-card(1.25rem) = 2.25rem に合わせてズレを解消 */
+                padding: 0.5rem 2.25rem 0 2.25rem;
+            }
+
+            .saidan-items-container {
+                padding: 1rem;
+            }
+
+            .saidan-add-card {
+                padding: 1.25rem 1.5rem;
+            }
+
+            .saidan-form-row-top {
+                grid-template-columns: 1fr 65px 65px 65px;
+                gap: 0.4rem;
+            }
+
+            /* スマホ版: form-row-topの先頭スペーサーを非表示にして備考欄の左端に揃える */
+            .saidan-form-row-top > div:first-child {
+                display: none;
+            }
+
+            /* スマホ版: フォームの備考ラベルを非表示にし、グリッドを1fr autoに変更 */
+            .saidan-form-row-bottom {
+                grid-template-columns: 1fr auto;
+                gap: 0.4rem;
+            }
+
+            .saidan-form-label-notes {
+                display: none;
+            }
+
+            .saidan-form .form-group label {
+                white-space: nowrap;
+                font-size: 0.65rem;
+            }
+
+            /* スマホ版: フォームのヘッダーラベルを中央揃え */
+            .saidan-form-row-top .form-group label {
+                text-align: center;
+            }
+
+            /* スマホ版の月別集計テーブル備考省略表示 */
+            .note-text-snippet {
+                max-width: 55px;
+            }
+
+            .saidan-month-table td.month-note-td {
+                max-width: 70px;
+                overflow: hidden;
+            }
+
+            /* スマホ版: ヘッダーラベル「製品名」を中央揃え */
+            .saidan-header-labels div {
+                text-align: center;
+            }
+
+            /* スマホ版: 備考ラベル（📝 備考）を非表示 */
+            .notes-label {
+                display: none;
+            }
+
+            /* 備考ラベルが非表示になった分、saidan-row-bottomの列を1列に変更 */
+            .saidan-row-bottom {
+                grid-template-columns: 1fr;
+                gap: 0.4rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app-wrapper">
+        <!-- Sidebar Menu -->
+        <aside class="sidebar" id="sidebar">
+            <button class="sidebar-close-btn" id="sidebar-close-btn" aria-label="メニューを閉じる">✕</button>
+            <div class="sidebar-header">
+                <div class="logo-section">
+                    <h1 style="font-size: 1.5rem;">管理システム</h1>
+                </div>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-title">日報管理</div>
+                <nav class="sidebar-nav">
+                    <a href="1f.html" class="nav-item">
+                        <span class="nav-icon">・</span>
+                        1階プレス機
+                    </a>
+                    <a href="1f-kenpin.html" class="nav-item">
+                        <span class="nav-icon">・</span>
+                        1階検品機
+                    </a>
+                    <a href="index.html?view=day" class="nav-item">
+                        <span class="nav-icon">・</span>
+                        2階製造
+                    </a>
+                    <a href="saidan.html" class="nav-item active">
+                        <span class="nav-icon">・</span>
+                        裁断
+                    </a>
+                </nav>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-title">在庫管理</div>
+                <nav class="sidebar-nav">
+                    <a href="index.html?view=stock" class="nav-item">
+                        <span class="nav-icon">・</span>
+                        ロール在庫
+                    </a>
+                    <a href="index.html?view=sliver" class="nav-item">
+                        <span class="nav-icon">・</span>
+                        スライバー在庫
+                    </a>
+                    <a href="index.html?view=hanapon" class="nav-item">
+                        <span class="nav-icon">・</span>
+                        鼻ぽん在庫
+                    </a>
+                    <a href="index.html?view=snowsprint" class="nav-item">
+                        <span class="nav-icon">・</span>
+                        スノースプリント資材
+                    </a>
+                </nav>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-title">シフト管理</div>
+                <nav class="sidebar-nav">
+                    <a href="index.html?view=shift" class="nav-item">
+                        <span class="nav-icon">・</span>
+                        シフト表
+                    </a>
+                </nav>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-title">プロジェクト管理</div>
+                <nav class="sidebar-nav">
+                    <a href="index.html?view=project" class="nav-item">
+                        <span class="nav-icon">・</span>
+                        進捗管理表
+                    </a>
+                </nav>
+            </div>
+
+            <div class="sidebar-section" style="margin-top: 3rem;">
+                <nav class="sidebar-nav">
+                    <a href="index.html?view=backup" class="nav-item" style="color: #64748b; font-size: 0.9rem;">
+                        <span class="nav-icon">⚙</span>
+                        バックアップ・復元
+                    </a>
+                </nav>
+            </div>
+        </aside>
+
+        <!-- Sidebar Overlay -->
+        <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+        <!-- Main Content -->
+        <div class="main-container">
+            <header>
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <button class="hamburger-btn" id="hamburger-btn" aria-label="メニューを開く">☰</button>
+                    <div class="logo-section">
+                        <h1>裁断 <span style="font-weight:300; opacity:0.7">Cutting Log</span></h1>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 1rem; align-items: center;">
+                    <!-- 日別 / 月別集計 切り替えトグル -->
+                    <div class="view-toggle">
+                        <button id="saidan-view-day-btn" class="toggle-btn active">日別</button>
+                        <button id="saidan-view-month-btn" class="toggle-btn">月別集計</button>
+                    </div>
+                    <div class="date-selector">
+                        <input type="date" id="current-date-picker">
+                    </div>
+                </div>
+            </header>
+
+            <!-- ================= 日別ビュー ================= -->
+            <div id="saidan-day-view-container">
+                <!-- Main Records Card (2段組構造) -->
+                <div class="saidan-main-card">
+                    <div class="saidan-card-header">
+                        <h2>本日の稼働記録</h2>
+                        <span id="saidan-record-count" style="font-size: 0.85rem; color: var(--text-muted);"></span>
+                    </div>
+
+                    <!-- ヘッダーラベル -->
+                    <div class="saidan-header-labels">
+                        <div></div>
+                        <div>製品名</div>
+                        <div class="center">開始</div>
+                        <div class="center">終了</div>
+                        <div class="center">作業者</div>
+                    </div>
+
+                    <!-- 2段組リスト要素 -->
+                    <div id="saidan-items-container" class="saidan-items-container">
+                        <!-- JSにより2段組の要素がレンダリングされます -->
+                    </div>
+                </div>
+
+                <!-- Add Entry -->
+                <div class="saidan-add-card">
+                    <div class="saidan-add-header">
+                        <h2>📋 記録を追加</h2>
+                        <p>新しい裁断稼働記録を追加します。</p>
+                    </div>
+
+                    <form id="saidan-entry-form" class="saidan-form">
+                        <!-- 1段目: 製品名, 開始, 終了, 作業者 -->
+                        <div class="saidan-form-row-top">
+                            <div></div>
+                            <div class="form-group">
+                                <label>製品名</label>
+                                <input type="text" id="saidan-product" required placeholder="製品名を入力">
+                            </div>
+                            <div class="form-group">
+                                <label class="center">開始</label>
+                                <input type="text" id="saidan-start-time" value="" placeholder="HH:mm"
+                                    inputmode="numeric" class="time-input">
+                            </div>
+                            <div class="form-group">
+                                <label class="center">終了</label>
+                                <input type="text" id="saidan-end-time" value="" placeholder="HH:mm"
+                                    inputmode="numeric" class="time-input">
+                            </div>
+                            <div class="form-group">
+                                <label class="center">作業者</label>
+                                <input type="text" id="saidan-worker" value="" placeholder="作業者" class="time-input">
+                            </div>
+                        </div>
+                        <!-- 2段目: 備考 ＋ 追加ボタン -->
+                        <div class="saidan-form-row-bottom">
+                            <div class="saidan-form-label-notes">📝 備考</div>
+                            <div class="form-group" style="margin: 0;">
+                                <input type="text" id="saidan-note" placeholder="備考を入力">
+                            </div>
+                            <button type="submit" class="saidan-btn-add">追加</button>
+                        </div>
+                    </form>
+
+                    <!-- Trash Section -->
+                    <div class="saidan-trash-section">
+                        <div class="saidan-trash-header">
+                            <h3>
+                                <svg width="18" height="18" fill="currentColor" viewBox="0 0 16 16">
+                                    <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
+                                    <path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
+                                </svg>
+                                記録の削除
+                            </h3>
+                            <button class="saidan-trash-toggle" id="saidan-trash-toggle" onclick="toggleSaidanTrash()">
+                                削除パネルを表示
+                            </button>
+                        </div>
+                        <div class="saidan-trash-panel" id="saidan-trash-panel">
+                            <p style="font-size: 0.85rem; color: #c53030; margin-bottom: 0.75rem;">削除したいレコードを選択してください：</p>
+                            <div class="saidan-trash-list" id="saidan-trash-list">
+                                <!-- Dynamic record chips -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ================= 月別集計ビュー ================= -->
+            <div id="saidan-month-view-container" style="display: none;">
+                <!-- 今月のサマリーカード -->
+                <div class="monthly-stats-grid">
+                    <div class="monthly-stat-card">
+                        <div class="monthly-stat-label">今月の稼働日数</div>
+                        <div class="monthly-stat-value" id="saidan-month-days-count">0 日</div>
+                    </div>
+                    <div class="monthly-stat-card">
+                        <div class="monthly-stat-label">今月の総裁断作業数</div>
+                        <div class="monthly-stat-value" id="saidan-month-total-count">0 件</div>
+                    </div>
+                    <div class="monthly-stat-card">
+                        <div class="monthly-stat-label">対象製品数</div>
+                        <div class="monthly-stat-value" id="saidan-month-products-count">0 種</div>
+                    </div>
+                </div>
+
+                <!-- 製品別月間集計 -->
+                <div class="saidan-main-card" style="margin-bottom: 2rem;">
+                    <div class="saidan-card-header">
+                        <h2>製品別 月間集計</h2>
+                    </div>
+                    <div style="padding: 1.5rem;">
+                        <div class="monthly-products-list" id="saidan-monthly-products-list">
+                            <!-- JSで自動生成 -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 月間日別作業履歴テーブル -->
+                <div class="saidan-main-card">
+                    <div class="saidan-card-header">
+                        <h2>今月の日別作業履歴</h2>
+                    </div>
+                    <div class="table-container-no-scroll" style="overflow-x: auto;">
+                        <table class="saidan-month-table">
+                            <thead>
+                                <tr>
+                                    <th class="col-date" style="width: 120px;">日付</th>
+                                    <th class="col-product" style="width: 25%; text-align: center;">製品名</th>
+                                    <th style="width: 80px; text-align: center;">開始</th>
+                                    <th style="width: 80px; text-align: center;">終了</th>
+                                    <th style="width: 90px; text-align: center;">作業者</th>
+                                    <th>備考</th>
+                                </tr>
+                            </thead>
+                            <tbody id="saidan-monthly-daily-list">
+                                <!-- JSで自動生成 -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- 備考閲覧モーダル -->
+    <div id="saidan-note-modal" class="saidan-modal" style="display:none;" onclick="closeSaidanNoteModal()">
+        <div class="saidan-modal-content" onclick="event.stopPropagation()">
+            <div class="saidan-modal-header">
+                <h3>📝 備考詳細</h3>
+                <button class="saidan-modal-close" onclick="closeSaidanNoteModal()">✕</button>
+            </div>
+            <div class="saidan-modal-body" id="saidan-modal-note-body"></div>
+        </div>
+    </div>
+
+    <script src="saidan-app.js"></script>
+</body>
+
+</html>
