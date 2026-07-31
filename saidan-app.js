@@ -485,10 +485,10 @@ function renderRecords() {
                        placeholder="製品名を入力"
                        onblur="updateRecord(${record.id}, 'product', this.value)">
                 <input type="text" class="saidan-inline-input time-input" value="${record.startTime || ''}"
-                       placeholder="HH:mm" inputmode="numeric" onfocus="this.select()"
+                       placeholder="開始" inputmode="numeric" onfocus="this.select()"
                        onblur="this.value = normalizeTime(this.value); updateRecord(${record.id}, 'startTime', this.value)">
                 <input type="text" class="saidan-inline-input time-input" value="${record.endTime || ''}"
-                       placeholder="HH:mm" inputmode="numeric" onfocus="this.select()"
+                       placeholder="終了" inputmode="numeric" onfocus="this.select()"
                        onblur="this.value = normalizeTime(this.value); updateRecord(${record.id}, 'endTime', this.value)">
                 <input type="text" class="saidan-inline-input time-input" value="${record.worker || ''}"
                        placeholder="作業者"

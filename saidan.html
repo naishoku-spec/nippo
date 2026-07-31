@@ -623,21 +623,32 @@
                 font-size: 0.8rem !important;
             }
 
+            /* アイデアB: 1段目=バッジ+製品名フル幅、2段目=開始・終了・作業者3等分 */
             .saidan-row-top {
-                grid-template-columns: 36px 1fr 65px 65px 65px;
-                gap: 0.4rem;
+                display: grid;
+                grid-template-columns: 36px 1fr 1fr 1fr;
+                grid-template-rows: auto auto;
+                grid-template-areas:
+                    "badge product product product"
+                    ".     start   end     worker";
+                gap: 0.5rem;
+                align-items: center;
             }
+
+            .saidan-row-top > *:nth-child(1) { grid-area: badge; }
+            .saidan-row-top > *:nth-child(2) { grid-area: product; }
+            .saidan-row-top > *:nth-child(3) { grid-area: start; }
+            .saidan-row-top > *:nth-child(4) { grid-area: end; }
+            .saidan-row-top > *:nth-child(5) { grid-area: worker; }
 
             .saidan-row-bottom {
                 grid-template-columns: 36px 1fr;
                 gap: 0.4rem;
             }
 
+            /* ヘッダーラベルもアイデアBの2段構成に対応 */
             .saidan-header-labels {
-                grid-template-columns: 36px 1fr 65px 65px 65px;
-                gap: 0.4rem;
-                /* items-container(1rem) + item-card(1.25rem) = 2.25rem に合わせてズレを解消 */
-                padding: 0.5rem 2.25rem 0 2.25rem;
+                display: none;
             }
 
             .saidan-items-container {
@@ -648,34 +659,45 @@
                 padding: 1.25rem 1.5rem;
             }
 
+            /* フォームrow-top: 1段目=製品名(全幅)、2段目=開始・終了・作業者(3等分) */
             .saidan-form-row-top {
-                grid-template-columns: 1fr 65px 65px 65px;
-                gap: 0.4rem;
+                display: grid;
+                grid-template-columns: 1fr 1fr 1fr;
+                grid-template-rows: auto auto;
+                grid-template-areas:
+                    "product product product"
+                    "start   end     worker";
+                gap: 0.5rem;
+                align-items: end;
+                margin-bottom: 0.75rem;
             }
 
-            /* スマホ版: form-row-topの先頭スペーサーを非表示にして備考欄の左端に揃える */
-            .saidan-form-row-top > div:first-child {
-                display: none;
-            }
+            .saidan-form-row-top > div:nth-child(1) { display: none; }
+            .saidan-form-row-top > div:nth-child(2) { grid-area: product; }
+            .saidan-form-row-top > div:nth-child(3) { grid-area: start; }
+            .saidan-form-row-top > div:nth-child(4) { grid-area: end; }
+            .saidan-form-row-top > div:nth-child(5) { grid-area: worker; }
 
-            /* スマホ版: フォームの備考ラベルを非表示にし、グリッドを1fr autoに変更 */
-            .saidan-form-row-bottom {
-                grid-template-columns: 1fr auto;
-                gap: 0.4rem;
-            }
-
-            .saidan-form-label-notes {
-                display: none;
-            }
-
-            .saidan-form .form-group label {
+            /* スマホ版: フォームのヘッダーラベルを中央揃え・小さめフォント */
+            .saidan-form-row-top .form-group label {
+                text-align: center;
                 white-space: nowrap;
                 font-size: 0.65rem;
             }
 
-            /* スマホ版: フォームのヘッダーラベルを中央揃え */
-            .saidan-form-row-top .form-group label {
-                text-align: center;
+            /* スマホ版: フォームの備考・追加ボタン行（カード全幅中央配置） */
+            .saidan-form-row-bottom {
+                display: flex;
+                gap: 0.5rem;
+                padding-left: 0;
+            }
+
+            .saidan-form-row-bottom .form-group {
+                flex: 1;
+            }
+
+            .saidan-form-label-notes {
+                display: none;
             }
 
             /* スマホ版の月別集計テーブル備考省略表示 */
@@ -698,10 +720,11 @@
                 display: none;
             }
 
-            /* 備考ラベルが非表示になった分、saidan-row-bottomの列を1列に変更 */
+            /* スマホ版: 稼働記録カードの備考欄のツラも製品名・開始・終了と揃える */
             .saidan-row-bottom {
-                grid-template-columns: 1fr;
-                gap: 0.4rem;
+                display: block;
+                padding-left: calc(36px + 0.5rem);
+                margin-top: 0.5rem;
             }
         }
     </style>
@@ -857,12 +880,12 @@
                             </div>
                             <div class="form-group">
                                 <label class="center">開始</label>
-                                <input type="text" id="saidan-start-time" value="" placeholder="HH:mm"
+                                <input type="text" id="saidan-start-time" value="" placeholder="開始"
                                     inputmode="numeric" class="time-input">
                             </div>
                             <div class="form-group">
                                 <label class="center">終了</label>
-                                <input type="text" id="saidan-end-time" value="" placeholder="HH:mm"
+                                <input type="text" id="saidan-end-time" value="" placeholder="終了"
                                     inputmode="numeric" class="time-input">
                             </div>
                             <div class="form-group">
