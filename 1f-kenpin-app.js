@@ -16,6 +16,10 @@ if (firebase.apps.length === 0) {
     firebase.initializeApp(firebaseConfig);
 }
 database = firebase.database();
+if (window.SharedSync) {
+    database = SharedSync.guardDatabase(database);
+    SharedSync.startVersionGuard();
+}
 
 const isProduction = true; // 常に本番データ（Web）と同期するためにtrueに変更
 const SECRET_KEY = 'nippo-report-secure-key-2026';
@@ -30,31 +34,38 @@ let records = JSON.parse(localStorage.getItem(LS_KEY)) || [];
 let currentDate = new Date().toLocaleDateString('sv-SE');
 let isFirstLoad = true;
 let activeRecordId = null;
+let recordsSync = null;
 
 // Sync
-if (database) {
-    database.ref(DB_PATH).on('value', (snapshot) => {
-        const firebaseData = snapshot.val();
-        let firebaseRecords = [];
-        if (firebaseData) {
-            firebaseRecords = Array.isArray(firebaseData) ? firebaseData : Object.values(firebaseData);
-        }
+function normalizeKenpinRecords(value) {
+    const list = Array.isArray(value)
+        ? value
+        : Object.values(value && typeof value === 'object' ? value : {});
+    return list.filter(item => item && typeof item === 'object');
+}
 
-        if (isFirstLoad) {
-            isFirstLoad = false;
-            if (firebaseRecords.length > 0) {
-                records = firebaseRecords;
-                localStorage.setItem(LS_KEY, JSON.stringify(records));
-            } else if (records.length > 0) {
-                database.ref(DB_PATH).set(records);
-            }
-        } else if (firebaseRecords.length > 0) {
-            records = firebaseRecords;
+if (database && window.SharedSync) {
+    recordsSync = SharedSync.createPathSync({
+        database,
+        path: DB_PATH,
+        emptyValue: [],
+        normalize: normalizeKenpinRecords,
+        pendingStorageKey: LS_KEY + '_pending_sync',
+        mergeInitial: true,
+        serverSnapshotStorageKey: LS_KEY + '_server_snapshot',
+        getLocal: () => records,
+        setLocal: value => {
+            records = normalizeKenpinRecords(value);
             localStorage.setItem(LS_KEY, JSON.stringify(records));
+        },
+        onRemote: () => {
+            const activeEl = document.activeElement;
+            if (!activeEl || !activeEl.closest('#records-list-kenpin')) renderRecords();
         }
-        renderRecords();
     });
 }
+
+
 
 function isJapaneseHoliday(dateStr) {
     const d = new Date(dateStr);
@@ -343,15 +354,12 @@ function deleteRec(id) {
 }
 
 function save() {
+    if (window.SharedSync && !SharedSync.canWrite()) return false;
+
     localStorage.setItem(LS_KEY, JSON.stringify(records));
-    if (database) {
-        // 空データ保護: recordsが空配列の場合はFirebaseへの書き込みをブロック
-        if (Array.isArray(records) && records.length === 0) {
-            console.warn('BLOCKED: Attempted to save empty records array to Firebase (1F Kenpin)');
-            return;
-        }
-        database.ref(DB_PATH).set(records);
-    }
+
+    if (recordsSync) return recordsSync.save(records);
+    return false;
 }
 
 let isKeyboardNavigating = false;

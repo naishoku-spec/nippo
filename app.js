@@ -1611,12 +1611,197 @@ const firebaseConfig = {
     measurementId: "G-SR8Y5NKQTZ"
 };
 
+const APP_BUILD_ID = '20260803-sync-v7';
+const APP_BUILD_NUMBER = 2026080307;
+const APP_VERSION_METADATA_PATH = 'app-version.json';
+const APP_VERSION_CHECK_INTERVAL_MS = 30000;
+const APP_LATEST_BUILD_LS_KEY = 'nippo_latest_app_build_number';
+let appVersionIsStale = false;
+let appVersionCheckInFlight = false;
+let appVersionCheckTimer = null;
+
+const FIREBASE_WRITE_METHODS = new Set([
+    'set',
+    'update',
+    'remove',
+    'setWithPriority',
+    'transaction'
+]);
+const FIREBASE_REFERENCE_CHAIN_METHODS = new Set([
+    'child',
+    'orderByChild',
+    'orderByKey',
+    'orderByValue',
+    'limitToFirst',
+    'limitToLast',
+    'startAt',
+    'endAt',
+    'equalTo'
+]);
+
+function canWriteAppData() {
+    if (window.SharedSync && !SharedSync.canWrite()) return false;
+    if (!appVersionIsStale) return true;
+    console.warn('Blocked data write because this page is out of date.');
+    return false;
+}
+
+function getBlockedFirebaseWriteError() {
+    const error = new Error('This page is out of date. Reload before saving data.');
+    error.code = 'app-version-stale';
+    return error;
+}
+
+function guardFirebaseReference(reference) {
+    if (!reference) return reference;
+
+    return new Proxy(reference, {
+        get(target, property) {
+            const value = target[property];
+
+            if (FIREBASE_WRITE_METHODS.has(property) && typeof value === 'function') {
+                return (...args) => {
+                    if (canWriteAppData()) return value.apply(target, args);
+
+                    const error = getBlockedFirebaseWriteError();
+                    if (property === 'transaction') {
+                        const completion = args[1];
+                        if (typeof completion === 'function') {
+                            setTimeout(() => completion(error, false, null), 0);
+                        }
+                        return Promise.resolve({ committed: false, snapshot: null });
+                    }
+
+                    return Promise.resolve();
+                };
+            }
+
+            if (FIREBASE_REFERENCE_CHAIN_METHODS.has(property) && typeof value === 'function') {
+                return (...args) => guardFirebaseReference(value.apply(target, args));
+            }
+
+            if ((property === 'parent' || property === 'root') && value) {
+                return guardFirebaseReference(value);
+            }
+
+            return typeof value === 'function' ? value.bind(target) : value;
+        }
+    });
+}
+
+function createGuardedFirebaseDatabase(rawDatabase) {
+    return {
+        ref(path) {
+            return guardFirebaseReference(rawDatabase.ref(path));
+        }
+    };
+}
+
+function showAppUpdateRequired() {
+    if (!document.body || document.getElementById('app-update-lock')) return;
+
+    const overlay = document.createElement('div');
+    overlay.id = 'app-update-lock';
+    overlay.className = 'app-update-lock';
+    overlay.setAttribute('role', 'alertdialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.setAttribute('aria-labelledby', 'app-update-lock-title');
+    overlay.innerHTML = [
+        '<div class="app-update-lock__dialog">',
+        '<div class="app-update-lock__icon" aria-hidden="true">&#x21bb;</div>',
+        '<h2 id="app-update-lock-title">ページを更新してください</h2>',
+        '<p>新しいページが公開されました。データ保護のため、このページからの保存を停止しています。</p>',
+        '<button type="button" id="app-update-lock-reload">再読み込み</button>',
+        '</div>'
+    ].join('');
+
+    overlay.querySelector('#app-update-lock-reload').addEventListener('click', () => {
+        window.location.reload();
+    });
+    document.body.appendChild(overlay);
+}
+
+function markAppVersionStale() {
+    if (appVersionIsStale) return;
+    appVersionIsStale = true;
+    if (appVersionCheckTimer) {
+        clearInterval(appVersionCheckTimer);
+        appVersionCheckTimer = null;
+    }
+    document.documentElement.classList.add('app-version-stale');
+    showAppUpdateRequired();
+}
+
+function getAppVersionMetadataUrl() {
+    const url = new URL(APP_VERSION_METADATA_PATH, document.baseURI || window.location.href);
+    url.searchParams.set('_check', String(Date.now()));
+    return url.toString();
+}
+
+async function checkAppVersion() {
+    if (appVersionIsStale || appVersionCheckInFlight || typeof fetch !== 'function') return;
+    if (window.location.protocol === 'file:') return;
+
+    appVersionCheckInFlight = true;
+    try {
+        const response = await fetch(getAppVersionMetadataUrl(), {
+            cache: 'no-store',
+            headers: { 'Cache-Control': 'no-cache' }
+        });
+        if (!response.ok) return;
+
+        const metadata = await response.json();
+        const latestBuildNumber = Number(metadata?.buildNumber);
+        const latestBuildId = typeof metadata?.buildId === 'string' ? metadata.buildId : '';
+        const newerBuild = Number.isFinite(latestBuildNumber)
+            ? latestBuildNumber > APP_BUILD_NUMBER
+            : Boolean(latestBuildId && latestBuildId !== APP_BUILD_ID);
+
+        if (newerBuild) markAppVersionStale();
+    } catch (error) {
+        // Temporary network failures must not block offline work.
+        console.warn('App version check skipped:', error);
+    } finally {
+        appVersionCheckInFlight = false;
+    }
+}
+
+function startAppVersionGuard() {
+    try {
+        const knownBuildNumber = Number(localStorage.getItem(APP_LATEST_BUILD_LS_KEY));
+        if (Number.isFinite(knownBuildNumber) && knownBuildNumber > APP_BUILD_NUMBER) {
+            markAppVersionStale();
+        } else if (!Number.isFinite(knownBuildNumber) || knownBuildNumber < APP_BUILD_NUMBER) {
+            localStorage.setItem(APP_LATEST_BUILD_LS_KEY, String(APP_BUILD_NUMBER));
+        }
+    } catch (error) {
+        console.warn('App version marker unavailable:', error);
+    }
+
+    window.addEventListener('storage', event => {
+        if (event.key !== APP_LATEST_BUILD_LS_KEY) return;
+        const nextBuildNumber = Number(event.newValue);
+        if (Number.isFinite(nextBuildNumber) && nextBuildNumber > APP_BUILD_NUMBER) {
+            markAppVersionStale();
+        }
+    });
+    window.addEventListener('focus', checkAppVersion);
+    window.addEventListener('pageshow', checkAppVersion);
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') checkAppVersion();
+    });
+
+    checkAppVersion();
+    if (!appVersionIsStale) appVersionCheckTimer = setInterval(checkAppVersion, APP_VERSION_CHECK_INTERVAL_MS);
+}
+
 // Initialize Firebase
 let database = null;
 if (firebaseConfig.apiKey !== "YOUR_API_KEY") {
     firebase.initializeApp(firebaseConfig);
-    database = firebase.database();
+    database = createGuardedFirebaseDatabase(firebase.database());
 }
+if (window.SharedSync) SharedSync.startVersionGuard();
 
 // Environment Detection (Production vs Development)
 const isProduction = true; // 常に本番データ（Web）と同期するためにtrueに変更
@@ -1825,8 +2010,306 @@ document.addEventListener('visibilitychange', () => {
 
 
 // State Management
-let records = JSON.parse(localStorage.getItem(LS_KEY)) || [];
+
+// Keep the existing array format while merging concurrent record changes in Firebase transactions.
+const DAILY_RECORD_KEY_FIELD = '_syncKey';
+const DAILY_RECORDS_PENDING_LS_KEY = LS_KEY + '_pending_sync';
+const DAILY_RECORDS_SERVER_LS_KEY = LS_KEY + '_server_snapshot';
+let recordsSyncReady = false;
+let recordsSyncInFlight = false;
+let recordsSyncRetryTimer = null;
+let recordsPendingSync = null;
+let recordsServerSnapshot = [];
+
+function hashDailyRecordValue(value) {
+    const text = String(value || '');
+    let hash = 2166136261;
+    for (let i = 0; i < text.length; i++) {
+        hash ^= text.charCodeAt(i);
+        hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0).toString(36);
+}
+
+function normalizeDailyRecords(input) {
+    const entries = Array.isArray(input)
+        ? input.map((value, index) => [String(index), value])
+        : Object.entries(input && typeof input === 'object' ? input : {});
+    const sourceRecords = entries
+        .filter(([, value]) => value && typeof value === 'object' && !Array.isArray(value))
+        .map(([sourceKey, value]) => ({ sourceKey, value: { ...value } }));
+    const naturalKeyCounts = {};
+
+    sourceRecords.forEach(({ value }) => {
+        const naturalKey = value.date && value.machine
+            ? 'dm_' + value.date + '_' + value.machine
+            : '';
+        if (naturalKey) naturalKeyCounts[naturalKey] = (naturalKeyCounts[naturalKey] || 0) + 1;
+    });
+
+    const usedKeys = new Set();
+    return sourceRecords.map(({ sourceKey, value }, index) => {
+        const naturalKey = value.date && value.machine
+            ? 'dm_' + value.date + '_' + value.machine
+            : '';
+        let syncKey = typeof value[DAILY_RECORD_KEY_FIELD] === 'string' && value[DAILY_RECORD_KEY_FIELD]
+            ? value[DAILY_RECORD_KEY_FIELD]
+            : '';
+
+        if (!syncKey && naturalKey && naturalKeyCounts[naturalKey] === 1) {
+            syncKey = naturalKey;
+        }
+        if (!syncKey && sourceKey && !/^\d+$/.test(sourceKey)) {
+            syncKey = sourceKey;
+        }
+        if (!syncKey) {
+            const stableValue = value.id !== undefined && value.id !== null
+                ? 'id:' + value.id
+                : JSON.stringify(value);
+            syncKey = 'id_' + hashDailyRecordValue(stableValue);
+        }
+
+        if (usedKeys.has(syncKey)) {
+            syncKey = syncKey + '_' + hashDailyRecordValue((value.id || '') + ':' + index);
+            while (usedKeys.has(syncKey)) syncKey += '_x';
+        }
+        usedKeys.add(syncKey);
+        value[DAILY_RECORD_KEY_FIELD] = syncKey;
+        return value;
+    });
+}
+
+function cloneDailyRecords(input) {
+    try {
+        return normalizeDailyRecords(JSON.parse(JSON.stringify(input || [])));
+    } catch (e) {
+        return normalizeDailyRecords(input || []);
+    }
+}
+
+function persistPendingRecordsSync() {
+    try {
+        if (recordsPendingSync) {
+            localStorage.setItem(DAILY_RECORDS_PENDING_LS_KEY, JSON.stringify(recordsPendingSync));
+        } else {
+            localStorage.removeItem(DAILY_RECORDS_PENDING_LS_KEY);
+        }
+    } catch (e) {
+        console.error('Failed to persist pending daily-record sync:', e);
+    }
+}
+
+function loadPendingRecordsSync() {
+    try {
+        const stored = localStorage.getItem(DAILY_RECORDS_PENDING_LS_KEY);
+        if (!stored) return null;
+        const parsed = JSON.parse(stored);
+        if (!Array.isArray(parsed?.base) || !Array.isArray(parsed?.local)) return null;
+        return {
+            base: normalizeDailyRecords(parsed.base),
+            local: normalizeDailyRecords(parsed.local)
+        };
+    } catch (e) {
+        console.error('Failed to load pending daily-record sync:', e);
+        return null;
+    }
+}
+
+function persistDailyServerSnapshot(snapshot) {
+    try {
+        localStorage.setItem(DAILY_RECORDS_SERVER_LS_KEY, JSON.stringify(snapshot || []));
+    } catch (e) {
+        console.error('Failed to persist daily-record server snapshot:', e);
+    }
+}
+
+function loadDailyServerSnapshot() {
+    try {
+        const stored = localStorage.getItem(DAILY_RECORDS_SERVER_LS_KEY);
+        return stored ? normalizeDailyRecords(JSON.parse(stored)) : null;
+    } catch (e) {
+        console.error('Failed to load daily-record server snapshot:', e);
+        return null;
+    }
+}
+
+function dailyRecordEquals(left, right) {
+    if (!left || !right) return left === right;
+    const fields = new Set([...Object.keys(left), ...Object.keys(right)]);
+    for (const field of fields) {
+        if (JSON.stringify(left[field]) !== JSON.stringify(right[field])) return false;
+    }
+    return true;
+}
+
+function dailyRecordsEqual(left, right) {
+    const leftMap = new Map(cloneDailyRecords(left).map(record => [record[DAILY_RECORD_KEY_FIELD], record]));
+    const rightMap = new Map(cloneDailyRecords(right).map(record => [record[DAILY_RECORD_KEY_FIELD], record]));
+    if (leftMap.size !== rightMap.size) return false;
+    for (const [key, value] of leftMap) {
+        if (!dailyRecordEquals(value, rightMap.get(key))) return false;
+    }
+    return true;
+}
+
+function mergeDailyRecordFields(base, local, remote, syncKey) {
+    const merged = {};
+    const fields = new Set([
+        ...Object.keys(base || {}),
+        ...Object.keys(local || {}),
+        ...Object.keys(remote || {})
+    ]);
+    fields.delete(DAILY_RECORD_KEY_FIELD);
+
+    fields.forEach(field => {
+        const baseHas = !!base && Object.prototype.hasOwnProperty.call(base, field);
+        const localHas = !!local && Object.prototype.hasOwnProperty.call(local, field);
+        const remoteHas = !!remote && Object.prototype.hasOwnProperty.call(remote, field);
+        const localChanged = localHas !== baseHas
+            || JSON.stringify(local?.[field]) !== JSON.stringify(base?.[field]);
+        const remoteChanged = remoteHas !== baseHas
+            || JSON.stringify(remote?.[field]) !== JSON.stringify(base?.[field]);
+        const source = localChanged ? local : (remoteChanged ? remote : (remote || local || base));
+
+        if (source && Object.prototype.hasOwnProperty.call(source, field)) {
+            merged[field] = source[field];
+        }
+    });
+
+    merged[DAILY_RECORD_KEY_FIELD] = syncKey;
+    return merged;
+}
+
+function mergeDailyRecords(baseInput, localInput, remoteInput) {
+    const base = new Map(cloneDailyRecords(baseInput).map(record => [record[DAILY_RECORD_KEY_FIELD], record]));
+    const local = new Map(cloneDailyRecords(localInput).map(record => [record[DAILY_RECORD_KEY_FIELD], record]));
+    const remote = new Map(cloneDailyRecords(remoteInput).map(record => [record[DAILY_RECORD_KEY_FIELD], record]));
+    const orderedKeys = [...remote.keys(), ...local.keys(), ...base.keys()];
+    const merged = new Map();
+
+    orderedKeys.forEach(key => {
+        if (merged.has(key)) return;
+        const baseRecord = base.get(key);
+        const localRecord = local.get(key);
+        const remoteRecord = remote.get(key);
+
+        if (!localRecord) {
+            if (remoteRecord && (!baseRecord || !dailyRecordEquals(remoteRecord, baseRecord))) {
+                merged.set(key, remoteRecord);
+            }
+            return;
+        }
+
+        if (!baseRecord) {
+            merged.set(key, remoteRecord
+                ? mergeDailyRecordFields(null, localRecord, remoteRecord, key)
+                : localRecord);
+            return;
+        }
+
+        if (dailyRecordEquals(localRecord, baseRecord)) {
+            if (remoteRecord) merged.set(key, remoteRecord);
+            return;
+        }
+
+        if (!remoteRecord) {
+            merged.set(key, localRecord);
+            return;
+        }
+
+        merged.set(key, mergeDailyRecordFields(baseRecord, localRecord, remoteRecord, key));
+    });
+
+    return Array.from(merged.values());
+}
+
+function flushPendingRecordsSync() {
+    if (!canWriteAppData() || !database || !recordsSyncReady || recordsSyncInFlight || !recordsPendingSync) return;
+
+    const pendingState = recordsPendingSync;
+    const baseSnapshot = cloneDailyRecords(pendingState.base);
+    const localSnapshot = cloneDailyRecords(pendingState.local);
+    recordsSyncInFlight = true;
+
+    database.ref(DB_PATH).transaction(currentData => {
+        const remoteRecords = normalizeDailyRecords(currentData);
+        return mergeDailyRecords(baseSnapshot, localSnapshot, remoteRecords);
+    }, (error, committed, snapshot) => {
+        recordsSyncInFlight = false;
+
+        if (error || !committed || !snapshot) {
+            if (error) console.error('Daily records sync failed:', error);
+            if (!recordsSyncRetryTimer) {
+                recordsSyncRetryTimer = setTimeout(() => {
+                    recordsSyncRetryTimer = null;
+                    flushPendingRecordsSync();
+                }, 3000);
+            }
+            return;
+        }
+
+        const committedRecords = normalizeDailyRecords(snapshot.val());
+        recordsServerSnapshot = committedRecords;
+        persistDailyServerSnapshot(committedRecords);
+        const pendingStillMatches = recordsPendingSync
+            && dailyRecordsEqual(recordsPendingSync.local, localSnapshot);
+
+        if (pendingStillMatches) {
+            recordsPendingSync = null;
+            records = committedRecords;
+        } else if (recordsPendingSync) {
+            recordsPendingSync.base = committedRecords;
+            records = mergeDailyRecords(
+                recordsPendingSync.base,
+                recordsPendingSync.local,
+                committedRecords
+            );
+        }
+        persistPendingRecordsSync();
+
+        localStorage.setItem(LS_KEY, JSON.stringify(records));
+        scheduleDailyBackupRefresh();
+        if (recordsPendingSync) flushPendingRecordsSync();
+    });
+}
+
+function queueRecordsSync() {
+    if (!canWriteAppData() || !database) return;
+    const localSnapshot = cloneDailyRecords(records);
+    if (!recordsPendingSync) {
+        recordsPendingSync = {
+            base: cloneDailyRecords(recordsServerSnapshot),
+            local: localSnapshot
+        };
+    } else {
+        recordsPendingSync.local = localSnapshot;
+    }
+    persistPendingRecordsSync();
+    flushPendingRecordsSync();
+}
+
+let records = normalizeDailyRecords(JSON.parse(localStorage.getItem(LS_KEY)) || []);
+const storedDailyServerSnapshot = loadDailyServerSnapshot();
+recordsPendingSync = loadPendingRecordsSync();
+if (recordsPendingSync) {
+    records = cloneDailyRecords(recordsPendingSync.local);
+    recordsServerSnapshot = cloneDailyRecords(recordsPendingSync.base);
+} else {
+    recordsServerSnapshot = storedDailyServerSnapshot || cloneDailyRecords(records);
+    if (storedDailyServerSnapshot && !dailyRecordsEqual(records, storedDailyServerSnapshot)) {
+        recordsPendingSync = {
+            base: cloneDailyRecords(storedDailyServerSnapshot),
+            local: cloneDailyRecords(records)
+        };
+        persistPendingRecordsSync();
+    }
+}
 let dailyNotes = JSON.parse(localStorage.getItem(NOTES_LS_KEY)) || {};
+let dailyNotesSync = null;
+let rollDataSync = null;
+let sliverDataSync = null;
+let hanaponDataSync = null;
+let snowsprintDataSync = null;
 let currentDate = new Date().toLocaleDateString('sv-SE'); // YYYY-MM-DD format
 let isFirstLoad = true;
 let isFirstNotesLoad = true;
@@ -1848,32 +2331,64 @@ let isFirstRollLoad = true;
 if (database) {
     // 1. Sync Daily Records
     database.ref(DB_PATH).on('value', (snapshot) => {
-        const firebaseData = snapshot.val();
-        let firebaseRecords = [];
-        if (firebaseData) {
-            firebaseRecords = Array.isArray(firebaseData) ? firebaseData : Object.values(firebaseData);
-        }
+        const remoteRecords = normalizeDailyRecords(snapshot.val());
 
         if (isFirstLoad) {
-            if (firebaseRecords.length > 0) {
-                records = firebaseRecords;
-                localStorage.setItem(LS_KEY, JSON.stringify(records));
-                scheduleDailyBackupRefresh();
-            } else if (records.length > 0) {
-                database.ref(DB_PATH).set(records);
+            const localRecords = cloneDailyRecords(records);
+            recordsServerSnapshot = remoteRecords;
+            persistDailyServerSnapshot(remoteRecords);
+
+            if (remoteRecords.length > 0) {
+                if (recordsPendingSync) {
+                    records = mergeDailyRecords(recordsPendingSync.base, recordsPendingSync.local, remoteRecords);
+                } else {
+                    const initialBase = storedDailyServerSnapshot
+                        ? cloneDailyRecords(storedDailyServerSnapshot)
+                        : [];
+                    const mergedRecords = localRecords.length > 0
+                        ? mergeDailyRecords(initialBase, localRecords, remoteRecords)
+                        : remoteRecords;
+                    records = mergedRecords;
+                    if (!dailyRecordsEqual(mergedRecords, remoteRecords)) {
+                        recordsPendingSync = { base: remoteRecords, local: mergedRecords };
+                        persistPendingRecordsSync();
+                    }
+                }
+            } else if (localRecords.length > 0) {
+                records = localRecords;
+                if (!recordsPendingSync) {
+                    recordsPendingSync = { base: [], local: localRecords };
+                    persistPendingRecordsSync();
+                }
+            } else {
+                records = [];
             }
+
+            recordsSyncReady = true;
             isFirstLoad = false;
+            flushPendingRecordsSync();
+            localStorage.setItem(LS_KEY, JSON.stringify(records));
+            scheduleDailyBackupRefresh();
             ensureDayRecords(currentDate);
             renderRecords();
         } else {
-            // Check if data is actually different to avoid redundant renders
-            const isDifferent = JSON.stringify(records) !== JSON.stringify(firebaseRecords);
-            if (isDifferent && firebaseRecords.length > 0) {
-                records = firebaseRecords;
+            if (remoteRecords.length === 0 && records.length > 0 && !recordsPendingSync) {
+                console.warn('Ignored an empty remote daily-records snapshot to protect local data');
+                return;
+            }
+
+            recordsServerSnapshot = remoteRecords;
+            persistDailyServerSnapshot(remoteRecords);
+            const nextRecords = recordsPendingSync
+                ? mergeDailyRecords(recordsPendingSync.base, recordsPendingSync.local, remoteRecords)
+                : remoteRecords;
+            const isDifferent = !dailyRecordsEqual(records, nextRecords);
+
+            records = nextRecords;
+            if (isDifferent) {
                 localStorage.setItem(LS_KEY, JSON.stringify(records));
                 scheduleDailyBackupRefresh();
 
-                // Only re-render if user is NOT currently focusing on an input in the table
                 const activeEl = document.activeElement;
                 const isTyping = activeEl && activeEl.closest('#records-list');
 
@@ -1887,64 +2402,24 @@ if (database) {
         }
     });
 
-    // 1.5 Sync Daily Notes
-    database.ref(NOTES_DB_PATH).on('value', (snapshot) => {
-        const firebaseNotes = snapshot.val() || {};
-        const isDifferent = JSON.stringify(dailyNotes) !== JSON.stringify(firebaseNotes);
-        
-        if (isFirstNotesLoad) {
-            if (Object.keys(firebaseNotes).length > 0) {
-                dailyNotes = firebaseNotes;
-                localStorage.setItem(NOTES_LS_KEY, JSON.stringify(dailyNotes));
-                scheduleDailyBackupRefresh();
-            } else if (Object.keys(dailyNotes).length > 0) {
-                database.ref(NOTES_DB_PATH).set(dailyNotes);
-            }
-            isFirstNotesLoad = false;
-            renderDailyNotes();
-        } else if (isDifferent) {
-            dailyNotes = firebaseNotes;
+    // Shared sync for daily notes and roll inventory.
+    dailyNotesSync = SharedSync.createPathSync({
+        database,
+        path: NOTES_DB_PATH,
+        emptyValue: {},
+        pendingStorageKey: NOTES_LS_KEY + '_pending_sync',
+        mergeInitial: true,
+        serverSnapshotStorageKey: NOTES_LS_KEY + '_server_snapshot',
+        getLocal: () => dailyNotes,
+        setLocal: value => {
+            dailyNotes = value;
             localStorage.setItem(NOTES_LS_KEY, JSON.stringify(dailyNotes));
-                scheduleDailyBackupRefresh();
+            scheduleDailyBackupRefresh();
+        },
+        onRemote: () => {
             const activeEl = document.activeElement;
-            if (activeEl && activeEl.id === 'day-note-text') return; // Do not overwrite if user is typing
-            renderDailyNotes();
+            if (!activeEl || activeEl.id !== 'day-note-text') renderDailyNotes();
         }
-    });
-
-    // 2. Sync Roll Inventory
-    database.ref(ROLL_DB_PATH).on('value', (snapshot) => {
-        const firebaseRollData = snapshot.val();
-        if (firebaseRollData && Object.keys(firebaseRollData).length > 0) {
-            const isDifferent = JSON.stringify(rollAllData) !== JSON.stringify(firebaseRollData);
-            if (isDifferent) {
-                if (Date.now() - rollLastEditTime < 2000) return; // 防止編集中の上書き
-
-                // --- 安全対策：月ごとの大きなデータブロックが丸ごと消えている場合は、ローカルデータを維持・復旧 ---
-                let restored = false;
-                for (const k in rollAllData) {
-                    if (firebaseRollData[k] === undefined) {
-                        firebaseRollData[k] = rollAllData[k];
-                        database.ref(ROLL_DB_PATH).child(k).set(rollAllData[k]);
-                        restored = true;
-                    }
-                }
-                if (restored) console.warn("Safety Check: Restored missing months in rollAllData");
-
-                rollAllData = firebaseRollData;
-                localStorage.setItem(ROLL_STORAGE_KEY, JSON.stringify(rollAllData));
-                scheduleDailyBackupRefresh();
-
-                if (stockViewContainer.style.display === 'block') {
-                    renderRollStock();
-                }
-            }
-        } else if (isFirstRollLoad && Object.keys(rollAllData).length > 0) {
-            // Firebaseが空でローカルにデータがある場合のみプッシュ
-            console.log('Roll: Firebase empty, pushing local data (' + Object.keys(rollAllData).length + ' months)');
-            database.ref(ROLL_DB_PATH).set(rollAllData);
-        }
-        isFirstRollLoad = false;
     });
 }
 
@@ -2102,11 +2577,6 @@ function init() {
     // Mobile Menu Setup
     setupMobileMenu();
 
-    // Prevent data loss on refresh/close
-    window.addEventListener('beforeunload', (e) => {
-        saveRecords();
-        saveRollData();
-    });
 }
 
 function setupMobileMenu() {
@@ -2146,10 +2616,12 @@ function switchView(view) {
     // Save current view to localStorage so it persists across reloads
     localStorage.setItem('nippo_current_view', view);
     
-    // Update URL to match current view without reloading the page
-    const url = new URL(window.location);
-    url.searchParams.set('view', view);
-    window.history.replaceState({}, '', url);
+    // Keep the selected view in local storage and remove the transient query from the address bar.
+    const url = new URL(window.location.href);
+    if (url.searchParams.has('view')) {
+        url.searchParams.delete('view');
+        window.history.replaceState({}, '', url);
+    }
     
     // Update header title based on view
     const titleHeader = document.querySelector('.inventory-title-header');
@@ -2416,6 +2888,7 @@ function renderDailyNotes() {
 
 // Global function to be called on textarea input
 window.saveDailyNotes = function() {
+    if (!canWriteAppData()) return;
     const textarea = document.getElementById('day-note-text');
     if (!textarea) return;
     
@@ -2434,14 +2907,11 @@ window.saveDailyNotes = function() {
     // Debounce the Firebase save to avoid excessive writes
     clearTimeout(noteSaveTimeout);
     noteSaveTimeout = setTimeout(() => {
-        if (database) {
-            database.ref(NOTES_DB_PATH).set(dailyNotes).then(() => {
-                const saveStatus = document.getElementById('saveStatusNotes');
-                if (saveStatus) {
-                    saveStatus.textContent = "保存しました";
-                    setTimeout(() => saveStatus.textContent = "", 3000);
-                }
-            });
+        if (dailyNotesSync) dailyNotesSync.save(dailyNotes);
+        const saveStatus = document.getElementById('saveStatusNotes');
+        if (saveStatus) {
+            saveStatus.textContent = "\u4fdd\u5b58\u3057\u307e\u3057\u305f";
+            setTimeout(() => saveStatus.textContent = "", 3000);
         }
     }, 1000);
 }
@@ -2597,30 +3067,23 @@ function calculateDuration(start, end) {
 
 // Save to LocalStorage and Firebase (with enhanced reliability)
 function saveRecords(triggerHistory = true) {
-    // Always save to localStorage first (immediate backup)
+    if (!canWriteAppData()) return false;
+
     try {
+        records = normalizeDailyRecords(records);
         localStorage.setItem(LS_KEY, JSON.stringify(records));
-                scheduleDailyBackupRefresh();
+        scheduleDailyBackupRefresh();
         if (triggerHistory) triggerHistorySave();
     } catch (e) {
         console.error('LocalStorage save failed:', e);
     }
 
-    // Then sync to Firebase
     if (database) {
-        // 空データ保護: recordsが空配列の場合はFirebaseへの書き込みをブロック
         if (Array.isArray(records) && records.length === 0) {
             console.warn('BLOCKED: Attempted to save empty records array to Firebase');
             return;
         }
-        database.ref(DB_PATH).set(records)
-            .then(() => {
-                // syncToGoogleSheets(records); // Disconnected
-            })
-            .catch((error) => {
-                console.error('Firebase save failed:', error);
-                // Data is still safe in localStorage
-            });
+        queueRecordsSync();
     }
 }
 
@@ -2914,6 +3377,26 @@ function isRollHoliday(year, month, day) {
 
 function initRollStock() {
     loadRollData();
+    if (database && !rollDataSync) {
+        rollDataSync = SharedSync.createPathSync({
+            database,
+            path: ROLL_DB_PATH,
+            emptyValue: {},
+            pendingStorageKey: ROLL_STORAGE_KEY + '_pending_sync',
+            serverSnapshotStorageKey: ROLL_STORAGE_KEY + '_server_snapshot',
+            getLocal: () => rollAllData,
+            setLocal: value => {
+                rollAllData = value;
+                localStorage.setItem(ROLL_STORAGE_KEY, JSON.stringify(rollAllData));
+                scheduleDailyBackupRefresh();
+            },
+            onRemote: () => {
+                const activeEl = document.activeElement;
+                if (activeEl && activeEl.closest('#stock-view-container')) return;
+                if (stockViewContainer.style.display === 'block') renderRollStock();
+            }
+        });
+    }
     setupRollSelectors();
     setupRollEventListeners();
 }
@@ -3002,6 +3485,7 @@ function updateRollSelectors() {
 }
 
 function saveRollData() {
+    if (!canWriteAppData()) return false;
     localStorage.setItem(ROLL_STORAGE_KEY, JSON.stringify(rollAllData));
                 scheduleDailyBackupRefresh();
     triggerHistorySave();
@@ -3011,7 +3495,7 @@ function saveRollData() {
             console.warn('BLOCKED: Attempted to save empty rollAllData to Firebase');
             return;
         }
-        database.ref(ROLL_DB_PATH).set(rollAllData);
+        if (rollDataSync) rollDataSync.save(rollAllData);
     }
 
     // Sync to Google Sheets (Temporarily disabled)
@@ -3394,40 +3878,25 @@ function initSliver() {
     // Setup month selector
     setupSliverMonthSelector();
 
-    // Firebase sync
-    if (database) {
-        database.ref(SLIVER_DB_PATH).on('value', (snapshot) => {
-            const firebaseData = snapshot.val();
-            if (firebaseData && Object.keys(firebaseData).length > 0) {
-                const isDifferent = JSON.stringify(sliverAllData) !== JSON.stringify(firebaseData);
-                if (isDifferent) {
-                    if (Date.now() - sliverLastEditTime < 2000) return; // 防止編集中の上書き
-
-                    // 安全対策：月データが丸ごと消えている場合はローカルから復旧
-                    let restored = false;
-                    for (const k in sliverAllData) {
-                        if (firebaseData[k] === undefined) {
-                            firebaseData[k] = sliverAllData[k];
-                            database.ref(SLIVER_DB_PATH).child(k).set(sliverAllData[k]);
-                            restored = true;
-                        }
-                    }
-                    if (restored) console.warn('Safety Check: Restored missing months in sliverAllData');
-
-                    sliverAllData = firebaseData;
-                    ensureSliverMonth(sliverCurrentYear, sliverCurrentMonth, true);
-                    localStorage.setItem(SLIVER_STORAGE_KEY, JSON.stringify(sliverAllData));
+    if (database && !sliverDataSync) {
+        sliverDataSync = SharedSync.createPathSync({
+            database,
+            path: SLIVER_DB_PATH,
+            emptyValue: {},
+            pendingStorageKey: SLIVER_STORAGE_KEY + '_pending_sync',
+            serverSnapshotStorageKey: SLIVER_STORAGE_KEY + '_server_snapshot',
+            getLocal: () => sliverAllData,
+            setLocal: value => {
+                sliverAllData = value;
+                localStorage.setItem(SLIVER_STORAGE_KEY, JSON.stringify(sliverAllData));
                 scheduleDailyBackupRefresh();
-
-                    if (sliverViewContainer.style.display === 'block') {
-                        renderSliver();
-                    }
-                }
-            } else if (isFirstSliverLoad && Object.keys(sliverAllData).length > 0) {
-                console.log('Sliver: Firebase empty, pushing local data (' + Object.keys(sliverAllData).length + ' months)');
-                database.ref(SLIVER_DB_PATH).set(sliverAllData);
+            },
+            onRemote: () => {
+                const activeEl = document.activeElement;
+                ensureSliverMonth(sliverCurrentYear, sliverCurrentMonth, true);
+                if (!activeEl?.closest('#sliver-view-container')
+                    && sliverViewContainer.style.display === 'block') renderSliver();
             }
-            isFirstSliverLoad = false;
         });
     }
 }
@@ -3533,6 +4002,8 @@ function setupSliverMonthSelector() {
 }
 
 function saveSliverData(triggerHistory = true) {
+    if (!canWriteAppData()) return false;
+
     try {
         localStorage.setItem(SLIVER_STORAGE_KEY, JSON.stringify(sliverAllData));
                 scheduleDailyBackupRefresh();
@@ -3547,8 +4018,7 @@ function saveSliverData(triggerHistory = true) {
             console.warn('BLOCKED: Attempted to save empty sliverAllData to Firebase');
             return;
         }
-        database.ref(SLIVER_DB_PATH).set(sliverAllData)
-            .catch((error) => console.error('Sliver Firebase save failed:', error));
+        if (sliverDataSync) sliverDataSync.save(sliverAllData);
     }
 }
 
@@ -4068,39 +4538,25 @@ function initHanapon() {
     // Setup month selector
     setupHanaponMonthSelector();
 
-    // Firebase sync
-    if (database) {
-        database.ref(HANAPON_DB_PATH).on('value', (snapshot) => {
-            const firebaseData = snapshot.val();
-            if (firebaseData && Object.keys(firebaseData).length > 0) {
-                const isDifferent = JSON.stringify(hanaponAllData) !== JSON.stringify(firebaseData);
-                if (isDifferent) {
-                    if (Date.now() - hanaponLastEditTime < 2000) return; // 防止編集中の上書き
-
-                    // 安全対策：月データが丸ごと消えている場合はローカルから復旧
-                    let restored = false;
-                    for (const k in hanaponAllData) {
-                        if (firebaseData[k] === undefined) {
-                            firebaseData[k] = hanaponAllData[k];
-                            database.ref(HANAPON_DB_PATH).child(k).set(hanaponAllData[k]);
-                            restored = true;
-                        }
-                    }
-                    if (restored) console.warn('Safety Check: Restored missing months in hanaponAllData');
-
-                    hanaponAllData = firebaseData;
-                    ensureHanaponMonth(hanaponCurrentYear, hanaponCurrentMonth, true);
-                    localStorage.setItem(HANAPON_STORAGE_KEY, JSON.stringify(hanaponAllData));
+    if (database && !hanaponDataSync) {
+        hanaponDataSync = SharedSync.createPathSync({
+            database,
+            path: HANAPON_DB_PATH,
+            emptyValue: {},
+            pendingStorageKey: HANAPON_STORAGE_KEY + '_pending_sync',
+            serverSnapshotStorageKey: HANAPON_STORAGE_KEY + '_server_snapshot',
+            getLocal: () => hanaponAllData,
+            setLocal: value => {
+                hanaponAllData = value;
+                localStorage.setItem(HANAPON_STORAGE_KEY, JSON.stringify(hanaponAllData));
                 scheduleDailyBackupRefresh();
-
-                    if (hanaponViewContainer.style.display === 'block') {
-                        renderHanapon();
-                    }
-                }
-            } else if (isFirstHanaponLoad && Object.keys(hanaponAllData).length > 0) {
-                database.ref(HANAPON_DB_PATH).set(hanaponAllData);
+            },
+            onRemote: () => {
+                const activeEl = document.activeElement;
+                ensureHanaponMonth(hanaponCurrentYear, hanaponCurrentMonth, true);
+                if (!activeEl?.closest('#hanapon-view-container')
+                    && hanaponViewContainer.style.display === 'block') renderHanapon();
             }
-            isFirstHanaponLoad = false;
         });
     }
 }
@@ -4202,6 +4658,8 @@ function setupHanaponMonthSelector() {
 }
 
 function saveHanaponData(triggerHistory = true) {
+    if (!canWriteAppData()) return false;
+
     try {
         localStorage.setItem(HANAPON_STORAGE_KEY, JSON.stringify(hanaponAllData));
                 scheduleDailyBackupRefresh();
@@ -4216,8 +4674,7 @@ function saveHanaponData(triggerHistory = true) {
             console.warn('BLOCKED: Attempted to save empty hanaponAllData to Firebase');
             return;
         }
-        database.ref(HANAPON_DB_PATH).set(hanaponAllData)
-            .catch((error) => console.error('Hanapon Firebase save failed:', error));
+        if (hanaponDataSync) hanaponDataSync.save(hanaponAllData);
     }
 }
 
@@ -7085,38 +7542,25 @@ function initSnowsprint() {
     propagateSnowSprintCarryover(snowsprintCurrentYear, snowsprintCurrentMonth);
     setupSnowsprintMonthSelector();
 
-    if (database) {
-        database.ref(SNOWSPRINT_DB_PATH).on('value', (snapshot) => {
-            const firebaseData = snapshot.val();
-            if (firebaseData && Object.keys(firebaseData).length > 0) {
-                const isDifferent = JSON.stringify(snowsprintAllData) !== JSON.stringify(firebaseData);
-                if (isDifferent) {
-                    if (Date.now() - snowsprintLastEditTime < 2000) return; // 防止編集中の上書き
-
-                    // 安全対策：月データが丸ごと消えている場合はローカルから復旧
-                    let restored = false;
-                    for (const k in snowsprintAllData) {
-                        if (firebaseData[k] === undefined) {
-                            firebaseData[k] = snowsprintAllData[k];
-                            database.ref(SNOWSPRINT_DB_PATH).child(k).set(snowsprintAllData[k]);
-                            restored = true;
-                        }
-                    }
-                    if (restored) console.warn('Safety Check: Restored missing months in snowsprintAllData');
-
-                    snowsprintAllData = firebaseData;
-                    ensureSnowsprintMonth(snowsprintCurrentYear, snowsprintCurrentMonth, true);
-                    localStorage.setItem(SNOWSPRINT_STORAGE_KEY, JSON.stringify(snowsprintAllData));
+    if (database && !snowsprintDataSync) {
+        snowsprintDataSync = SharedSync.createPathSync({
+            database,
+            path: SNOWSPRINT_DB_PATH,
+            emptyValue: {},
+            pendingStorageKey: SNOWSPRINT_STORAGE_KEY + '_pending_sync',
+            serverSnapshotStorageKey: SNOWSPRINT_STORAGE_KEY + '_server_snapshot',
+            getLocal: () => snowsprintAllData,
+            setLocal: value => {
+                snowsprintAllData = value;
+                localStorage.setItem(SNOWSPRINT_STORAGE_KEY, JSON.stringify(snowsprintAllData));
                 scheduleDailyBackupRefresh();
-                    
-                    if (snowsprintViewContainer.style.display === 'block') {
-                        renderSnowsprint();
-                    }
-                }
-            } else if (isFirstSnowsprintLoad && Object.keys(snowsprintAllData).length > 0) {
-                database.ref(SNOWSPRINT_DB_PATH).set(snowsprintAllData);
+            },
+            onRemote: () => {
+                const activeEl = document.activeElement;
+                ensureSnowsprintMonth(snowsprintCurrentYear, snowsprintCurrentMonth, true);
+                if (!activeEl?.closest('#snowsprint-view-container')
+                    && snowsprintViewContainer.style.display === 'block') renderSnowsprint();
             }
-            isFirstSnowsprintLoad = false;
         });
     }
 }
@@ -7216,6 +7660,7 @@ function setupSnowsprintMonthSelector() {
 }
 
 function saveSnowsprintData() {
+    if (!canWriteAppData()) return false;
     localStorage.setItem(SNOWSPRINT_STORAGE_KEY, JSON.stringify(snowsprintAllData));
                 scheduleDailyBackupRefresh();
     triggerHistorySave();
@@ -7225,15 +7670,12 @@ function saveSnowsprintData() {
             console.warn('BLOCKED: Attempted to save empty snowsprintAllData to Firebase');
             return;
         }
-        database.ref(SNOWSPRINT_DB_PATH).set(snowsprintAllData)
-            .then(() => {
-                const el = document.getElementById('saveStatusSnowsprint');
-                if (el) {
-                    el.textContent = '保存しました ' + new Date().toLocaleTimeString();
-                    setTimeout(() => el.textContent = '', 3000);
-                }
-            })
-            .catch(e => console.error(e));
+        if (snowsprintDataSync) snowsprintDataSync.save(snowsprintAllData);
+        const el = document.getElementById('saveStatusSnowsprint');
+        if (el) {
+            el.textContent = '\u4fdd\u5b58\u3057\u307e\u3057\u305f ' + new Date().toLocaleTimeString();
+            setTimeout(() => el.textContent = '', 3000);
+        }
     }
 }
 
@@ -7869,40 +8311,50 @@ let shiftBaseDate = new Date("2026-03-30");
 const shiftBaseEarlyIndex = 0;
 
 let shiftDatabaseRef = null;
+let shiftDataSync = null;
 
 // Initialize Shift Firebase in a separate app instance to avoid conflicts
 try {
-    const shiftApp = firebase.initializeApp(shiftFirebaseConfig, "shiftApp");
+    const shiftApp = firebase.initializeApp(shiftFirebaseConfig, 'shiftApp');
     const shiftDb = shiftApp.database();
-    shiftDatabaseRef = shiftDb.ref('shift_data/' + SHIFT_SECRET_PATH);
-
-    shiftDatabaseRef.on('value', (snapshot) => {
-        const data = snapshot.val();
-        if (data) {
-            if (data.members) shiftNames = data.members;
-            if (data.rotation_order) shiftRotationOrder = data.rotation_order;
-            if (data.base_date) shiftBaseDate = new Date(data.base_date);
-            shiftOverrides = data.overrides || {};
-            if (document.getElementById('shift-view-container')?.style.display === 'block') {
-                shiftRenderMembers();
-            }
-        } else {
-            shiftSaveAllData();
-        }
-    });
-} catch (e) {
-    console.error("Shift Firebase initialization failed.", e);
-}
-
-function shiftSaveAllData() {
-    if (shiftDatabaseRef) {
-        shiftDatabaseRef.set({
+    shiftDataSync = SharedSync.createPathSync({
+        database: SharedSync.guardDatabase(shiftDb),
+        path: 'shift_data/' + SHIFT_SECRET_PATH,
+        emptyValue: {},
+        pendingStorageKey: 'shift_data_' + SHIFT_SECRET_PATH + '_pending_sync',
+        serverSnapshotStorageKey: 'shift_data_' + SHIFT_SECRET_PATH + '_server_snapshot',
+        getLocal: () => ({
             members: shiftNames,
             rotation_order: shiftRotationOrder,
             base_date: shiftBaseDate.toISOString().split('T')[0],
             overrides: shiftOverrides
-        });
-    }
+        }),
+        setLocal: value => {
+            if (Array.isArray(value.members)) shiftNames = value.members;
+            if (Array.isArray(value.rotation_order)) shiftRotationOrder = value.rotation_order;
+            if (value.base_date) shiftBaseDate = new Date(value.base_date);
+            shiftOverrides = value.overrides && typeof value.overrides === 'object' ? value.overrides : {};
+        },
+        onRemote: () => {
+            const activeEl = document.activeElement;
+            if (activeEl?.closest('#shift-view-container')) return;
+            if (document.getElementById('shift-view-container')?.style.display === 'block') shiftRenderMembers();
+        }
+    });
+} catch (e) {
+    console.error('Shift Firebase initialization failed.', e);
+}
+
+function shiftSaveAllData() {
+    if (!canWriteAppData()) return false;
+    const value = {
+        members: shiftNames,
+        rotation_order: shiftRotationOrder,
+        base_date: shiftBaseDate.toISOString().split('T')[0],
+        overrides: shiftOverrides
+    };
+    if (shiftDataSync) return shiftDataSync.save(value);
+    return false;
 }
 
 function shiftUpdateRotationOrder() {
@@ -8210,8 +8662,25 @@ let boardsData = []; // Array of board (project) objects
 let currentBoardId = null;
 let currentAssigneeFilter = 'all';
 let isFirstBoardLoad = true;
+let projectDataSync = null;
 
 const BOARDS_STORAGE_KEY = 'nippo_boards_data';
+
+function normalizeProjectBoards(value) {
+    const list = Array.isArray(value)
+        ? SharedSync.cloneValue(value)
+        : Object.values(value && typeof value === 'object' ? value : {});
+    return list.filter(board => board && typeof board === 'object').map(board => {
+        board.columns = Array.isArray(board.columns) ? board.columns.filter(Boolean) : [];
+        board.columns.forEach(column => {
+            column.tasks = Array.isArray(column.tasks) ? column.tasks.filter(Boolean) : [];
+            column.tasks.forEach(task => {
+                task.comments = Array.isArray(task.comments) ? task.comments.filter(Boolean) : [];
+            });
+        });
+        return board;
+    });
+}
 
 function initProjectManagement() {
     // 1. ローカルストレージからの読み込み（確実なデータ復旧）
@@ -8230,85 +8699,36 @@ function initProjectManagement() {
 
     if (!database) return;
 
-    // 2. Firebaseからの読み込みと同期
-    database.ref(PROJECT_DB_PATH).on('value', (snapshot) => {
-        const data = snapshot.val();
-        let firebaseBoards = [];
-        if (data) {
-            firebaseBoards = Array.isArray(data) ? data : Object.values(data);
-        }
-
-        // Firebaseから取得したデータのnull穴を除去（配列のインデックスずれ対策）
-        firebaseBoards = firebaseBoards.filter(b => b !== null && b !== undefined);
-
-        // 各タスクのcommentsがnullの場合を空配列に正規化
-        firebaseBoards.forEach(board => {
-            if (board.columns) {
-                board.columns.forEach(col => {
-                    if (col.tasks) {
-                        col.tasks = col.tasks.filter(t => t !== null && t !== undefined);
-                        col.tasks.forEach(task => {
-                            if (task.comments) {
-                                task.comments = task.comments.filter(c => c !== null && c !== undefined);
-                            } else {
-                                task.comments = [];
-                            }
-                        });
-                    }
-                });
-            }
-        });
-
-        if (isFirstBoardLoad) {
-            // もしFirebaseにデータが無く、ローカルにはデータがある場合は、ローカルを正としてFirebaseに同期する
-            if (firebaseBoards.length === 0 && boardsData.length > 0) {
-                saveBoardsToFirebase();
-            } else {
-                boardsData = firebaseBoards;
-                localStorage.setItem(BOARDS_STORAGE_KEY, JSON.stringify(boardsData));
-                scheduleDailyBackupRefresh();
-            }
-            
-            isFirstBoardLoad = false;
-            if (boardsData.length > 0 && !currentBoardId) {
-                currentBoardId = boardsData[0].id;
-            }
-            renderBoard();
-        } else {
-            // 他の端末からの更新を反映（内容が変わっている場合のみ）
-            const isDifferent = JSON.stringify(boardsData) !== JSON.stringify(firebaseBoards);
-            if (isDifferent) {
-                // 安全対策：全データが消えている場合はローカルから復旧
-                if (firebaseBoards.length === 0 && boardsData.length > 0) {
-                    console.warn('Safety Check: Restored missing boards from local storage');
-                    saveBoardsToFirebase();
-                    return; // ローカルデータで上書きしたのでそのまま終了
-                }
-
-                boardsData = firebaseBoards;
-                localStorage.setItem(BOARDS_STORAGE_KEY, JSON.stringify(boardsData));
-                scheduleDailyBackupRefresh();
-                renderBoard();
-
-                // もしコメントモーダルが開いていれば中身を最新化する
-                if (typeof currentCommentTaskInfo !== 'undefined' && currentCommentTaskInfo) {
-                    const b = getCurrentBoard();
-                    if (b) {
-                        const c = b.columns.find(col => col.id === currentCommentTaskInfo.colId);
-                        if (c) {
-                            const t = c.tasks.find(task => task.id === currentCommentTaskInfo.taskId);
-                            if (t) {
-                                renderTaskCommentsList(t.comments || []);
-                            }
-                        }
-                    }
-                }
+    projectDataSync = SharedSync.createPathSync({
+        database,
+        path: PROJECT_DB_PATH,
+        emptyValue: [],
+        normalize: normalizeProjectBoards,
+        pendingStorageKey: BOARDS_STORAGE_KEY + '_pending_sync',
+        mergeInitial: true,
+        serverSnapshotStorageKey: BOARDS_STORAGE_KEY + '_server_snapshot',
+        getLocal: () => boardsData,
+        setLocal: value => {
+            boardsData = normalizeProjectBoards(value);
+            localStorage.setItem(BOARDS_STORAGE_KEY, JSON.stringify(boardsData));
+            scheduleDailyBackupRefresh();
+        },
+        onRemote: () => {
+            if (boardsData.length > 0 && !currentBoardId) currentBoardId = boardsData[0].id;
+            const activeEl = document.activeElement;
+            if (!activeEl?.closest('#project-view-container')) renderBoard();
+            if (typeof currentCommentTaskInfo !== 'undefined' && currentCommentTaskInfo) {
+                const board = getCurrentBoard();
+                const column = board && board.columns.find(col => col.id === currentCommentTaskInfo.colId);
+                const task = column && column.tasks.find(item => item.id === currentCommentTaskInfo.taskId);
+                if (task) renderTaskCommentsList(task.comments || []);
             }
         }
     });
 }
 
 function saveBoardsToFirebase() {
+    if (!canWriteAppData()) return false;
     // 保存前にデータを正規化（null穴を除去）
     boardsData = boardsData.filter(b => b !== null && b !== undefined);
     boardsData.forEach(board => {
@@ -8338,9 +8758,7 @@ function saveBoardsToFirebase() {
             console.warn('BLOCKED: Attempted to save empty boardsData to Firebase');
             return;
         }
-        database.ref(PROJECT_DB_PATH).set(boardsData).catch(error => {
-            console.error('Board save failed:', error);
-        });
+        if (projectDataSync) projectDataSync.save(boardsData);
     }
 }
 
@@ -9254,76 +9672,90 @@ window.selectHistoryBackup = function(slot) {
 };
 
 // タイムマシン履歴からの復元
+// Restore selected history data by merging backup-only values into current data.
 window.restoreFromHistory = function(slot) {
-    const HIST_PREFIX = 'nippo_history_backup_';
-    const dataStr = localStorage.getItem(HIST_PREFIX + slot);
+    if (!canWriteAppData()) return;
+    const dataStr = localStorage.getItem('nippo_history_backup_' + slot);
     if (!dataStr) return;
 
     let backupObj = {};
-    try { backupObj = JSON.parse(dataStr); } catch(e) { alert("バックアップデータの読み込みに失敗しました"); return; }
+    try { backupObj = JSON.parse(dataStr) || {}; } catch (error) {
+        alert('バックアップデータの読み込みに失敗しました');
+        return;
+    }
 
     const suffix = 'hist' + slot;
     const checks = [
-        { id: `chk-roll-${suffix}`, key: 'roll', ls: ROLL_STORAGE_KEY, db: ROLL_DB_PATH },
-        { id: `chk-sliver-${suffix}`, key: 'sliver', ls: SLIVER_STORAGE_KEY, db: SLIVER_DB_PATH },
-        { id: `chk-hanapon-${suffix}`, key: 'hanapon', ls: HANAPON_STORAGE_KEY, db: HANAPON_DB_PATH },
-        { id: `chk-snowsprint-${suffix}`, key: 'snowsprint', ls: SNOWSPRINT_STORAGE_KEY, db: SNOWSPRINT_DB_PATH },
-        { id: `chk-project-${suffix}`, key: 'project', ls: 'nippo_boards_data', db: PROJECT_DB_PATH },
-        { id: `chk-records-${suffix}`, key: 'records', ls: LS_KEY, db: DB_PATH },
-        { id: `chk-records-${suffix}`, key: 'dailyNotes', ls: NOTES_LS_KEY, db: NOTES_DB_PATH },
-        { id: `chk-records1f-${suffix}`, key: 'records1f', ls: isProduction ? '1f_nippo_records' : '1f_nippo_records_dev', db: `${SECRET_KEY}/${isProduction ? '1f_nippo_records' : '1f_nippo_records_dev'}` },
-        { id: `chk-kenpin1f-${suffix}`, key: 'kenpin1f', ls: isProduction ? '1f_kenpin_records' : '1f_kenpin_records_dev', db: `${SECRET_KEY}/${isProduction ? '1f_kenpin_records' : '1f_kenpin_records_dev'}` },
-        { id: `chk-saidan-${suffix}`, key: 'saidan', ls: isProduction ? 'saidan_records' : 'saidan_records_dev', db: `${SECRET_KEY}/${isProduction ? 'saidan_records' : 'saidan_records_dev'}` }
+        { id: 'chk-roll-' + suffix, key: 'roll', db: ROLL_DB_PATH },
+        { id: 'chk-sliver-' + suffix, key: 'sliver', db: SLIVER_DB_PATH },
+        { id: 'chk-hanapon-' + suffix, key: 'hanapon', db: HANAPON_DB_PATH },
+        { id: 'chk-snowsprint-' + suffix, key: 'snowsprint', db: SNOWSPRINT_DB_PATH },
+        { id: 'chk-project-' + suffix, key: 'project', db: PROJECT_DB_PATH },
+        { id: 'chk-records-' + suffix, key: 'records', db: DB_PATH },
+        { id: 'chk-records-' + suffix, key: 'dailyNotes', db: NOTES_DB_PATH },
+        { id: 'chk-records1f-' + suffix, key: 'records1f', db: SECRET_KEY + '/' + (isProduction ? '1f_nippo_records' : '1f_nippo_records_dev') },
+        { id: 'chk-kenpin1f-' + suffix, key: 'kenpin1f', db: SECRET_KEY + '/' + (isProduction ? '1f_kenpin_records' : '1f_kenpin_records_dev') },
+        { id: 'chk-saidan-' + suffix, key: 'saidan', db: SECRET_KEY + '/' + (isProduction ? 'saidan_records' : 'saidan_records_dev') }
     ];
 
-    const toRestore = checks.filter(c => document.getElementById(c.id)?.checked);
-
+    const toRestore = checks.filter(item => document.getElementById(item.id)?.checked);
     if (toRestore.length === 0) {
-        alert("\u5fa9\u5143\u3059\u308b\u9805\u76ee\u3092\u9078\u629e\u3057\u3066\u304f\u3060\u3055\u3044\u3002");
+        alert('復元する項目を選択してください。');
         return;
     }
 
     const restorableItems = toRestore.filter(item => hasRestorableBackupValue(backupObj[item.key]));
     if (restorableItems.length === 0) {
-        alert("\u9078\u629e\u3057\u305f\u9805\u76ee\u306b\u306f\u5fa9\u5143\u3067\u304d\u308b\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u30c7\u30fc\u30bf\u304c\u3042\u308a\u307e\u305b\u3093\u3002\u5225\u306e\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u3092\u9078\u3093\u3067\u304f\u3060\u3055\u3044\u3002");
+        alert('選択した項目には復元できるバックアップデータがありません。');
         return;
     }
 
     if (!database) {
-        alert("\u30b5\u30fc\u30d0\u30fc\u63a5\u7d9a\u304c\u521d\u671f\u5316\u3055\u308c\u3066\u3044\u307e\u305b\u3093\u3002\u901a\u4fe1\u72b6\u614b\u3092\u78ba\u8a8d\u3057\u3066\u304b\u3089\u3082\u3046\u4e00\u5ea6\u304a\u8a66\u3057\u304f\u3060\u3055\u3044\u3002");
+        alert('サーバー接続が初期化されていません。通信状態を確認してからもう一度お試しください。');
         return;
     }
 
-    const historyLabels = { 1: '最新の状態', 2: '1つ前の状態', 3: '2つ前の状態' };
-    const label = historyLabels[slot] || '履歴 ' + slot;
-    const itemsStr = restorableItems.map(c => document.getElementById(c.id).parentElement.textContent.trim()).join('\u3001');
-    if (!confirm(`本当に以下の項目を「${label}」に復元しますか？\n現在のデータは失われます。\n\n復元対象: ${itemsStr}`)) {
-        return;
-    }
+    const label = slot === 1 ? '最新の状態' : '履歴 ' + slot;
+    const itemsStr = restorableItems.map(item => {
+        const checkbox = document.getElementById(item.id);
+        return checkbox?.parentElement?.textContent?.trim() || item.key;
+    }).join('、');
+    const newline = String.fromCharCode(10);
+    const message = 'バックアップ「' + label + '」を統合復元します。' + newline
+        + '現在のデータは残し、バックアップにしかない記録を追加します。' + newline
+        + '対象: ' + itemsStr;
+    if (!confirm(message)) return;
 
-    let promises = [];
+    saveHistoryBackup();
+    const promises = [];
     restorableItems.forEach(item => {
-        const rawData = backupObj[item.key];
-        if (rawData) {
-            try {
-                const parsed = JSON.parse(rawData);
-                promises.push(database.ref(item.db).set(parsed));
-            } catch(e) {
-                console.error("Parse error for " + item.key, e);
-            }
+        try {
+            const backupValue = JSON.parse(backupObj[item.key]);
+            promises.push(new Promise((resolve, reject) => {
+                database.ref(item.db).transaction(currentValue =>
+                    SharedSync.mergeRestoreValue(currentValue, backupValue),
+                    (error, committed, snapshot) => {
+                        if (error) reject(error);
+                        else resolve({ committed, snapshot });
+                    }
+                );
+            }));
+        } catch (error) {
+            console.error('Restore parse error for ' + item.key, error);
         }
     });
 
     if (promises.length === 0) {
-        alert("\u5fa9\u5143\u3067\u304d\u308b\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u30c7\u30fc\u30bf\u304c\u3042\u308a\u307e\u305b\u3093\u3002\u5225\u306e\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u3092\u9078\u3093\u3067\u304f\u3060\u3055\u3044\u3002");
+        alert('復元できるバックアップデータがありません。');
         return;
     }
 
-    Promise.all(promises).then(() => {
-        alert("復元が完了しました。ページを再読み込みします。");
+    Promise.all(promises).then(results => {
+        if (results.some(result => result && result.committed === false)) throw new Error('app-version-stale');
+        alert('バックアップデータを現在のデータに統合しました。');
         window.location.reload();
-    }).catch(err => {
-        alert("復元中にエラーが発生しました: " + err.message);
+    }).catch(error => {
+        alert('統合復元中にエラーが発生しました: ' + error.message);
     });
 };
 
@@ -9405,77 +9837,92 @@ window.selectBackupDate = function(dateStr) {
 };
 
 window.restoreFromBackup = function(dateStr) {
-    const BACKUP_PREFIX = 'nippo_auto_backup_';
-    const key = BACKUP_PREFIX + dateStr;
-    const dataStr = localStorage.getItem(key);
+    if (!canWriteAppData()) return;
+    const dataStr = localStorage.getItem('nippo_auto_backup_' + dateStr);
     if (!dataStr) return;
-    
+
     let backupObj = {};
-    try { backupObj = JSON.parse(dataStr); } catch(e) { alert("バックアップデータの読み込みに失敗しました"); return; }
+    try { backupObj = JSON.parse(dataStr) || {}; } catch (error) {
+        alert('バックアップデータの読み込みに失敗しました');
+        return;
+    }
 
     const checks = [
-        { id: `chk-roll-${dateStr}`, key: 'roll', db: ROLL_DB_PATH },
-        { id: `chk-sliver-${dateStr}`, key: 'sliver', db: SLIVER_DB_PATH },
-        { id: `chk-hanapon-${dateStr}`, key: 'hanapon', db: HANAPON_DB_PATH },
-        { id: `chk-snowsprint-${dateStr}`, key: 'snowsprint', db: SNOWSPRINT_DB_PATH },
-        { id: `chk-project-${dateStr}`, key: 'project', db: PROJECT_DB_PATH },
-        { id: `chk-records-${dateStr}`, key: 'records', db: DB_PATH },
-        { id: `chk-records-${dateStr}`, key: 'dailyNotes', db: NOTES_DB_PATH }, // 2階日報も一緒に復元
-        { id: `chk-records1f-${dateStr}`, key: 'records1f', db: `${SECRET_KEY}/${isProduction ? '1f_nippo_records' : '1f_nippo_records_dev'}` },
-        { id: `chk-kenpin1f-${dateStr}`, key: 'kenpin1f', db: `${SECRET_KEY}/${isProduction ? '1f_kenpin_records' : '1f_kenpin_records_dev'}` },
-        { id: `chk-saidan-${dateStr}`, key: 'saidan', db: `${SECRET_KEY}/${isProduction ? 'saidan_records' : 'saidan_records_dev'}` }
+        { id: 'chk-roll-' + dateStr, key: 'roll', db: ROLL_DB_PATH },
+        { id: 'chk-sliver-' + dateStr, key: 'sliver', db: SLIVER_DB_PATH },
+        { id: 'chk-hanapon-' + dateStr, key: 'hanapon', db: HANAPON_DB_PATH },
+        { id: 'chk-snowsprint-' + dateStr, key: 'snowsprint', db: SNOWSPRINT_DB_PATH },
+        { id: 'chk-project-' + dateStr, key: 'project', db: PROJECT_DB_PATH },
+        { id: 'chk-records-' + dateStr, key: 'records', db: DB_PATH },
+        { id: 'chk-records-' + dateStr, key: 'dailyNotes', db: NOTES_DB_PATH },
+        { id: 'chk-records1f-' + dateStr, key: 'records1f', db: SECRET_KEY + '/' + (isProduction ? '1f_nippo_records' : '1f_nippo_records_dev') },
+        { id: 'chk-kenpin1f-' + dateStr, key: 'kenpin1f', db: SECRET_KEY + '/' + (isProduction ? '1f_kenpin_records' : '1f_kenpin_records_dev') },
+        { id: 'chk-saidan-' + dateStr, key: 'saidan', db: SECRET_KEY + '/' + (isProduction ? 'saidan_records' : 'saidan_records_dev') }
     ];
 
-    const toRestore = checks.filter(c => document.getElementById(c.id)?.checked);
-
+    const toRestore = checks.filter(item => document.getElementById(item.id)?.checked);
     if (toRestore.length === 0) {
-        alert("\u5fa9\u5143\u3059\u308b\u9805\u76ee\u3092\u9078\u629e\u3057\u3066\u304f\u3060\u3055\u3044\u3002");
+        alert('復元する項目を選択してください。');
         return;
     }
 
     const restorableItems = toRestore.filter(item => hasRestorableBackupValue(backupObj[item.key]));
     if (restorableItems.length === 0) {
-        alert("\u9078\u629e\u3057\u305f\u9805\u76ee\u306b\u306f\u5fa9\u5143\u3067\u304d\u308b\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u30c7\u30fc\u30bf\u304c\u3042\u308a\u307e\u305b\u3093\u3002\u5225\u306e\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u3092\u9078\u3093\u3067\u304f\u3060\u3055\u3044\u3002");
+        alert('選択した項目には復元できるバックアップデータがありません。');
         return;
     }
 
     if (!database) {
-        alert("\u30b5\u30fc\u30d0\u30fc\u63a5\u7d9a\u304c\u521d\u671f\u5316\u3055\u308c\u3066\u3044\u307e\u305b\u3093\u3002\u901a\u4fe1\u72b6\u614b\u3092\u78ba\u8a8d\u3057\u3066\u304b\u3089\u3082\u3046\u4e00\u5ea6\u304a\u8a66\u3057\u304f\u3060\u3055\u3044\u3002");
+        alert('サーバー接続が初期化されていません。通信状態を確認してからもう一度お試しください。');
         return;
     }
 
-    const itemsStr = restorableItems.map(c => document.getElementById(c.id).parentElement.textContent.trim()).join('\u3001');
-    if (!confirm(`本当に以下の項目を ${dateStr} の状態に復元しますか？\n現在のデータは失われます。\n\n復元対象: ${itemsStr}`)) {
-        return;
-    }
+    const itemsStr = restorableItems.map(item => {
+        const checkbox = document.getElementById(item.id);
+        return checkbox?.parentElement?.textContent?.trim() || item.key;
+    }).join('、');
+    const newline = String.fromCharCode(10);
+    const message = '自動バックアップ ' + dateStr + 'を統合復元します。' + newline
+        + '現在のデータは残し、バックアップにしかない記録を追加します。' + newline
+        + '対象: ' + itemsStr;
+    if (!confirm(message)) return;
 
-    let promises = [];
+    saveHistoryBackup();
+    const promises = [];
     restorableItems.forEach(item => {
-        const rawData = backupObj[item.key];
-        if (rawData) {
-            try {
-                const parsed = JSON.parse(rawData);
-                promises.push(database.ref(item.db).set(parsed));
-            } catch(e) {
-                console.error("Parse error for " + item.key, e);
-            }
+        try {
+            const backupValue = JSON.parse(backupObj[item.key]);
+            promises.push(new Promise((resolve, reject) => {
+                database.ref(item.db).transaction(currentValue =>
+                    SharedSync.mergeRestoreValue(currentValue, backupValue),
+                    (error, committed, snapshot) => {
+                        if (error) reject(error);
+                        else resolve({ committed, snapshot });
+                    }
+                );
+            }));
+        } catch (error) {
+            console.error('Restore parse error for ' + item.key, error);
         }
     });
 
     if (promises.length === 0) {
-        alert("\u5fa9\u5143\u3067\u304d\u308b\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u30c7\u30fc\u30bf\u304c\u3042\u308a\u307e\u305b\u3093\u3002\u5225\u306e\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u3092\u9078\u3093\u3067\u304f\u3060\u3055\u3044\u3002");
+        alert('復元できるバックアップデータがありません。');
         return;
     }
 
-    Promise.all(promises).then(() => {
-        alert("復元が完了しました。ページを再読み込みします。");
+    Promise.all(promises).then(results => {
+        if (results.some(result => result && result.committed === false)) throw new Error('app-version-stale');
+        alert('バックアップデータを現在のデータに統合しました。');
         window.location.reload();
-    }).catch(err => {
-        alert("復元中にエラーが発生しました: " + err.message);
+    }).catch(error => {
+        alert('統合復元中にエラーが発生しました: ' + error.message);
     });
 };
 
 // Start the application after all scripts and modules are defined
+SharedSync.startVersionGuard();
+startAppVersionGuard();
 init();
 
 

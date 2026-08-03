@@ -16,6 +16,10 @@ if (firebase.apps.length === 0) {
     firebase.initializeApp(firebaseConfig);
 }
 database = firebase.database();
+if (window.SharedSync) {
+    database = SharedSync.guardDatabase(database);
+    SharedSync.startVersionGuard();
+}
 
 const isProduction = true;
 const SECRET_KEY = 'nippo-report-secure-key-2026';
@@ -32,41 +36,37 @@ let currentDate = new Date().toLocaleDateString('sv-SE');
 let currentView = 'day'; // 'day' or 'month'
 let isFirstLoad = true;
 let isFirebaseSynced = false;
+let recordsSync = null;
 
 // Real-time sync from Firebase
-if (database) {
-    database.ref(DB_PATH).on('value', (snapshot) => {
-        const firebaseData = snapshot.val();
-        let firebaseRecords = [];
-        if (firebaseData) {
-            firebaseRecords = Array.isArray(firebaseData) ? firebaseData : Object.values(firebaseData);
-        }
+function normalizeSaidanRecords(value) {
+    const list = Array.isArray(value)
+        ? value
+        : Object.values(value && typeof value === 'object' ? value : {});
+    return list.filter(item => item && typeof item === 'object');
+}
 
-        if (isFirstLoad) {
-            isFirstLoad = false;
-            if (firebaseRecords.length > 0) {
-                records = firebaseRecords;
-                localStorage.setItem(LS_KEY, JSON.stringify(records));
-            } else if (records.length > 0) {
-                database.ref(DB_PATH).set(records);
-            }
+if (database && window.SharedSync) {
+    recordsSync = SharedSync.createPathSync({
+        database,
+        path: DB_PATH,
+        emptyValue: [],
+        normalize: normalizeSaidanRecords,
+        pendingStorageKey: LS_KEY + '_pending_sync',
+        mergeInitial: true,
+        serverSnapshotStorageKey: LS_KEY + '_server_snapshot',
+        getLocal: () => records,
+        setLocal: value => {
+            records = normalizeSaidanRecords(value);
+            localStorage.setItem(LS_KEY, JSON.stringify(records));
+        },
+        onRemote: () => {
             isFirebaseSynced = true;
+            const activeEl = document.activeElement;
+            if (activeEl && activeEl.closest('#saidan-items-container')) return;
             ensureMinRows(currentDate);
             renderRecords();
             if (currentView === 'month') renderMonthlyRecords();
-        } else if (firebaseRecords.length > 0) {
-            const sortedFirebase = firebaseRecords.slice().sort((a, b) =>
-                (a.date || '').localeCompare(b.date || '') || (a.id || 0) - (b.id || 0));
-            const sortedLocal = records.slice().sort((a, b) =>
-                (a.date || '').localeCompare(b.date || '') || (a.id || 0) - (b.id || 0));
-
-            if (JSON.stringify(sortedLocal) !== JSON.stringify(sortedFirebase)) {
-                records = firebaseRecords;
-                localStorage.setItem(LS_KEY, JSON.stringify(records));
-                ensureMinRows(currentDate);
-                renderRecords();
-                if (currentView === 'month') renderMonthlyRecords();
-            }
         }
     });
 }
@@ -197,10 +197,6 @@ function init() {
     ensureMinRows(currentDate);
     renderRecords();
 
-    // Prevent data loss
-    window.addEventListener('beforeunload', () => {
-        saveRecords();
-    });
 }
 
 // Switch between Day view and Monthly view
@@ -421,20 +417,16 @@ function handleAddRecord(e) {
 
 // Save records
 function saveRecords() {
+    if (window.SharedSync && !SharedSync.canWrite()) return false;
+
     try {
         localStorage.setItem(LS_KEY, JSON.stringify(records));
     } catch (e) {
         console.error('LocalStorage save failed:', e);
     }
 
-    if (database && isFirebaseSynced) {
-        if (Array.isArray(records) && records.length === 0) {
-            console.warn('BLOCKED: Attempted to save empty records to Firebase (saidan)');
-            return;
-        }
-        database.ref(DB_PATH).set(records)
-            .catch(err => console.error('Firebase save failed:', err));
-    }
+    if (recordsSync) return recordsSync.save(records);
+    return false;
 }
 
 // Update record field

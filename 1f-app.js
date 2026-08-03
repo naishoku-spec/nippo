@@ -15,6 +15,10 @@ let database = null;
 if (firebaseConfig.apiKey !== "YOUR_API_KEY") {
     firebase.initializeApp(firebaseConfig);
     database = firebase.database();
+    if (window.SharedSync) {
+        database = SharedSync.guardDatabase(database);
+        SharedSync.startVersionGuard();
+    }
 }
 
 // Environment Detection (Production vs Development)
@@ -37,67 +41,69 @@ let isFirstLoad = true;
 let isFirebaseSynced = false; 
 let dailyNotes = JSON.parse(localStorage.getItem(NOTES_LS_KEY)) || {};
 let noteSaveTimeout = null;
+let recordsSync = null;
+let notesSync = null;
 
 
 // Real-time synchronization from Firebase
-if (database) {
-    database.ref(DB_PATH).on('value', (snapshot) => {
-        const firebaseData = snapshot.val();
-        let firebaseRecords = [];
-        if (firebaseData) {
-            firebaseRecords = Array.isArray(firebaseData) ? firebaseData : Object.values(firebaseData);
-        }
+function normalize1fRecords(value) {
+    const list = Array.isArray(value)
+        ? value
+        : Object.values(value && typeof value === 'object' ? value : {});
+    return list.filter(item => item && typeof item === 'object');
+}
 
-        if (isFirstLoad) {
-            isFirstLoad = false;
-            
-            if (firebaseRecords.length > 0) {
-                // Cloud has data: prioritize it
-                records = firebaseRecords;
-                localStorage.setItem(LS_KEY, JSON.stringify(records));
-            } else {
-                // Cloud is empty: seed it with local data if available
-                if (records.length > 0) {
-                    database.ref(DB_PATH).set(records);
-                }
-            }
-            
-            isFirebaseSynced = true; 
-            ensureDayRecords(currentDate);
-            renderRecords();
-            if (monthViewContainer && monthViewContainer.style.display === 'block') renderMonthlyRecords();
-        } else {
-            // Live updates from other devices
-            if (firebaseRecords.length > 0) {
-                // Ensure consistent ordering for comparison
-                const sortedFirebase = firebaseRecords.slice().sort((a, b) => a.date.localeCompare(b.date) || a.machine.localeCompare(b.machine));
-                const sortedLocal = records.slice().sort((a, b) => a.date.localeCompare(b.date) || a.machine.localeCompare(b.machine));
+function normalize1fNotes(value) {
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+}
 
-
-                // Only update if the data is actually different to avoid unnecessary jumping
-                if (JSON.stringify(sortedLocal) !== JSON.stringify(sortedFirebase)) {
-                    records = firebaseRecords;
-                    localStorage.setItem(LS_KEY, JSON.stringify(records));
-                    renderRecords();
-                    if (monthViewContainer && monthViewContainer.style.display === 'block') renderMonthlyRecords();
+if (database && window.SharedSync) {
+    recordsSync = SharedSync.createPathSync({
+        database,
+        path: DB_PATH,
+        emptyValue: [],
+        normalize: normalize1fRecords,
+        pendingStorageKey: LS_KEY + '_pending_sync',
+        mergeInitial: true,
+        serverSnapshotStorageKey: LS_KEY + '_server_snapshot',
+        getLocal: () => records,
+        setLocal: value => {
+            records = normalize1fRecords(value);
+            localStorage.setItem(LS_KEY, JSON.stringify(records));
+        },
+        onRemote: () => {
+            isFirebaseSynced = true;
+            const activeEl = document.activeElement;
+            const isEditing = activeEl && activeEl.closest('#records-list-1f');
+            if (!isEditing) {
+                ensureDayRecords(currentDate);
+                renderRecords();
+                if (monthViewContainer && monthViewContainer.style.display === 'block') {
+                    renderMonthlyRecords();
                 }
             }
         }
     });
 
-
-
-    // Sync centralized notes
-    database.ref(NOTES_DB_PATH).on('value', (snapshot) => {
-        const firebaseNotes = snapshot.val();
-        if (firebaseNotes) {
-            dailyNotes = firebaseNotes;
+    notesSync = SharedSync.createPathSync({
+        database,
+        path: NOTES_DB_PATH,
+        emptyValue: {},
+        normalize: normalize1fNotes,
+        pendingStorageKey: NOTES_LS_KEY + '_pending_sync',
+        mergeInitial: true,
+        serverSnapshotStorageKey: NOTES_LS_KEY + '_server_snapshot',
+        getLocal: () => dailyNotes,
+        setLocal: value => {
+            dailyNotes = normalize1fNotes(value);
             localStorage.setItem(NOTES_LS_KEY, JSON.stringify(dailyNotes));
-            renderDailyNotes();
+        },
+        onRemote: () => {
+            const activeEl = document.activeElement;
+            if (!activeEl || activeEl.id !== 'day-note-text-1f') renderDailyNotes();
         }
     });
 }
-
 
 const MACHINES = ['R1', 'R2', 'R3', 'R4'];
 
@@ -177,12 +183,6 @@ function init() {
     ensureDayRecords(currentDate);
     renderRecords();
     renderDailyNotes();
-
-    // Prevent data loss on refresh/close
-    window.addEventListener('beforeunload', () => {
-        saveRecords();
-        saveDailyNotes1f();
-    });
 
     // Mobile Menu Setup
     setupMobileMenu();
@@ -437,23 +437,16 @@ function calculateDuration(start, end) {
 
 // Save logic: Granular updates to prevent multi-device conflicts
 function saveRecords() {
-    // Always save to localStorage immediately
+    if (window.SharedSync && !SharedSync.canWrite()) return false;
+
     try {
         localStorage.setItem(LS_KEY, JSON.stringify(records));
     } catch (e) {
         console.error('LocalStorage save failed:', e);
     }
-    
-    // Sync to Firebase using full sync for 1F (stabler and manageable data size)
-    if (database && isFirebaseSynced) {
-        // 空データ保護: recordsが空配列の場合はFirebaseへの書き込みをブロック
-        if (Array.isArray(records) && records.length === 0) {
-            console.warn('BLOCKED: Attempted to save empty records array to Firebase (1F)');
-            return;
-        }
-        database.ref(DB_PATH).set(records)
-            .catch(err => console.error('Firebase save failed:', err));
-    }
+
+    if (recordsSync) return recordsSync.save(records);
+    return false;
 }
 
 // Calculate cumulative total for a machine up to a certain date
@@ -657,20 +650,11 @@ function clearRow(id) {
 // Delete row
 function deleteRecord(id) {
     if (confirm('この項目を削除してもよろしいですか？')) {
+        if (window.SharedSync && !SharedSync.canWrite()) return;
         records = records.filter(r => r.id != id);
-        localStorage.setItem(LS_KEY, JSON.stringify(records));
-        
-        if (database && isFirebaseSynced) {
-            database.ref(DB_PATH + '/' + id).remove()
-                .then(() => {
-                    renderRecords();
-                    if (monthViewContainer && monthViewContainer.style.display === 'block') renderMonthlyRecords();
-                })
-                .catch(err => console.error('Firebase remove failed:', err));
-        } else {
-            renderRecords();
-            if (monthViewContainer && monthViewContainer.style.display === 'block') renderMonthlyRecords();
-        }
+        saveRecords();
+        renderRecords();
+        if (monthViewContainer && monthViewContainer.style.display === 'block') renderMonthlyRecords();
     }
 }
 
@@ -722,31 +706,34 @@ function renderDailyNotes() {
 }
 
 window.saveDailyNotes1f = function() {
+    if (window.SharedSync && !SharedSync.canWrite()) return;
+
     const textarea = document.getElementById('day-note-text-1f');
     if (!textarea) return;
-    
+
     const text = textarea.value.trim();
     if (text) {
         dailyNotes[currentDate] = text;
     } else {
         delete dailyNotes[currentDate];
     }
-    
+
     localStorage.setItem(NOTES_LS_KEY, JSON.stringify(dailyNotes));
-    
+
     clearTimeout(noteSaveTimeout);
     noteSaveTimeout = setTimeout(() => {
-        if (database) {
-            database.ref(NOTES_DB_PATH).set(dailyNotes).then(() => {
-                const saveStatus = document.getElementById('saveStatusNotes1f');
-                if (saveStatus) {
-                    saveStatus.textContent = "保存しました";
-                    setTimeout(() => saveStatus.textContent = "", 3000);
-                }
-            });
+        if (notesSync) notesSync.save(dailyNotes);
+
+        const saveStatus = document.getElementById('saveStatusNotes1f');
+        if (saveStatus) {
+            saveStatus.textContent = "\u4fdd\u5b58\u3057\u307e\u3057\u305f";
+            setTimeout(() => saveStatus.textContent = "", 3000);
         }
     }, 1000);
-}
+};
+
+
+init();
 
 
 init();
