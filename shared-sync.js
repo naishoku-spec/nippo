@@ -1,8 +1,8 @@
 (function (global) {
     'use strict';
 
-    const BUILD_ID = '20260803-sync-v9';
-    const BUILD_NUMBER = 2026080309;
+    const BUILD_ID = '20260803-sync-v21';
+    const BUILD_NUMBER = 2026080321;
     const VERSION_PATH = 'app-version.json';
     const VERSION_CHECK_INTERVAL_MS = 30000;
     const LATEST_BUILD_KEY = 'nippo_latest_app_build_number';
@@ -113,7 +113,10 @@
                 continue;
             }
             if (valuesEqual(localValue, baseValue)) {
-                if (hasRemote) result.push(cloneValue(remoteValue));
+                // A stale page may send an older array without this item.
+                // Preserve the acknowledged local item unless this page
+                // explicitly removed it (handled by !hasLocal above).
+                result.push(hasRemote ? cloneValue(remoteValue) : cloneValue(localValue));
                 continue;
             }
             if (!hasRemote) {
@@ -220,9 +223,9 @@
                     continue;
                 }
                 if (!remoteHas) {
-                    if (!valuesEqual(local[key], base[key])) {
-                        result[key] = cloneValue(local[key]);
-                    }
+                    // Keep a local field when a stale remote snapshot omits it.
+                    // An explicit local deletion has already returned above.
+                    result[key] = cloneValue(local[key]);
                     continue;
                 }
 

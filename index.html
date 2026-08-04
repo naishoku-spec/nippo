@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="app-build-id" content="20260803-sync-v9">
+    <meta name="app-build-id" content="20260803-sync-v21">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
@@ -14,6 +14,18 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
+    <script>
+        (function () {
+            var initialView = new URLSearchParams(window.location.search).get('view');
+            if (initialView === 'month') document.documentElement.setAttribute('data-initial-view', 'month');
+        })();
+    </script>
+    <style>
+        html[data-initial-view="month"] #day-view-container { display: none !important; }
+        html[data-initial-view="month"] #month-view-container { display: block !important; }
+        html[data-initial-view="month"] #productionViewToggle { display: flex !important; }
+        html[data-initial-view="month"] #dayDateSelector { display: block !important; }
+    </style>
     <!-- Flatpickr for custom date styling -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -22,7 +34,7 @@
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
-    <script src="shared-sync.js?v=20260803-sync-v9"></script>
+    <script src="shared-sync.js?v=20260803-sync-v21"></script>
 </head>
 
 <body>
@@ -915,7 +927,7 @@
         </div>
     </div>
 
-    <script src="app.js?v=20260803-sync-v9"></script>
+    <script src="app.js?v=20260803-sync-v21"></script>
 </body>
 
 </html>

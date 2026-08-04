@@ -1611,8 +1611,8 @@ const firebaseConfig = {
     measurementId: "G-SR8Y5NKQTZ"
 };
 
-const APP_BUILD_ID = '20260803-sync-v9';
-const APP_BUILD_NUMBER = 2026080309;
+const APP_BUILD_ID = '20260803-sync-v21';
+const APP_BUILD_NUMBER = 2026080321;
 const APP_VERSION_METADATA_PATH = 'app-version.json';
 const APP_VERSION_CHECK_INTERVAL_MS = 30000;
 const APP_LATEST_BUILD_LS_KEY = 'nippo_latest_app_build_number';
@@ -1797,11 +1797,11 @@ function startAppVersionGuard() {
 
 // Initialize Firebase
 let database = null;
-if (firebaseConfig.apiKey !== "YOUR_API_KEY") {
+if (typeof firebase !== "undefined" && firebaseConfig.apiKey !== "YOUR_API_KEY") {
     firebase.initializeApp(firebaseConfig);
     database = createGuardedFirebaseDatabase(firebase.database());
 }
-if (window.SharedSync) SharedSync.startVersionGuard();
+if (window.SharedSync && typeof SharedSync.startVersionGuard === 'function') SharedSync.startVersionGuard();
 
 // Environment Detection (Production vs Development)
 const isProduction = true; // 常に本番データ（Web）と同期するためにtrueに変更
@@ -2013,9 +2013,10 @@ document.addEventListener('visibilitychange', () => {
 
 // Keep the existing array format while merging concurrent record changes in Firebase transactions.
 const DAILY_RECORD_KEY_FIELD = '_syncKey';
+const DAILY_RECORD_UPDATED_AT_FIELD = '_syncUpdatedAt';
 const DAILY_RECORDS_PENDING_LS_KEY = LS_KEY + '_pending_sync';
 const DAILY_RECORDS_SERVER_LS_KEY = LS_KEY + '_server_snapshot';
-let recordsSyncReady = false;
+let recordsSyncReady = !database;
 let recordsSyncInFlight = false;
 let recordsSyncRetryTimer = null;
 let recordsPendingSync = null;
@@ -2029,6 +2030,11 @@ function hashDailyRecordValue(value) {
         hash = Math.imul(hash, 16777619);
     }
     return (hash >>> 0).toString(36);
+}
+
+function getDailyRecordUpdatedAt(record) {
+    const updatedAt = Number(record?.[DAILY_RECORD_UPDATED_AT_FIELD]);
+    return Number.isFinite(updatedAt) ? updatedAt : 0;
 }
 
 function normalizeDailyRecords(input) {
@@ -2136,6 +2142,8 @@ function loadDailyServerSnapshot() {
 function dailyRecordEquals(left, right) {
     if (!left || !right) return left === right;
     const fields = new Set([...Object.keys(left), ...Object.keys(right)]);
+    fields.delete('id'); // The UI id can differ between devices; _syncKey is the identity.
+    fields.delete(DAILY_RECORD_UPDATED_AT_FIELD);
     for (const field of fields) {
         if (JSON.stringify(left[field]) !== JSON.stringify(right[field])) return false;
     }
@@ -2160,6 +2168,7 @@ function mergeDailyRecordFields(base, local, remote, syncKey) {
         ...Object.keys(remote || {})
     ]);
     fields.delete(DAILY_RECORD_KEY_FIELD);
+    fields.delete(DAILY_RECORD_UPDATED_AT_FIELD);
 
     fields.forEach(field => {
         const baseHas = !!base && Object.prototype.hasOwnProperty.call(base, field);
@@ -2169,13 +2178,21 @@ function mergeDailyRecordFields(base, local, remote, syncKey) {
             || JSON.stringify(local?.[field]) !== JSON.stringify(base?.[field]);
         const remoteChanged = remoteHas !== baseHas
             || JSON.stringify(remote?.[field]) !== JSON.stringify(base?.[field]);
-        const source = localChanged ? local : (remoteChanged ? remote : (remote || local || base));
+        const source = field === 'id'
+            ? (localHas ? local : (remoteHas ? remote : base))
+            : (localChanged ? local : (remoteChanged ? remote : (remote || local || base)));
 
         if (source && Object.prototype.hasOwnProperty.call(source, field)) {
             merged[field] = source[field];
         }
     });
 
+    const updatedAt = Math.max(
+        getDailyRecordUpdatedAt(base),
+        getDailyRecordUpdatedAt(local),
+        getDailyRecordUpdatedAt(remote)
+    );
+    if (updatedAt > 0) merged[DAILY_RECORD_UPDATED_AT_FIELD] = updatedAt;
     merged[DAILY_RECORD_KEY_FIELD] = syncKey;
     return merged;
 }
@@ -2208,7 +2225,13 @@ function mergeDailyRecords(baseInput, localInput, remoteInput) {
         }
 
         if (dailyRecordEquals(localRecord, baseRecord)) {
-            if (remoteRecord) merged.set(key, remoteRecord);
+            // A stale page may send an older array or old values after this
+            // device has already committed a newer edit.
+            if (remoteRecord && getDailyRecordUpdatedAt(remoteRecord) < getDailyRecordUpdatedAt(baseRecord)) {
+                merged.set(key, localRecord);
+            } else {
+                merged.set(key, remoteRecord || localRecord);
+            }
             return;
         }
 
@@ -2230,7 +2253,15 @@ function mergeInitialDailyRecords(localInput, remoteInput) {
 
     remote.forEach((remoteRecord, key) => {
         const localRecord = local.get(key);
-        merged.push(localRecord ? { ...localRecord, ...remoteRecord } : remoteRecord);
+        if (localRecord && getDailyRecordUpdatedAt(localRecord) > getDailyRecordUpdatedAt(remoteRecord)) {
+            // A just-entered local value is newer than an old remote row even
+            // when both rows already share the same date/machine key.
+            merged.push(mergeDailyRecordFields(remoteRecord, localRecord, remoteRecord, key));
+        } else {
+            // With no local timestamp, preserve the established initial rule:
+            // the remote conflict wins while local-only rows survive below.
+            merged.push(localRecord ? { ...localRecord, ...remoteRecord } : remoteRecord);
+        }
     });
     local.forEach((localRecord, key) => {
         if (!remote.has(key)) merged.push(localRecord);
@@ -2326,7 +2357,46 @@ let rollDataSync = null;
 let sliverDataSync = null;
 let hanaponDataSync = null;
 let snowsprintDataSync = null;
-let currentDate = new Date().toLocaleDateString('sv-SE'); // YYYY-MM-DD format
+const CURRENT_DATE_LS_KEY = 'nippo_current_date';
+const CURRENT_VIEW_LS_KEY = 'nippo_current_view';
+const CURRENT_VIEW_SESSION_KEY = CURRENT_VIEW_LS_KEY + '_session';
+
+function getStoredView() {
+    let storedView = null;
+    try {
+        storedView = sessionStorage.getItem(CURRENT_VIEW_SESSION_KEY);
+    } catch (error) {
+        console.warn('Session view state unavailable:', error);
+    }
+    if (!storedView) {
+        try {
+            storedView = localStorage.getItem(CURRENT_VIEW_LS_KEY);
+        } catch (error) {
+            console.warn('Local view state unavailable:', error);
+        }
+    }
+    return storedView;
+}
+
+function saveCurrentView(view) {
+    try {
+        sessionStorage.setItem(CURRENT_VIEW_SESSION_KEY, view);
+    } catch (error) {
+        console.warn('Session view state could not be saved:', error);
+    }
+    try {
+        localStorage.setItem(CURRENT_VIEW_LS_KEY, view);
+    } catch (error) {
+        console.warn('Local view state could not be saved:', error);
+    }
+}
+function getInitialCurrentDate() {
+    const storedDate = localStorage.getItem(CURRENT_DATE_LS_KEY);
+    return /^\d{4}-\d{2}-\d{2}$/.test(storedDate || '')
+        ? storedDate
+        : new Date().toLocaleDateString('sv-SE');
+}
+let currentDate = getInitialCurrentDate(); // YYYY-MM-DD format
 let isFirstLoad = true;
 let isFirstNotesLoad = true;
 let noteSaveTimeout = null;
@@ -2342,6 +2412,21 @@ let rollLastEditTime = 0;
 let rollCurrentYear = new Date().getFullYear();
 let rollCurrentMonth = new Date().getMonth() + 1;
 let isFirstRollLoad = true;
+
+function renderDailySyncLoadingState() {
+    // Keep the cached records visible while the background sync is running.
+    renderActiveDailyView();
+}
+
+function renderActiveDailyView() {
+    const monthContainer = document.getElementById('month-view-container');
+    const dayContainer = document.getElementById('day-view-container');
+    if (monthContainer?.style.display === 'block') {
+        renderMonthlyRecords();
+    } else if (dayContainer?.style.display === 'block') {
+        renderRecords();
+    }
+}
 
 // Real-time synchronization from Firebase
 if (database) {
@@ -2401,21 +2486,36 @@ if (database) {
             localStorage.setItem(LS_KEY, JSON.stringify(records));
             scheduleDailyBackupRefresh();
             ensureDayRecords(currentDate);
-            renderRecords();
+            // Render only after the initial server snapshot has been merged.
+            // The saved view may have been selected before this callback ran.
+            setTimeout(renderActiveDailyView, 0);
         } else {
             if (remoteRecords.length === 0 && records.length > 0 && !recordsPendingSync) {
                 console.warn('Ignored an empty remote daily-records snapshot to protect local data');
                 return;
             }
 
+            // Reconcile every realtime event against the last acknowledged server
+            // state. A value event can arrive after a local save but before its
+            // pending state is visible here, so replacing records with the remote
+            // array directly can discard a just-entered record.
+            const previousServerRecords = cloneDailyRecords(recordsServerSnapshot);
+            const localRecordsBeforeRemote = cloneDailyRecords(records);
             recordsServerSnapshot = remoteRecords;
             persistDailyServerSnapshot(remoteRecords);
             const nextRecords = recordsPendingSync
                 ? mergeDailyRecords(recordsPendingSync.base, recordsPendingSync.local, remoteRecords)
-                : remoteRecords;
+                : mergeDailyRecords(previousServerRecords, localRecordsBeforeRemote, remoteRecords);
             const isDifferent = !dailyRecordsEqual(records, nextRecords);
 
             records = nextRecords;
+            if (!recordsPendingSync && !dailyRecordsEqual(nextRecords, remoteRecords)) {
+                recordsPendingSync = {
+                    base: cloneDailyRecords(remoteRecords),
+                    local: cloneDailyRecords(nextRecords)
+                };
+                persistPendingRecordsSync();
+            }
             if (isDifferent) {
                 localStorage.setItem(LS_KEY, JSON.stringify(records));
                 scheduleDailyBackupRefresh();
@@ -2430,11 +2530,12 @@ if (database) {
                     renderMonthlyRecords();
                 }
             }
+            if (recordsPendingSync && !recordsSyncInFlight) flushPendingRecordsSync();
         }
     });
 
     // Shared sync for daily notes and roll inventory.
-    dailyNotesSync = SharedSync.createPathSync({
+    if (window.SharedSync) dailyNotesSync = SharedSync.createPathSync({
         database,
         path: NOTES_DB_PATH,
         emptyValue: {},
@@ -2539,16 +2640,17 @@ function init() {
 
 
     // Initialize Flatpickr for better styling control (like weekend colors)
-    flatpickr(datePicker, {
+    if (typeof flatpickr === "function" && datePicker) {
+        flatpickr(datePicker, {
         locale: "ja",
         defaultValue: currentDate,
         disableMobile: true, // Force consistent UI on mobile
         onChange: function (selectedDates, dateStr) {
             currentDate = dateStr;
+            localStorage.setItem(CURRENT_DATE_LS_KEY, currentDate);
             ensureDayRecords(currentDate);
-            renderRecords();
+            renderActiveDailyView();
             renderDailyNotes();
-            if (monthViewContainer.style.display === 'block') renderMonthlyRecords();
         },
         onDayCreate: function (dObj, dStr, fp, dayElem) {
             const dateStr = dayElem.dateObj.toLocaleDateString('sv-SE');
@@ -2559,7 +2661,16 @@ function init() {
                 dayElem.classList.add("weekend-sat");
             }
         }
-    });
+        });
+    } else if (datePicker) {
+        datePicker.addEventListener("change", function () {
+            currentDate = datePicker.value;
+            localStorage.setItem(CURRENT_DATE_LS_KEY, currentDate);
+            ensureDayRecords(currentDate);
+            renderActiveDailyView();
+            renderDailyNotes();
+        });
+    }
 
     datePicker.value = currentDate;
     // ensureDayRecords is now called inside Firebase listener after sync
@@ -2582,7 +2693,7 @@ function init() {
 
     // Check URL parameters or localStorage for view
     const urlParams = new URLSearchParams(window.location.search);
-    const viewParam = urlParams.get('view') || localStorage.getItem('nippo_current_view');
+    const viewParam = urlParams.get('view') || getStoredView();
     if (viewParam && ['day', 'month', 'stock', 'sliver', 'hanapon', 'snowsprint', 'shift', 'project', 'backup'].includes(viewParam)) {
         switchView(viewParam);
     } else {
@@ -2645,13 +2756,14 @@ function setupMobileMenu() {
 
 function switchView(view) {
     // Save current view to localStorage so it persists across reloads
-    localStorage.setItem('nippo_current_view', view);
+    saveCurrentView(view);
+    document.documentElement.removeAttribute('data-initial-view');
     
-    // Keep the selected view in local storage and remove the transient query from the address bar.
+    // Keep the address bar clean; the tab-specific state restores the page on reload.
     const url = new URL(window.location.href);
     if (url.searchParams.has('view')) {
         url.searchParams.delete('view');
-        window.history.replaceState({}, '', url);
+        window.history.replaceState({ view }, '', url);
     }
     
     // Update header title based on view
@@ -2795,8 +2907,9 @@ function switchView(view) {
 
     // Header sub-toggle active states
     document.getElementById('view-day-btn')?.classList.toggle('active', view === 'day');
-    if (view === 'day') renderRecords();
-    if (view === 'month') renderMonthlyRecords();
+    if (view === 'day' || view === 'month') {
+        renderActiveDailyView();
+    }
     if (view === 'stock') renderRollStock();
     if (view === 'sliver') renderSliver();
     if (view === 'sliver') renderSliver();
@@ -2898,7 +3011,8 @@ function handleAddRecord(e) {
         startTime: startTimeInput.value,
         endTime: endTimeInput.value,
         count: parseInt(document.getElementById('count').value || 0),
-        orderCount: 0
+        orderCount: 0,
+        [DAILY_RECORD_UPDATED_AT_FIELD]: Date.now()
     };
 
     records.push(record);
@@ -3047,7 +3161,8 @@ function ensureDayRecords(date) {
                 startTime: '08:45',
                 endTime: '16:30',
                 count: 0,
-                orderCount: 0
+                orderCount: 0,
+                [DAILY_RECORD_UPDATED_AT_FIELD]: Date.now()
             });
             updated = true;
         }
@@ -3070,6 +3185,9 @@ function updateRecord(id, field, value) {
     }
 
     // If product name is changed, propagate this choice to future dates that haven't been "started" yet
+    const updatedAt = Date.now();
+    record[DAILY_RECORD_UPDATED_AT_FIELD] = updatedAt;
+
     if (field === 'product') {
         const realToday = new Date().toLocaleDateString('sv-SE');
         // Propagation only happens if we are editing today's or a future record
@@ -3079,6 +3197,7 @@ function updateRecord(id, field, value) {
                     futureRecord.machine === record.machine &&
                     futureRecord.count === 0) {
                     futureRecord.product = value;
+                    futureRecord[DAILY_RECORD_UPDATED_AT_FIELD] = updatedAt;
                 }
             });
         }
@@ -3378,6 +3497,7 @@ function clearRow(id) {
     if (!record) return;
     record.product = '';
     record.count = 0;
+    record[DAILY_RECORD_UPDATED_AT_FIELD] = Date.now();
     saveRecords();
     renderRecords();
 }
@@ -3417,7 +3537,7 @@ function isRollHoliday(year, month, day) {
 
 function initRollStock() {
     loadRollData();
-    if (database && !rollDataSync) {
+    if (database && window.SharedSync && !rollDataSync) {
         rollDataSync = SharedSync.createPathSync({
             database,
             path: ROLL_DB_PATH,
@@ -3918,7 +4038,7 @@ function initSliver() {
     // Setup month selector
     setupSliverMonthSelector();
 
-    if (database && !sliverDataSync) {
+    if (database && window.SharedSync && !sliverDataSync) {
         sliverDataSync = SharedSync.createPathSync({
             database,
             path: SLIVER_DB_PATH,
@@ -4578,7 +4698,7 @@ function initHanapon() {
     // Setup month selector
     setupHanaponMonthSelector();
 
-    if (database && !hanaponDataSync) {
+    if (database && window.SharedSync && !hanaponDataSync) {
         hanaponDataSync = SharedSync.createPathSync({
             database,
             path: HANAPON_DB_PATH,
@@ -7582,7 +7702,7 @@ function initSnowsprint() {
     propagateSnowSprintCarryover(snowsprintCurrentYear, snowsprintCurrentMonth);
     setupSnowsprintMonthSelector();
 
-    if (database && !snowsprintDataSync) {
+    if (database && window.SharedSync && !snowsprintDataSync) {
         snowsprintDataSync = SharedSync.createPathSync({
             database,
             path: SNOWSPRINT_DB_PATH,
@@ -8737,7 +8857,7 @@ function initProjectManagement() {
         }
     }
 
-    if (!database) return;
+    if (!database || !window.SharedSync) return;
 
     projectDataSync = SharedSync.createPathSync({
         database,
@@ -9961,7 +10081,7 @@ window.restoreFromBackup = function(dateStr) {
 };
 
 // Start the application after all scripts and modules are defined
-SharedSync.startVersionGuard();
+if (window.SharedSync && typeof SharedSync.startVersionGuard === 'function') SharedSync.startVersionGuard();
 startAppVersionGuard();
 init();
 
