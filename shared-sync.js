@@ -1,8 +1,8 @@
 (function (global) {
     'use strict';
 
-    const BUILD_ID = '20260803-sync-v7';
-    const BUILD_NUMBER = 2026080307;
+    const BUILD_ID = '20260803-sync-v9';
+    const BUILD_NUMBER = 2026080309;
     const VERSION_PATH = 'app-version.json';
     const VERSION_CHECK_INTERVAL_MS = 30000;
     const LATEST_BUILD_KEY = 'nippo_latest_app_build_number';
@@ -123,6 +123,57 @@
             result.push(mergeThreeWay(baseValue, localValue, remoteValue));
         }
         return result;
+    }
+
+    function mergeInitialArrays(local, remote) {
+        const toMap = list => {
+            const map = new Map();
+            for (const item of list) {
+                const key = collectionKey(item);
+                if (!key || map.has(key)) return null;
+                map.set(key, item);
+            }
+            return map;
+        };
+
+        const localMap = toMap(local);
+        const remoteMap = toMap(remote);
+        if (!localMap || !remoteMap) return cloneValue(remote);
+
+        const result = [];
+        for (const [key, remoteValue] of remoteMap) {
+            result.push(localMap.has(key)
+                ? mergeInitialValue(localMap.get(key), remoteValue)
+                : cloneValue(remoteValue));
+        }
+        for (const [key, localValue] of localMap) {
+            if (!remoteMap.has(key)) result.push(cloneValue(localValue));
+        }
+        return result;
+    }
+
+    // During the first sync, remote conflicts win while local-only values survive.
+    function mergeInitialValue(local, remote) {
+        if (remote === undefined) return cloneValue(local);
+        if (local === undefined) return cloneValue(remote);
+
+        if (Array.isArray(local) || Array.isArray(remote)) {
+            if (!Array.isArray(local) || !Array.isArray(remote)) return cloneValue(remote);
+            return mergeInitialArrays(local, remote);
+        }
+
+        if (isPlainObject(local) || isPlainObject(remote)) {
+            if (!isPlainObject(local) || !isPlainObject(remote)) return cloneValue(remote);
+            const result = cloneValue(remote) || {};
+            for (const key of Object.keys(local)) {
+                result[key] = Object.prototype.hasOwnProperty.call(remote, key)
+                    ? mergeInitialValue(local[key], remote[key])
+                    : cloneValue(local[key]);
+            }
+            return result;
+        }
+
+        return cloneValue(remote);
     }
 
     function mergeThreeWay(base, local, remote) {
@@ -564,7 +615,12 @@
                 const previousServer = storedServerSnapshot.found ? cloneValue(storedServerSnapshot.value) : null;
                 serverSnapshot = cloneValue(remote);
                 if (pending) {
-                    const merged = merge(pending.base, pending.local, remote);
+                    const noKnownBaseline = !storedServerSnapshot.found
+                        && isEmptyValue(pending.base)
+                        && !isEmptyValue(remote);
+                    const merged = noKnownBaseline
+                        ? mergeInitialValue(pending.local, remote)
+                        : merge(pending.base, pending.local, remote);
                     pending = { base: cloneValue(remote), local: cloneValue(merged) };
                     setLocal(merged, { source: 'initial', pending: true });
                 } else if (previousServer !== null) {
@@ -579,7 +635,7 @@
                     pending = { base: cloneValue(emptyValue), local: cloneValue(local) };
                     setLocal(local, { source: 'initial', pending: true });
                 } else if (mergeInitial && !isEmptyValue(local) && !isEmptyValue(remote)) {
-                    const merged = merge(emptyValue, local, remote);
+                    const merged = mergeInitialValue(local, remote);
                     if (!valuesEqual(merged, remote)) {
                         pending = { base: cloneValue(remote), local: cloneValue(merged) };
                         setLocal(merged, { source: 'initial', pending: true });
@@ -648,6 +704,7 @@
         cloneValue,
         valuesEqual,
         mergeThreeWay,
+        mergeInitialValue,
         mergeRestoreValue,
         guardReference,
         guardDatabase,

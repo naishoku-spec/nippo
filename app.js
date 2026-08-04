@@ -1611,8 +1611,8 @@ const firebaseConfig = {
     measurementId: "G-SR8Y5NKQTZ"
 };
 
-const APP_BUILD_ID = '20260803-sync-v7';
-const APP_BUILD_NUMBER = 2026080307;
+const APP_BUILD_ID = '20260803-sync-v9';
+const APP_BUILD_NUMBER = 2026080309;
 const APP_VERSION_METADATA_PATH = 'app-version.json';
 const APP_VERSION_CHECK_INTERVAL_MS = 30000;
 const APP_LATEST_BUILD_LS_KEY = 'nippo_latest_app_build_number';
@@ -2223,6 +2223,22 @@ function mergeDailyRecords(baseInput, localInput, remoteInput) {
     return Array.from(merged.values());
 }
 
+function mergeInitialDailyRecords(localInput, remoteInput) {
+    const local = new Map(cloneDailyRecords(localInput).map(record => [record[DAILY_RECORD_KEY_FIELD], record]));
+    const remote = new Map(cloneDailyRecords(remoteInput).map(record => [record[DAILY_RECORD_KEY_FIELD], record]));
+    const merged = [];
+
+    remote.forEach((remoteRecord, key) => {
+        const localRecord = local.get(key);
+        merged.push(localRecord ? { ...localRecord, ...remoteRecord } : remoteRecord);
+    });
+    local.forEach((localRecord, key) => {
+        if (!remote.has(key)) merged.push(localRecord);
+    });
+
+    return merged;
+}
+
 function flushPendingRecordsSync() {
     if (!canWriteAppData() || !database || !recordsSyncReady || recordsSyncInFlight || !recordsPendingSync) return;
 
@@ -2340,13 +2356,28 @@ if (database) {
 
             if (remoteRecords.length > 0) {
                 if (recordsPendingSync) {
-                    records = mergeDailyRecords(recordsPendingSync.base, recordsPendingSync.local, remoteRecords);
+                    const noKnownBaseline = !storedDailyServerSnapshot
+                        && recordsPendingSync.base.length === 0
+                        && remoteRecords.length > 0;
+                    const mergedPendingRecords = noKnownBaseline
+                        ? mergeInitialDailyRecords(recordsPendingSync.local, remoteRecords)
+                        : mergeDailyRecords(recordsPendingSync.base, recordsPendingSync.local, remoteRecords);
+                    records = mergedPendingRecords;
+                    if (noKnownBaseline) {
+                        recordsPendingSync = {
+                            base: cloneDailyRecords(remoteRecords),
+                            local: cloneDailyRecords(mergedPendingRecords)
+                        };
+                        persistPendingRecordsSync();
+                    }
                 } else {
                     const initialBase = storedDailyServerSnapshot
                         ? cloneDailyRecords(storedDailyServerSnapshot)
                         : [];
                     const mergedRecords = localRecords.length > 0
-                        ? mergeDailyRecords(initialBase, localRecords, remoteRecords)
+                        ? (storedDailyServerSnapshot
+                            ? mergeDailyRecords(initialBase, localRecords, remoteRecords)
+                            : mergeInitialDailyRecords(localRecords, remoteRecords))
                         : remoteRecords;
                     records = mergedRecords;
                     if (!dailyRecordsEqual(mergedRecords, remoteRecords)) {
@@ -2850,6 +2881,7 @@ function renderMonthlyRecords() {
 // Handle Quick Entry
 function handleAddRecord(e) {
     e.preventDefault();
+    if (!canWriteAppData()) return;
 
     const startTimeInput = document.getElementById('start-time');
     const endTimeInput = document.getElementById('end-time');
@@ -2989,6 +3021,8 @@ function isFixedHoliday(y, m, d) {
 
 // Ensure machines A-J exist for a specific date
 function ensureDayRecords(date) {
+    if (!canWriteAppData()) return;
+
     // Skip if weekend (Saturday=6, Sunday=0) or Holiday
     const dayOfWeek = new Date(date).getDay();
     if (dayOfWeek === 0 || dayOfWeek === 6 || isJapaneseHoliday(date)) return;
@@ -3024,6 +3058,8 @@ function ensureDayRecords(date) {
 
 // Update a specific field in a record
 function updateRecord(id, field, value) {
+    if (!canWriteAppData()) return;
+
     const record = records.find(r => r.id == id);
     if (!record) return;
 
@@ -3336,6 +3372,8 @@ function calculateAndDisplayStats() {
 
 // Reset a row
 function clearRow(id) {
+    if (!canWriteAppData()) return;
+
     const record = records.find(r => r.id == id);
     if (!record) return;
     record.product = '';
@@ -3346,6 +3384,8 @@ function clearRow(id) {
 
 // Delete a row
 function deleteRecord(id) {
+    if (!canWriteAppData()) return;
+
     if (confirm('この項目を削除してもよろしいですか？')) {
         records = records.filter(r => r.id != id);
         saveRecords();
