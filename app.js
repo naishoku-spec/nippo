@@ -2559,6 +2559,7 @@ const MACHINES = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
 // ... (PRODUCTS list remains same)
 const PRODUCTS = [
     '', 'No.4', 'No.6', 'No.10', 'No.30フラット', 'No.30スイック', 'No.30タブレット',
+    'Φ20×20', 'Φ15×20',
     '鼻ぽん大', '鼻ぽん小', '穴あき鼻ぽん小さめ', '穴あき鼻ぽん普通', '鼻ぽん特注',
     'コア', '楕円型タブレット', 'SH', 'MSH', 'ソフト', 'インジェクション',
     'ガーゼボール', '固巻円柱綿', 'ぼぼ小', 'ぼぼ大', 'ウォータージェット綿球',
@@ -2575,8 +2576,92 @@ const PRODUCTS = [
     '片穴コットン玉#40片', '片穴コットン玉#10太片', '片穴コットン玉#12太片',
     '片穴コットン玉#14太片', '片穴コットン玉#16太片', '片穴コットン玉 半丸φ15',
     '片穴コットン玉 半丸φ20', '片穴コットン玉 半丸φ25',
-    '開頭綿球#40', 'むし綿球', 'サンプル'
 ];
+
+// --- Custom Combobox Dropdown Logic ---
+const VALID_PRODUCTS = PRODUCTS.filter(p => p !== '');
+
+window.openComboboxMenu = function(inputEl, recordId) {
+    let wrapper = inputEl.closest('.combobox-wrapper');
+    if (!wrapper) return;
+    let dropdown = wrapper.querySelector('.combobox-dropdown');
+    if (!dropdown) return;
+
+    renderComboboxDropdownItems(dropdown, inputEl.value, inputEl, recordId);
+    dropdown.style.display = 'block';
+};
+
+window.toggleComboboxMenu = function(inputEl, recordId) {
+    let wrapper = inputEl.closest('.combobox-wrapper');
+    if (!wrapper) return;
+    let dropdown = wrapper.querySelector('.combobox-dropdown');
+    if (!dropdown) return;
+
+    if (dropdown.style.display === 'block') {
+        dropdown.style.display = 'none';
+    } else {
+        inputEl.focus();
+        openComboboxMenu(inputEl, recordId);
+    }
+};
+
+function renderComboboxDropdownItems(dropdown, filterText, inputEl, recordId) {
+    let list = VALID_PRODUCTS;
+    if (inputEl.getAttribute('data-typing') === 'true' && filterText) {
+        const term = filterText.trim().toLowerCase();
+        list = VALID_PRODUCTS.filter(p => p.toLowerCase().includes(term));
+        if (list.length === 0) list = VALID_PRODUCTS;
+    }
+
+    let html = list.map(p => `
+        <div class="combobox-item ${p === inputEl.value ? 'active' : ''}"
+             onmousedown="selectComboboxItem(event, '${p.replace(/'/g, "\\'")}', this, ${recordId !== undefined ? recordId : 'null'})">
+            ${p}
+        </div>
+    `).join('');
+
+    dropdown.innerHTML = html || '<div class="combobox-item" style="color:#94a3b8;">該当なし</div>';
+}
+
+window.selectComboboxItem = function(e, value, itemEl, recordId) {
+    e.preventDefault();
+    let wrapper = itemEl.closest('.combobox-wrapper');
+    let inputEl = wrapper.querySelector('input');
+    if (inputEl) {
+        inputEl.value = value;
+        inputEl.removeAttribute('data-typing');
+        if (recordId !== undefined && recordId !== null) {
+            updateRecord(recordId, 'product', value);
+        }
+    }
+    let dropdown = wrapper.querySelector('.combobox-dropdown');
+    if (dropdown) dropdown.style.display = 'none';
+};
+
+window.filterComboboxMenu = function(inputEl) {
+    inputEl.setAttribute('data-typing', 'true');
+    let wrapper = inputEl.closest('.combobox-wrapper');
+    if (!wrapper) return;
+    let dropdown = wrapper.querySelector('.combobox-dropdown');
+    if (dropdown) {
+        renderComboboxDropdownItems(dropdown, inputEl.value, inputEl);
+        dropdown.style.display = 'block';
+    }
+};
+
+window.handleComboboxBlur = function(inputEl, recordId) {
+    setTimeout(() => {
+        let wrapper = inputEl.closest('.combobox-wrapper');
+        if (!wrapper) return;
+        let dropdown = wrapper.querySelector('.combobox-dropdown');
+        if (dropdown) dropdown.style.display = 'none';
+        inputEl.removeAttribute('data-typing');
+
+        if (recordId !== undefined && recordId !== null) {
+            updateRecord(recordId, 'product', inputEl.value);
+        }
+    }, 200);
+};
 
 // DOM Elements
 const recordsList = document.getElementById('records-list');
@@ -3350,9 +3435,15 @@ function renderRecords() {
         tr.innerHTML = `
             <td class="machine-cell"><span class="machine-badge">${record.machine}</span></td>
             <td class="product-cell">
-                <select class="inline-input" onchange="updateRecord(${record.id}, 'product', this.value)">
-                    ${PRODUCTS.map(p => `<option value="${p}" ${record.product === p ? 'selected' : ''}>${p || '選択してください...'}</option>`).join('')}
-                </select>
+                <div class="combobox-wrapper">
+                    <input type="text" class="inline-input product-combobox-input" value="${record.product || ''}"
+                           placeholder="選択または入力..."
+                           onfocus="openComboboxMenu(this, ${record.id})"
+                           oninput="filterComboboxMenu(this)"
+                           onblur="handleComboboxBlur(this, ${record.id})">
+                    <span class="combobox-arrow" onclick="toggleComboboxMenu(this.previousElementSibling, ${record.id})">▼</span>
+                    <div class="combobox-dropdown" style="display: none;"></div>
+                </div>
             </td>
             <td class="time-cell">
                 <input type="text" class="inline-input" value="${record.startTime}" 
