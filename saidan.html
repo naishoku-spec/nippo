@@ -6,17 +6,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>裁断 - 日報管理</title>
     <meta name="description" content="裁断の日報管理アプリ">
+    <script src="local-entry.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link
         href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;600;700;800&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=20260817-sync-v29">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/ja.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
-    <script src="shared-sync.js?v=20260803-sync-v21"></script>
+    <script src="shared-sync.js?v=20260817-sync-v29"></script>
     <style>
         /* ========================================
            裁断ページ専用スタイル（アイデアC: 2段組レイアウト）
@@ -779,6 +780,10 @@
                         <span class="nav-icon">・</span>
                         鼻ぽん在庫
                     </a>
+                    <a href="index.html?view=hanapon-box" class="nav-item">
+                        <span class="nav-icon">・</span>
+                        鼻ぽん中箱在庫
+                    </a>
                     <a href="index.html?view=snowsprint" class="nav-item">
                         <span class="nav-icon">・</span>
                         スノースプリント資材
@@ -997,7 +1002,7 @@
         </div>
     </div>
 
-    <script src="saidan-app.js?v=20260803-sync-v21"></script>
+    <script src="saidan-app.js?v=20260817-sync-v29"></script>
 </body>
 
 </html>

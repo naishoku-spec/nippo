@@ -816,7 +816,7 @@ span.flatpickr-weekday:nth-child(7n) {
 /* ========== Stock Inventory Specific Styles ========== */
 .summary-section-stock {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     gap: 1.5rem;
     margin-bottom: 2rem;
 }
@@ -846,6 +846,10 @@ span.flatpickr-weekday:nth-child(7n) {
 
 .plain-card-stock::before {
     background: #10b981;
+}
+
+.plain2-card-stock::before {
+    background: #0ea5e9;
 }
 
 .eog-card-stock::before {
@@ -899,6 +903,10 @@ span.flatpickr-weekday:nth-child(7n) {
 
 .plain-icon-stock {
     background: #10b981;
+}
+
+.plain2-icon-stock {
+    background: #0ea5e9;
 }
 
 .eog-icon-stock {
@@ -1037,9 +1045,23 @@ span.flatpickr-weekday:nth-child(7n) {
     color: #10b981;
 }
 
+.group-plain2-stock {
+    border-top: 3px solid #0ea5e9 !important;
+    color: #0ea5e9;
+}
+
 .group-eog-stock {
     border-top: 3px solid #f59e0b !important;
     color: #f59e0b;
+}
+
+@media (max-width: 600px) {
+    .inventory-table-stock th.roll-group-label-stock {
+        white-space: normal !important;
+        word-break: break-word !important;
+        overflow-wrap: anywhere;
+        line-height: 1.15;
+    }
 }
 
 .row-sunday-stock {
@@ -1192,42 +1214,44 @@ span.flatpickr-weekday:nth-child(7n) {
         grid-template-columns: 1fr;
     }
 
+    .inventory-table-wrapper {
+        overflow: hidden !important;
+    }
+
     .inventory-table-stock {
-        font-size: 0.75rem;
-        /* Slightly larger for readability */
+        font-size: 0.65rem;
         width: 100%;
+        min-width: 0;
         table-layout: fixed;
     }
 
     .inventory-table-stock th {
-        padding: 0.4rem 0.1rem !important;
-        font-size: 0.7rem;
+        padding: 0.3rem 0 !important;
+        font-size: 0.6rem;
     }
 
     .inventory-table-stock td {
         padding: 0 !important;
-        height: 48px;
-        /* Taller cells for easier tapping */
+        height: 42px;
     }
 
     .inventory-table-stock td input {
         padding: 0 !important;
-        font-size: 0.85rem;
-        /* Larger text for the actual input value */
+        font-size: 0.65rem;
         height: 100%;
         font-weight: 700;
     }
 
     .inventory-table-stock .date-col-stock {
-        width: 60px;
-        font-size: 0.65rem;
+        width: 46px;
+        font-size: 0.55rem;
     }
 
     .remaining-cell-stock {
         padding: 0 !important;
-        line-height: 48px;
+        line-height: 42px;
         font-weight: 800;
-        font-size: 0.8rem;
+        font-size: 0.65rem;
     }
 }
 

@@ -184,6 +184,10 @@ function init() {
     renderRecords();
     renderDailyNotes();
 
+    // Allow direct links such as 1f.html?view=month to open the requested view.
+    const initialView = new URLSearchParams(window.location.search).get('view');
+    if (initialView === 'month') switchView('month');
+
     // Mobile Menu Setup
     setupMobileMenu();
 }
@@ -298,8 +302,9 @@ function renderMonthlyRecords() {
 
     // Daily breakdown
     const dailyListEl = document.getElementById('monthly-daily-list-1f');
+    // Keep zero-count rows visible so the monthly view shows every record,
+    // matching the 2F daily report and preventing an empty-looking summary.
     const sortedRecords = monthRecords
-        .filter(r => r.count > 0 || r.notes)
         .sort((a, b) => b.date.localeCompare(a.date) || a.machine.localeCompare(b.machine));
 
     let html = '';
@@ -731,9 +736,6 @@ window.saveDailyNotes1f = function() {
         }
     }, 1000);
 };
-
-
-init();
 
 
 init();

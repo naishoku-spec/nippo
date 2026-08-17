@@ -4,16 +4,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="app-build-id" content="20260803-sync-v21">
+    <meta name="app-build-id" content="20260817-sync-v29">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>2階製造 - 記録ツール</title>
+    <script src="local-entry.js"></script>
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=20260817-sync-v29">
     <script>
         (function () {
             var initialView = new URLSearchParams(window.location.search).get('view');
@@ -34,7 +35,7 @@
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
-    <script src="shared-sync.js?v=20260803-sync-v21"></script>
+    <script src="shared-sync.js?v=20260817-sync-v29"></script>
 </head>
 
 <body>
@@ -84,6 +85,10 @@
                     <a href="javascript:void(0)" id="view-hanapon" class="nav-item" onclick="switchView('hanapon')">
                         <span class="nav-icon">・</span>
                         鼻ぽん在庫
+                    </a>
+                    <a href="javascript:void(0)" id="view-hanapon-box" class="nav-item" onclick="switchView('hanapon-box')">
+                        <span class="nav-icon">・</span>
+                        鼻ぽん中箱在庫
                     </a>
                     <a href="javascript:void(0)" id="view-snowsprint" class="nav-item" onclick="switchView('snowsprint')">
                         <span class="nav-icon">・</span>
@@ -176,6 +181,17 @@
                             <span class="month-separator-stock">月</span>
                         </div>
                         <button class="nav-btn-stock" id="nextMonthHanapon" title="次月">→</button>
+                    </div>
+
+                    <div class="month-selector-stock" id="monthSelectorHanaponBox" style="display: none;">
+                        <button class="nav-btn-stock" id="prevMonthHanaponBox" title="前月">←</button>
+                        <div class="month-display-stock">
+                            <select id="yearSelectHanaponBox" class="year-select-stock"></select>
+                            <span class="month-separator-stock">年</span>
+                            <select id="monthSelectHanaponBox" class="month-select-stock"></select>
+                            <span class="month-separator-stock">月</span>
+                        </div>
+                        <button class="nav-btn-stock" id="nextMonthHanaponBox" title="次月">→</button>
                     </div>
 
                     <div class="month-selector-stock" id="monthSelectorSnowsprint" style="display: none;">
@@ -381,9 +397,10 @@
                             <thead>
                                 <tr class="header-main-stock">
                                     <th rowspan="2" class="date-col-stock">日付</th>
-                                    <th colspan="3" class="group-film-stock">フィルム</th>
-                                    <th colspan="3" class="group-plain-stock">無地</th>
-                                    <th colspan="3" class="group-eog-stock">EOG</th>
+                                    <th colspan="3" class="group-film-stock roll-group-label-stock">フィルム</th>
+                                    <th colspan="3" class="group-plain-stock roll-group-label-stock">ニチエー無地</th>
+                                    <th colspan="3" class="group-eog-stock roll-group-label-stock">EOG</th>
+                                    <th colspan="3" class="group-plain2-stock roll-group-label-stock">静幸産業無地</th>
                                 </tr>
                                 <tr class="header-sub-stock">
                                     <th class="sub-film-stock">配達</th>
@@ -395,6 +412,9 @@
                                     <th class="sub-eog-stock">配達</th>
                                     <th class="sub-eog-stock">製造</th>
                                     <th class="sub-eog-stock remaining-stock">残</th>
+                                    <th class="sub-plain2-stock">配達</th>
+                                    <th class="sub-plain2-stock">製造</th>
+                                    <th class="sub-plain2-stock remaining-stock">残</th>
                                 </tr>
                             </thead>
                             <tbody id="inventoryBodyStock">
@@ -429,7 +449,7 @@
                     <div class="summary-card-stock plain-card-stock" id="plainCardStock">
                         <div class="card-header-stock">
                             <div class="card-icon-stock plain-icon-stock">P</div>
-                            <h3>無地</h3>
+                            <h3>ニチエー無地</h3>
                         </div>
                         <div class="card-body-stock">
                             <div class="stat-stock">
@@ -457,6 +477,23 @@
                             <div class="stat-stock">
                                 <span class="stat-label-stock">現在庫</span>
                                 <span class="stat-value-stock highlight-stock" id="eogCurrentStock">0</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="summary-card-stock plain2-card-stock" id="plain2CardStock">
+                        <div class="card-header-stock">
+                            <div class="card-icon-stock plain2-icon-stock">P2</div>
+                            <h3>静幸産業無地</h3>
+                        </div>
+                        <div class="card-body-stock">
+                            <div class="stat-stock">
+                                <span class="stat-label-stock">繰越分</span>
+                                <span class="stat-value-stock" id="plain2CarryoverStock">0</span>
+                            </div>
+
+                            <div class="stat-stock">
+                                <span class="stat-label-stock">現在庫</span>
+                                <span class="stat-value-stock highlight-stock" id="plain2CurrentStock">0</span>
                             </div>
                         </div>
                     </div>
@@ -557,6 +594,29 @@
                 <!-- Save Status -->
                 <div style="display: flex; justify-content: flex-end; align-items: center; margin-bottom: 2rem;">
                     <div id="saveStatusHanapon" style="font-size: 0.85rem; color: var(--text-muted);"></div>
+                </div>
+            </div>
+
+            <!-- ========================================== -->
+            <!-- ======== Hanapon Box Inventory View ====== -->
+            <!-- ========================================== -->
+            <div id="hanapon-box-view-container" style="display: none;">
+                <div class="sn-size-tabs hanapon-box-company-tabs" id="hanaponBoxCompanyTabs">
+                    <button type="button" class="sn-size-tab active" data-company="limited" aria-selected="true">有限</button>
+                    <button type="button" class="sn-size-tab" data-company="stock" aria-selected="false">株式</button>
+                </div>
+                <div class="card sn-table-card">
+                    <div class="sliver-table-wrapper">
+                        <table class="sliver-table hanapon-box-table" id="hanaponBoxTable">
+                            <thead id="hanaponBoxHead"></thead>
+                            <tbody id="hanaponBoxBody"></tbody>
+                            <tfoot id="hanaponBoxFoot"></tfoot>
+                        </table>
+                    </div>
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; align-items: center; margin-bottom: 2rem;">
+                    <div id="saveStatusHanaponBox" style="font-size: 0.85rem; color: var(--text-muted);"></div>
                 </div>
             </div>
 
@@ -842,7 +902,7 @@
         </div>
     </div>
 
-    <script src="app.js?v=20260803-sync-v21"></script>
+    <script src="app.js?v=20260817-sync-v29"></script>
 </body>
 
 </html>

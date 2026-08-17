@@ -1,8 +1,8 @@
 (function (global) {
     'use strict';
 
-    const BUILD_ID = '20260803-sync-v21';
-    const BUILD_NUMBER = 2026080321;
+    const BUILD_ID = '20260817-sync-v29';
+    const BUILD_NUMBER = 2026081729;
     const VERSION_PATH = 'app-version.json';
     const VERSION_CHECK_INTERVAL_MS = 30000;
     const LATEST_BUILD_KEY = 'nippo_latest_app_build_number';
@@ -627,7 +627,11 @@
                     pending = { base: cloneValue(remote), local: cloneValue(merged) };
                     setLocal(merged, { source: 'initial', pending: true });
                 } else if (previousServer !== null) {
-                    const merged = merge(previousServer, local, remote);
+                    // A cached local collection can be incomplete after a failed
+                    // sync. Treat the server snapshot as the baseline and keep
+                    // only local-only values, instead of interpreting missing
+                    // cached rows as intentional deletions.
+                    const merged = mergeInitialValue(local, remote);
                     if (!valuesEqual(merged, remote)) {
                         pending = { base: cloneValue(remote), local: cloneValue(merged) };
                         setLocal(merged, { source: 'initial', pending: true });

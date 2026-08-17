@@ -1611,8 +1611,8 @@ const firebaseConfig = {
     measurementId: "G-SR8Y5NKQTZ"
 };
 
-const APP_BUILD_ID = '20260803-sync-v21';
-const APP_BUILD_NUMBER = 2026080321;
+const APP_BUILD_ID = '20260817-sync-v29';
+const APP_BUILD_NUMBER = 2026081729;
 const APP_VERSION_METADATA_PATH = 'app-version.json';
 const APP_VERSION_CHECK_INTERVAL_MS = 30000;
 const APP_LATEST_BUILD_LS_KEY = 'nippo_latest_app_build_number';
@@ -1829,6 +1829,7 @@ function getLocalBackupSnapshot() {
         roll: localStorage.getItem('rollInventoryData'),
         sliver: localStorage.getItem('sliverInventoryData'),
         hanapon: localStorage.getItem('hanaponInventoryData'),
+        hanaponBox: localStorage.getItem('hanaponBoxInventoryData'),
         snowsprint: localStorage.getItem('snowsprintInventoryData'),
         project: localStorage.getItem('nippo_boards_data'),
         records1f: localStorage.getItem(isProduction ? '1f_nippo_records' : '1f_nippo_records_dev'),
@@ -1943,6 +1944,7 @@ function saveHistoryBackup() {
             roll: localStorage.getItem('rollInventoryData'),
             sliver: localStorage.getItem('sliverInventoryData'),
             hanapon: localStorage.getItem('hanaponInventoryData'),
+            hanaponBox: localStorage.getItem('hanaponBoxInventoryData'),
             snowsprint: localStorage.getItem('snowsprintInventoryData'),
             project: localStorage.getItem('nippo_boards_data'),
             records1f: localStorage.getItem(isProduction ? '1f_nippo_records' : '1f_nippo_records_dev'),
@@ -2356,6 +2358,7 @@ let dailyNotesSync = null;
 let rollDataSync = null;
 let sliverDataSync = null;
 let hanaponDataSync = null;
+let hanaponBoxDataSync = null;
 let snowsprintDataSync = null;
 const CURRENT_DATE_LS_KEY = 'nippo_current_date';
 const CURRENT_VIEW_LS_KEY = 'nippo_current_view';
@@ -2403,8 +2406,8 @@ let noteSaveTimeout = null;
 
 // Roll Stock State
 const ROLL_STORAGE_KEY = 'rollInventoryData';
-const ROLL_TYPES = ['film', 'plain', 'eog'];
-const ROLL_LABELS = { film: 'フィルム', plain: '無地', eog: 'EOG' };
+const ROLL_TYPES = ['film', 'plain', 'eog', 'plain2'];
+const ROLL_LABELS = { film: 'フィルム', plain: 'ニチエー無地', eog: 'EOG', plain2: '静幸産業無地' };
 const ROLL_DAY_NAMES = ['日', '月', '火', '水', '木', '金', '土'];
 const STOCK_LOW_THRESHOLD = 5;
 let rollAllData = {};
@@ -2456,13 +2459,12 @@ if (database) {
                         persistPendingRecordsSync();
                     }
                 } else {
-                    const initialBase = storedDailyServerSnapshot
-                        ? cloneDailyRecords(storedDailyServerSnapshot)
-                        : [];
+                    // Treat the first remote snapshot as authoritative for
+                    // existing rows. Local-only records still survive through
+                    // the initial merge, but a stale cache cannot hide rows
+                    // that are already present in Firebase.
                     const mergedRecords = localRecords.length > 0
-                        ? (storedDailyServerSnapshot
-                            ? mergeDailyRecords(initialBase, localRecords, remoteRecords)
-                            : mergeInitialDailyRecords(localRecords, remoteRecords))
+                        ? mergeInitialDailyRecords(localRecords, remoteRecords)
                         : remoteRecords;
                     records = mergedRecords;
                     if (!dailyRecordsEqual(mergedRecords, remoteRecords)) {
@@ -2682,6 +2684,8 @@ const sliverViewContainer = document.getElementById('sliver-view-container');
 const viewSliverBtn = document.getElementById('view-sliver');
 const hanaponViewContainer = document.getElementById('hanapon-view-container');
 const viewHanaponBtn = document.getElementById('view-hanapon');
+const hanaponBoxViewContainer = document.getElementById('hanapon-box-view-container');
+const viewHanaponBoxBtn = document.getElementById('view-hanapon-box');
 const snowsprintViewContainer = document.getElementById('snowsprint-view-container');
 const viewSnowsprintBtn = document.getElementById('view-snowsprint');
 const shiftViewContainer = document.getElementById('shift-view-container');
@@ -2770,6 +2774,9 @@ function init() {
     // Initialize Hanapon Management
     initHanapon();
 
+    // Initialize Hanapon Box Inventory Management
+    initHanaponBox();
+
     // Initialize Snow Sprint Management
     initSnowsprint();
 
@@ -2779,7 +2786,7 @@ function init() {
     // Check URL parameters or localStorage for view
     const urlParams = new URLSearchParams(window.location.search);
     const viewParam = urlParams.get('view') || getStoredView();
-    if (viewParam && ['day', 'month', 'stock', 'sliver', 'hanapon', 'snowsprint', 'shift', 'project', 'backup'].includes(viewParam)) {
+    if (viewParam && ['day', 'month', 'stock', 'sliver', 'hanapon', 'hanapon-box', 'snowsprint', 'shift', 'project', 'backup'].includes(viewParam)) {
         switchView(viewParam);
     } else {
         // Default to stock view if nothing is saved
@@ -2796,6 +2803,7 @@ function init() {
     viewStockBtn?.addEventListener('click', () => switchView('stock'));
     viewSliverBtn?.addEventListener('click', () => switchView('sliver'));
     viewHanaponBtn?.addEventListener('click', () => switchView('hanapon'));
+    viewHanaponBoxBtn?.addEventListener('click', () => switchView('hanapon-box'));
     viewSnowsprintBtn?.addEventListener('click', () => switchView('snowsprint'));
     viewShiftBtn?.addEventListener('click', () => switchView('shift'));
 
@@ -2862,6 +2870,8 @@ function switchView(view) {
             titleHeader.textContent = 'スライバー在庫';
         } else if (view === 'hanapon') {
             titleHeader.textContent = '鼻ぽん在庫';
+        } else if (view === 'hanapon-box') {
+            titleHeader.textContent = '鼻ぽん中箱在庫';
         } else if (view === 'snowsprint') {
             titleHeader.textContent = 'スノースプリント資材';
         } else if (view === 'shift') {
@@ -2880,6 +2890,7 @@ function switchView(view) {
     if (viewStockBtn) viewStockBtn.classList.toggle('active', view === 'stock');
     if (viewSliverBtn) viewSliverBtn.classList.toggle('active', view === 'sliver');
     if (viewHanaponBtn) viewHanaponBtn.classList.toggle('active', view === 'hanapon');
+    if (viewHanaponBoxBtn) viewHanaponBoxBtn.classList.toggle('active', view === 'hanapon-box');
     if (viewSnowsprintBtn) viewSnowsprintBtn.classList.toggle('active', view === 'snowsprint');
     if (viewShiftBtn) viewShiftBtn.classList.toggle('active', view === 'shift');
     if (viewProjectBtn) viewProjectBtn.classList.toggle('active', view === 'project');
@@ -2891,6 +2902,7 @@ function switchView(view) {
     stockViewContainer.style.display = (view === 'stock') ? 'block' : 'none';
     sliverViewContainer.style.display = (view === 'sliver') ? 'block' : 'none';
     hanaponViewContainer.style.display = (view === 'hanapon') ? 'block' : 'none';
+    hanaponBoxViewContainer.style.display = (view === 'hanapon-box') ? 'block' : 'none';
     snowsprintViewContainer.style.display = (view === 'snowsprint') ? 'block' : 'none';
     shiftViewContainer.style.display = (view === 'shift') ? 'block' : 'none';
     if (projectViewContainer) projectViewContainer.style.display = (view === 'project') ? 'block' : 'none';
@@ -2920,6 +2932,7 @@ function switchView(view) {
     const stockMonthSelector = document.getElementById('monthSelectorStock');
     const sliverMonthSelector = document.getElementById('monthSelectorSliver');
     const hanaponMonthSelector = document.getElementById('monthSelectorHanapon');
+    const hanaponBoxMonthSelector = document.getElementById('monthSelectorHanaponBox');
     const snowsprintMonthSelector = document.getElementById('monthSelectorSnowsprint');
     const dayDateSelector = document.getElementById('dayDateSelector');
 
@@ -2929,6 +2942,7 @@ function switchView(view) {
         if (stockMonthSelector) stockMonthSelector.style.display = 'flex';
         if (sliverMonthSelector) sliverMonthSelector.style.display = 'none';
         if (hanaponMonthSelector) hanaponMonthSelector.style.display = 'none';
+        if (hanaponBoxMonthSelector) hanaponBoxMonthSelector.style.display = 'none';
         if (snowsprintMonthSelector) snowsprintMonthSelector.style.display = 'none';
         if (dayDateSelector) dayDateSelector.style.display = 'none';
         if (prodViewToggle) prodViewToggle.style.display = 'none';
@@ -2936,6 +2950,7 @@ function switchView(view) {
         if (stockMonthSelector) stockMonthSelector.style.display = 'none';
         if (sliverMonthSelector) sliverMonthSelector.style.display = 'flex';
         if (hanaponMonthSelector) hanaponMonthSelector.style.display = 'none';
+        if (hanaponBoxMonthSelector) hanaponBoxMonthSelector.style.display = 'none';
         if (snowsprintMonthSelector) snowsprintMonthSelector.style.display = 'none';
         if (dayDateSelector) dayDateSelector.style.display = 'none';
         if (prodViewToggle) prodViewToggle.style.display = 'none';
@@ -2943,6 +2958,15 @@ function switchView(view) {
         if (stockMonthSelector) stockMonthSelector.style.display = 'none';
         if (sliverMonthSelector) sliverMonthSelector.style.display = 'none';
         if (hanaponMonthSelector) hanaponMonthSelector.style.display = 'flex';
+        if (hanaponBoxMonthSelector) hanaponBoxMonthSelector.style.display = 'none';
+        if (snowsprintMonthSelector) snowsprintMonthSelector.style.display = 'none';
+        if (dayDateSelector) dayDateSelector.style.display = 'none';
+        if (prodViewToggle) prodViewToggle.style.display = 'none';
+    } else if (view === 'hanapon-box') {
+        if (stockMonthSelector) stockMonthSelector.style.display = 'none';
+        if (sliverMonthSelector) sliverMonthSelector.style.display = 'none';
+        if (hanaponMonthSelector) hanaponMonthSelector.style.display = 'none';
+        if (hanaponBoxMonthSelector) hanaponBoxMonthSelector.style.display = 'flex';
         if (snowsprintMonthSelector) snowsprintMonthSelector.style.display = 'none';
         if (dayDateSelector) dayDateSelector.style.display = 'none';
         if (prodViewToggle) prodViewToggle.style.display = 'none';
@@ -2950,6 +2974,7 @@ function switchView(view) {
         if (stockMonthSelector) stockMonthSelector.style.display = 'none';
         if (sliverMonthSelector) sliverMonthSelector.style.display = 'none';
         if (hanaponMonthSelector) hanaponMonthSelector.style.display = 'none';
+        if (hanaponBoxMonthSelector) hanaponBoxMonthSelector.style.display = 'none';
         if (snowsprintMonthSelector) snowsprintMonthSelector.style.display = 'flex';
         if (dayDateSelector) dayDateSelector.style.display = 'none';
         if (prodViewToggle) prodViewToggle.style.display = 'none';
@@ -2957,6 +2982,7 @@ function switchView(view) {
         if (stockMonthSelector) stockMonthSelector.style.display = 'none';
         if (sliverMonthSelector) sliverMonthSelector.style.display = 'none';
         if (hanaponMonthSelector) hanaponMonthSelector.style.display = 'none';
+        if (hanaponBoxMonthSelector) hanaponBoxMonthSelector.style.display = 'none';
         if (snowsprintMonthSelector) snowsprintMonthSelector.style.display = 'none';
         if (dayDateSelector) dayDateSelector.style.display = 'none';
         if (prodViewToggle) prodViewToggle.style.display = 'none';
@@ -2964,6 +2990,7 @@ function switchView(view) {
         if (stockMonthSelector) stockMonthSelector.style.display = 'none';
         if (sliverMonthSelector) sliverMonthSelector.style.display = 'none';
         if (hanaponMonthSelector) hanaponMonthSelector.style.display = 'none';
+        if (hanaponBoxMonthSelector) hanaponBoxMonthSelector.style.display = 'none';
         if (snowsprintMonthSelector) snowsprintMonthSelector.style.display = 'none';
         if (dayDateSelector) dayDateSelector.style.display = 'block';
         if (prodViewToggle) prodViewToggle.style.display = 'flex';
@@ -2971,6 +2998,7 @@ function switchView(view) {
         if (stockMonthSelector) stockMonthSelector.style.display = 'none';
         if (sliverMonthSelector) sliverMonthSelector.style.display = 'none';
         if (hanaponMonthSelector) hanaponMonthSelector.style.display = 'none';
+        if (hanaponBoxMonthSelector) hanaponBoxMonthSelector.style.display = 'none';
         if (snowsprintMonthSelector) snowsprintMonthSelector.style.display = 'none';
         if (dayDateSelector) dayDateSelector.style.display = 'block';
         if (prodViewToggle) prodViewToggle.style.display = 'flex';
@@ -2978,6 +3006,7 @@ function switchView(view) {
         if (stockMonthSelector) stockMonthSelector.style.display = 'none';
         if (sliverMonthSelector) sliverMonthSelector.style.display = 'none';
         if (hanaponMonthSelector) hanaponMonthSelector.style.display = 'none';
+        if (hanaponBoxMonthSelector) hanaponBoxMonthSelector.style.display = 'none';
         if (snowsprintMonthSelector) snowsprintMonthSelector.style.display = 'none';
         if (dayDateSelector) dayDateSelector.style.display = 'none';
         if (prodViewToggle) prodViewToggle.style.display = 'none';
@@ -2985,6 +3014,7 @@ function switchView(view) {
         if (stockMonthSelector) stockMonthSelector.style.display = 'none';
         if (sliverMonthSelector) sliverMonthSelector.style.display = 'none';
         if (hanaponMonthSelector) hanaponMonthSelector.style.display = 'none';
+        if (hanaponBoxMonthSelector) hanaponBoxMonthSelector.style.display = 'none';
         if (snowsprintMonthSelector) snowsprintMonthSelector.style.display = 'none';
         if (dayDateSelector) dayDateSelector.style.display = 'none';
         if (prodViewToggle) prodViewToggle.style.display = 'none';
@@ -2999,6 +3029,7 @@ function switchView(view) {
     if (view === 'sliver') renderSliver();
     if (view === 'sliver') renderSliver();
     if (view === 'hanapon') renderHanapon();
+    if (view === 'hanapon-box') renderHanaponBox();
     if (view === 'snowsprint') renderSnowsprint();
     if (view === 'shift' && typeof shiftRenderMembers === 'function') shiftRenderMembers();
 }
@@ -3370,6 +3401,7 @@ async function syncRollToGoogleSheets(year, month) {
         date: "繰越分",
         filmDel: "", filmProd: "", filmRem: data.film.carryover || 0,
         plainDel: "", plainProd: "", plainRem: data.plain.carryover || 0,
+        plain2Del: "", plain2Prod: "", plain2Rem: data.plain2.carryover || 0,
         eogDel: "", eogProd: "", eogRem: data.eog.carryover || 0
     };
     records.push(carryRow);
@@ -3624,6 +3656,33 @@ function isRollHoliday(year, month, day) {
     return isJapaneseHoliday(key);
 }
 
+function normalizeRollData(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+
+    let normalized;
+    try {
+        normalized = JSON.parse(JSON.stringify(value));
+    } catch (error) {
+        console.warn('Roll data normalization skipped:', error);
+        return {};
+    }
+
+    Object.keys(normalized).forEach(key => {
+        const monthData = normalized[key];
+        if (!monthData || typeof monthData !== 'object' || Array.isArray(monthData)) return;
+
+        ROLL_TYPES.forEach(type => {
+            if (!monthData[type] || typeof monthData[type] !== 'object' || Array.isArray(monthData[type])) {
+                monthData[type] = { carryover: 0, days: {} };
+            } else if (!monthData[type].days || typeof monthData[type].days !== 'object' || Array.isArray(monthData[type].days)) {
+                monthData[type].days = {};
+            }
+        });
+    });
+
+    return normalized;
+}
+
 ;
 
 function initRollStock() {
@@ -3635,6 +3694,9 @@ function initRollStock() {
             emptyValue: {},
             pendingStorageKey: ROLL_STORAGE_KEY + '_pending_sync',
             serverSnapshotStorageKey: ROLL_STORAGE_KEY + '_server_snapshot',
+            normalize: normalizeRollData,
+            // Keep the new empty category while reconciling with older snapshots.
+            mergeInitial: true,
             getLocal: () => rollAllData,
             setLocal: value => {
                 rollAllData = value;
@@ -3672,6 +3734,7 @@ function loadRollData() {
         // If no data in localStorage, use initial data
         rollAllData = JSON.parse(JSON.stringify(ROLL_INITIAL_DATA));
     }
+    rollAllData = normalizeRollData(rollAllData);
     // Merge initial data (don't overwrite user edits)
     Object.keys(ROLL_INITIAL_DATA).forEach(key => {
         if (!rollAllData[key]) {
@@ -3767,7 +3830,7 @@ function getRollMonthData(year, month) {
         const prevYear = month === 1 ? year - 1 : year;
         const prevKey = `${prevYear}-${prevMonth}`;
 
-        let initialCarry = { film: 0, plain: 0, eog: 0 };
+        let initialCarry = { film: 0, plain: 0, eog: 0, plain2: 0 };
 
         if (rollAllData[prevKey]) {
             const pData = rollAllData[prevKey];
@@ -3785,7 +3848,8 @@ function getRollMonthData(year, month) {
         rollAllData[key] = {
             film: { carryover: initialCarry.film, days: {} },
             plain: { carryover: initialCarry.plain, days: {} },
-            eog: { carryover: initialCarry.eog, days: {} }
+            eog: { carryover: initialCarry.eog, days: {} },
+            plain2: { carryover: initialCarry.plain2, days: {} }
         };
     }
     ROLL_TYPES.forEach(type => {
@@ -8532,7 +8596,515 @@ function propagateSnowSprintCarryover(year, month) {
         curM = nextM;
     }
     localStorage.setItem(SNOWSPRINT_STORAGE_KEY, JSON.stringify(snowsprintAllData));
+    scheduleDailyBackupRefresh();
+}
+
+// ==========================================
+// ===== Hanapon Box Inventory Management ====
+// ==========================================
+
+const HANAPON_BOX_STORAGE_KEY = 'hanaponBoxInventoryData';
+const HANAPON_BOX_DB_PATH = `${SECRET_KEY}/${isProduction ? 'hanapon_box_inventory' : 'hanapon_box_inventory_dev'}`;
+const HANAPON_BOX_TYPES = [
+    { key: 'ariake', name: '0649', bg: '#e0e7ff', color: '#4338ca' },
+    { key: 'materials', name: '0588', bg: '#d1fae5', color: '#047857' },
+    { key: 'large', name: '大', bg: '#fef3c7', color: '#b45309' }
+];
+const HANAPON_BOX_COMPANIES = [
+    { key: 'limited', name: '有限' },
+    { key: 'stock', name: '株式' }
+];
+const HANAPON_BOX_LEGACY_COMPANY_KEY = 'limited';
+
+let hanaponBoxAllData = {};
+let hanaponBoxSaveTimer = null;
+let hanaponBoxCurrentYear = new Date().getFullYear();
+let hanaponBoxCurrentMonth = new Date().getMonth() + 1;
+let hanaponBoxActiveCompany = HANAPON_BOX_LEGACY_COMPANY_KEY;
+
+function isHanaponBoxObject(value) {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function cloneHanaponBoxValue(value) {
+    if (value === undefined) return undefined;
+    try {
+        return JSON.parse(JSON.stringify(value));
+    } catch (error) {
+        return value;
+    }
+}
+
+function createHanaponBoxType(type, carryover = 0) {
+    return {
+        name: type.name,
+        carryover: Number.isNaN(parseInt(carryover, 10)) ? 0 : parseInt(carryover, 10),
+        days: {}
+    };
+}
+
+function normalizeHanaponBoxType(typeData, type) {
+    const normalized = isHanaponBoxObject(typeData)
+        ? cloneHanaponBoxValue(typeData)
+        : createHanaponBoxType(type);
+    normalized.name = type.name;
+    const carryover = parseInt(normalized.carryover, 10);
+    normalized.carryover = Number.isNaN(carryover) ? 0 : carryover;
+    if (!isHanaponBoxObject(normalized.days)) normalized.days = {};
+    return normalized;
+}
+
+function syncHanaponBoxLegacyMonth(monthData) {
+    if (!isHanaponBoxObject(monthData) || !isHanaponBoxObject(monthData[HANAPON_BOX_LEGACY_COMPANY_KEY])) return;
+    HANAPON_BOX_TYPES.forEach(type => {
+        const typeData = monthData[HANAPON_BOX_LEGACY_COMPANY_KEY][type.key];
+        if (isHanaponBoxObject(typeData)) monthData[type.key] = cloneHanaponBoxValue(typeData);
+    });
+}
+
+function getHanaponBoxPreviousType(previousData, companyKey, typeKey) {
+    if (!isHanaponBoxObject(previousData)) return null;
+    const companyData = previousData[companyKey];
+    if (isHanaponBoxObject(companyData) && isHanaponBoxObject(companyData[typeKey])) {
+        return companyData[typeKey];
+    }
+    if (companyKey === HANAPON_BOX_LEGACY_COMPANY_KEY && isHanaponBoxObject(previousData[typeKey])) {
+        return previousData[typeKey];
+    }
+    return null;
+}
+
+function normalizeHanaponBoxData(value) {
+    let data = {};
+    if (isHanaponBoxObject(value)) {
+        try {
+            data = JSON.parse(JSON.stringify(value));
+        } catch (error) {
+            data = {};
+        }
+    }
+
+    Object.keys(data).forEach(monthKey => {
+        const monthData = data[monthKey];
+        if (!isHanaponBoxObject(monthData)) return;
+
+        const legacyTypes = {};
+        HANAPON_BOX_TYPES.forEach(type => {
+            if (isHanaponBoxObject(monthData[type.key])) {
+                legacyTypes[type.key] = normalizeHanaponBoxType(monthData[type.key], type);
+            }
+        });
+
+        HANAPON_BOX_COMPANIES.forEach(company => {
+            const existingCompany = isHanaponBoxObject(monthData[company.key])
+                ? monthData[company.key]
+                : {};
+            const companyData = {};
+            HANAPON_BOX_TYPES.forEach(type => {
+                const existingType = existingCompany[type.key];
+                const legacyType = company.key === HANAPON_BOX_LEGACY_COMPANY_KEY
+                    ? legacyTypes[type.key]
+                    : null;
+                companyData[type.key] = normalizeHanaponBoxType(existingType || legacyType, type);
+            });
+            monthData[company.key] = companyData;
+        });
+
+        // Keep the old three top-level fields as a compatibility copy for an
+        // already-open older page. New edits are made in the company tabs.
+        syncHanaponBoxLegacyMonth(monthData);
+    });
+
+    return data;
+}
+
+function createHanaponBoxMonth(previousData, previousYear, previousMonth) {
+    const monthData = {};
+    HANAPON_BOX_COMPANIES.forEach(company => {
+        const companyData = {};
+        HANAPON_BOX_TYPES.forEach(type => {
+            const previousType = getHanaponBoxPreviousType(previousData, company.key, type.key);
+            companyData[type.key] = createHanaponBoxType(
+                type,
+                previousType
+                    ? calculateHanaponBoxEndBalance(previousType, previousYear, previousMonth)
+                    : 0
+            );
+        });
+        monthData[company.key] = companyData;
+    });
+    syncHanaponBoxLegacyMonth(monthData);
+    return monthData;
+}
+
+function ensureHanaponBoxMonth(year, month, shouldSave = true) {
+    const key = `${year}-${month}`;
+    const previousMonth = month === 1 ? 12 : month - 1;
+    const previousYear = month === 1 ? year - 1 : year;
+    const previousData = hanaponBoxAllData[`${previousYear}-${previousMonth}`];
+
+    if (!hanaponBoxAllData[key]) {
+        hanaponBoxAllData[key] = createHanaponBoxMonth(previousData, previousYear, previousMonth);
+        if (shouldSave) saveHanaponBoxData(false);
+        return;
+    }
+
+    const monthData = hanaponBoxAllData[key];
+    if (!isHanaponBoxObject(monthData)) return;
+
+    const legacyTypes = {};
+    HANAPON_BOX_TYPES.forEach(type => {
+        if (isHanaponBoxObject(monthData[type.key])) {
+            legacyTypes[type.key] = normalizeHanaponBoxType(monthData[type.key], type);
+        }
+    });
+
+    HANAPON_BOX_COMPANIES.forEach(company => {
+        const companyData = isHanaponBoxObject(monthData[company.key])
+            ? monthData[company.key]
+            : {};
+        HANAPON_BOX_TYPES.forEach(type => {
+            if (isHanaponBoxObject(companyData[type.key])) {
+                companyData[type.key] = normalizeHanaponBoxType(companyData[type.key], type);
+                return;
+            }
+
+            const legacyType = company.key === HANAPON_BOX_LEGACY_COMPANY_KEY
+                ? legacyTypes[type.key]
+                : null;
+            const previousType = getHanaponBoxPreviousType(previousData, company.key, type.key);
+            companyData[type.key] = legacyType
+                ? normalizeHanaponBoxType(legacyType, type)
+                : createHanaponBoxType(
+                    type,
+                    previousType
+                        ? calculateHanaponBoxEndBalance(previousType, previousYear, previousMonth)
+                        : 0
+                );
+        });
+        monthData[company.key] = companyData;
+    });
+
+    syncHanaponBoxLegacyMonth(monthData);
+}
+
+function calculateHanaponBoxEndBalance(typeData, year, month, throughDay = null) {
+    if (!typeData || typeof typeData !== 'object') return 0;
+    let balance = parseInt(typeData.carryover, 10);
+    if (Number.isNaN(balance)) balance = 0;
+
+    const daysInMonth = throughDay || new Date(year, month, 0).getDate();
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dayData = typeData.days && typeData.days[day];
+        balance -= parseInt(dayData?.usage, 10) || 0;
+    }
+    return balance;
+}
+
+function initHanaponBox() {
+    const stored = localStorage.getItem(HANAPON_BOX_STORAGE_KEY);
+    if (stored) {
+        try {
+            hanaponBoxAllData = normalizeHanaponBoxData(JSON.parse(stored));
+        } catch (error) {
+            hanaponBoxAllData = {};
+        }
+    } else {
+        hanaponBoxAllData = {};
+    }
+
+    ensureHanaponBoxMonth(hanaponBoxCurrentYear, hanaponBoxCurrentMonth, false);
+    localStorage.setItem(HANAPON_BOX_STORAGE_KEY, JSON.stringify(hanaponBoxAllData));
+    scheduleDailyBackupRefresh();
+    setupHanaponBoxMonthSelector();
+    setupHanaponBoxCompanyTabs();
+
+    if (database && window.SharedSync && !hanaponBoxDataSync) {
+        hanaponBoxDataSync = SharedSync.createPathSync({
+            database,
+            path: HANAPON_BOX_DB_PATH,
+            emptyValue: {},
+            normalize: normalizeHanaponBoxData,
+            mergeInitial: true,
+            pendingStorageKey: HANAPON_BOX_STORAGE_KEY + '_pending_sync',
+            serverSnapshotStorageKey: HANAPON_BOX_STORAGE_KEY + '_server_snapshot',
+            getLocal: () => hanaponBoxAllData,
+            setLocal: value => {
+                hanaponBoxAllData = normalizeHanaponBoxData(value);
+                ensureHanaponBoxMonth(hanaponBoxCurrentYear, hanaponBoxCurrentMonth, false);
+                localStorage.setItem(HANAPON_BOX_STORAGE_KEY, JSON.stringify(hanaponBoxAllData));
                 scheduleDailyBackupRefresh();
+            },
+            onRemote: () => {
+                const activeEl = document.activeElement;
+                ensureHanaponBoxMonth(hanaponBoxCurrentYear, hanaponBoxCurrentMonth, false);
+                if (!activeEl?.closest('#hanapon-box-view-container')
+                    && hanaponBoxViewContainer.style.display === 'block') {
+                    renderHanaponBox();
+                }
+            }
+        });
+    }
+}
+
+function setupHanaponBoxCompanyTabs() {
+    const buttons = document.querySelectorAll('#hanaponBoxCompanyTabs [data-company]');
+    if (!buttons.length) return;
+
+    buttons.forEach(button => {
+        button.addEventListener('click', () => {
+            const companyKey = button.dataset.company;
+            if (!HANAPON_BOX_COMPANIES.some(company => company.key === companyKey)) return;
+            hanaponBoxActiveCompany = companyKey;
+            buttons.forEach(item => {
+                const isActive = item.dataset.company === hanaponBoxActiveCompany;
+                item.classList.toggle('active', isActive);
+                item.setAttribute('aria-selected', String(isActive));
+            });
+            renderHanaponBox();
+        });
+    });
+}
+
+function setupHanaponBoxMonthSelector() {
+    const yearSelect = document.getElementById('yearSelectHanaponBox');
+    const monthSelect = document.getElementById('monthSelectHanaponBox');
+    const previousButton = document.getElementById('prevMonthHanaponBox');
+    const nextButton = document.getElementById('nextMonthHanaponBox');
+    if (!yearSelect || !monthSelect) return;
+
+    yearSelect.innerHTML = '';
+    for (let year = 2024; year <= 2100; year++) {
+        const option = document.createElement('option');
+        option.value = year;
+        option.textContent = year;
+        yearSelect.appendChild(option);
+    }
+
+    monthSelect.innerHTML = '';
+    for (let month = 1; month <= 12; month++) {
+        const option = document.createElement('option');
+        option.value = month;
+        option.textContent = month;
+        monthSelect.appendChild(option);
+    }
+
+    yearSelect.value = hanaponBoxCurrentYear;
+    monthSelect.value = hanaponBoxCurrentMonth;
+
+    const update = () => {
+        hanaponBoxCurrentYear = parseInt(yearSelect.value, 10);
+        hanaponBoxCurrentMonth = parseInt(monthSelect.value, 10);
+        ensureHanaponBoxMonth(hanaponBoxCurrentYear, hanaponBoxCurrentMonth);
+        renderHanaponBox();
+    };
+
+    yearSelect.addEventListener('change', update);
+    monthSelect.addEventListener('change', update);
+    previousButton?.addEventListener('click', () => {
+        let year = parseInt(yearSelect.value, 10);
+        let month = parseInt(monthSelect.value, 10) - 1;
+        if (month < 1) { month = 12; year--; }
+        if (year < 2024) return;
+        yearSelect.value = year;
+        monthSelect.value = month;
+        update();
+    });
+    nextButton?.addEventListener('click', () => {
+        let year = parseInt(yearSelect.value, 10);
+        let month = parseInt(monthSelect.value, 10) + 1;
+        if (month > 12) { month = 1; year++; }
+        if (year > 2100) return;
+        yearSelect.value = year;
+        monthSelect.value = month;
+        update();
+    });
+}
+
+function saveHanaponBoxData(triggerHistory = true) {
+    if (!canWriteAppData()) return false;
+    hanaponBoxAllData = normalizeHanaponBoxData(hanaponBoxAllData);
+    localStorage.setItem(HANAPON_BOX_STORAGE_KEY, JSON.stringify(hanaponBoxAllData));
+    scheduleDailyBackupRefresh();
+    if (triggerHistory) triggerHistorySave();
+
+    if (database && hanaponBoxDataSync && Object.keys(hanaponBoxAllData).length > 0) {
+        hanaponBoxDataSync.save(hanaponBoxAllData);
+        const status = document.getElementById('saveStatusHanaponBox');
+        if (status) {
+            status.textContent = '保存しました ' + new Date().toLocaleTimeString();
+            setTimeout(() => { status.textContent = ''; }, 3000);
+        }
+    }
+    return true;
+}
+
+function handleHanaponBoxInput(event) {
+    const target = event.target;
+    if (!target.classList.contains('hanapon-box-input')) return;
+
+    const inputYear = hanaponBoxCurrentYear;
+    const inputMonth = hanaponBoxCurrentMonth;
+    const inputCompany = hanaponBoxActiveCompany;
+    const key = `${inputYear}-${inputMonth}`;
+    ensureHanaponBoxMonth(inputYear, inputMonth, false);
+    const monthData = hanaponBoxAllData[key];
+    const companyData = monthData?.[inputCompany];
+    const typeData = companyData?.[target.dataset.type];
+    if (!typeData) return;
+
+    const parsed = target.value.trim() === '' ? 0 : parseInt(target.value, 10);
+    if (Number.isNaN(parsed)) return;
+
+    if (target.dataset.field === 'carryover') {
+        typeData.carryover = parsed;
+    } else {
+        const day = target.dataset.day;
+        if (!typeData.days) typeData.days = {};
+        if (!typeData.days[day]) typeData.days[day] = {};
+        if (parsed === 0) {
+            delete typeData.days[day].usage;
+            if (Object.keys(typeData.days[day]).length === 0) delete typeData.days[day];
+        } else {
+            typeData.days[day].usage = parsed;
+        }
+    }
+
+    if (inputCompany === HANAPON_BOX_LEGACY_COMPANY_KEY) {
+        syncHanaponBoxLegacyMonth(monthData);
+    }
+
+    clearTimeout(hanaponBoxSaveTimer);
+    hanaponBoxSaveTimer = setTimeout(() => {
+        saveHanaponBoxData();
+        propagateHanaponBoxCarryover(inputYear, inputMonth, inputCompany);
+    }, 500);
+}
+
+function renderHanaponBox() {
+    ensureHanaponBoxMonth(hanaponBoxCurrentYear, hanaponBoxCurrentMonth, false);
+    const key = `${hanaponBoxCurrentYear}-${hanaponBoxCurrentMonth}`;
+    const monthData = hanaponBoxAllData[key];
+    const companyData = monthData?.[hanaponBoxActiveCompany]
+        || monthData?.[HANAPON_BOX_LEGACY_COMPANY_KEY];
+    const head = document.getElementById('hanaponBoxHead');
+    const body = document.getElementById('hanaponBoxBody');
+    const foot = document.getElementById('hanaponBoxFoot');
+    if (!monthData || !companyData || !head || !body || !foot) return;
+
+    document.querySelectorAll('#hanaponBoxCompanyTabs [data-company]').forEach(button => {
+        const isActive = button.dataset.company === hanaponBoxActiveCompany;
+        button.classList.toggle('active', isActive);
+        button.setAttribute('aria-selected', String(isActive));
+    });
+
+    let mainHeader = '<tr class="header-main-stock"><th rowspan="2" class="date-col-stock">日付</th>';
+    let subHeader = '<tr class="header-sub-stock">';
+    HANAPON_BOX_TYPES.forEach(type => {
+        mainHeader += `<th colspan="2" class="group-film-stock" style="background: ${type.bg}; color: ${type.color}; border: 1px solid var(--border);">${type.name}</th>`;
+        subHeader += '<th class="sub-film-stock">使用数</th><th class="sub-film-stock remaining-stock">残数</th>';
+    });
+    head.innerHTML = mainHeader + '</tr>' + subHeader + '</tr>';
+
+    let carryRow = '<tr class="carryover-row" style="background: rgba(var(--primary-rgb), 0.05);"><td style="font-weight:700; padding:0.5rem; white-space:nowrap; border:1px solid var(--border);"><span class="carryover-text-desktop">前月繰越</span><span class="carryover-text-mobile">繰越</span></td>';
+    HANAPON_BOX_TYPES.forEach(type => {
+        const typeData = companyData[type.key] || { carryover: 0, days: {} };
+        const carry = parseInt(typeData.carryover, 10) || 0;
+        carryRow += '<td style="border:1px solid var(--border);"></td>';
+        carryRow += `<td class="remaining-stock" style="border:1px solid var(--border);"><input type="number" min="0" class="hanapon-box-input carry-input" data-type="${type.key}" data-field="carryover" value="${carry}" style="width:90%; background:transparent; border:none; font-weight:800; color:var(--primary); text-align:center; padding:2px;"></td>`;
+    });
+    carryRow += '</tr>';
+
+    const daysInMonth = new Date(hanaponBoxCurrentYear, hanaponBoxCurrentMonth, 0).getDate();
+    const weekdayLabels = ['日', '月', '火', '水', '木', '金', '土'];
+    const todayStr = currentDate;
+    let rows = '';
+
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dateObj = new Date(hanaponBoxCurrentYear, hanaponBoxCurrentMonth - 1, day);
+        const dateStr = `${hanaponBoxCurrentYear}-${String(hanaponBoxCurrentMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const isHoliday = isRollHoliday(hanaponBoxCurrentYear, hanaponBoxCurrentMonth, day);
+        const isToday = dateStr === todayStr;
+        let rowClass = '';
+        if (isToday) rowClass = 'sliver-row-today';
+        else if (isHoliday) rowClass = 'weekend-holiday';
+        else if (dateObj.getDay() === 0) rowClass = 'weekend-sun';
+        else if (dateObj.getDay() === 6) rowClass = 'weekend-sat';
+
+        rows += `<tr class="${rowClass}"><td class="date-cell" style="border:1px solid var(--border);"><div class="date-desktop">${hanaponBoxCurrentMonth}/${day}(${weekdayLabels[dateObj.getDay()]})</div><div class="date-mobile"><div class="date-num">${day}</div><div class="day-name">${weekdayLabels[dateObj.getDay()]}</div></div></td>`;
+        HANAPON_BOX_TYPES.forEach(type => {
+            const typeData = companyData[type.key] || { carryover: 0, days: {} };
+            const dayData = typeData.days?.[day] || {};
+            const usage = dayData.usage || '';
+            const balance = calculateHanaponBoxEndBalance(typeData, hanaponBoxCurrentYear, hanaponBoxCurrentMonth, day);
+            rows += `<td style="border:1px solid var(--border); padding:0.25rem;"><input type="number" min="0" class="hanapon-box-input stock-input" data-type="${type.key}" data-field="usage" data-day="${day}" value="${usage}" style="width:100%; border:none; padding:4px; text-align:center;"></td>`;
+            rows += `<td class="remaining-stock ${balance < STOCK_LOW_THRESHOLD ? 'low-stock' : ''}" style="border:1px solid var(--border);">${balance}</td>`;
+        });
+        rows += '</tr>';
+    }
+    body.innerHTML = carryRow + rows;
+
+    let footer = '<tr><td style="font-weight:700; border:1px solid var(--border); text-align:center;">月末残</td>';
+    HANAPON_BOX_TYPES.forEach(type => {
+        const typeData = companyData[type.key] || { carryover: 0, days: {} };
+        const balance = calculateHanaponBoxEndBalance(typeData, hanaponBoxCurrentYear, hanaponBoxCurrentMonth);
+        footer += `<td style="border:1px solid var(--border);"></td><td class="remaining-stock" style="font-weight:800; border:1px solid var(--border); background:rgba(var(--primary-rgb), 0.05);">${balance}</td>`;
+    });
+    foot.innerHTML = footer + '</tr>';
+
+    body.querySelectorAll('.hanapon-box-input').forEach(input => {
+        input.addEventListener('input', handleHanaponBoxInput);
+        input.addEventListener('change', renderHanaponBox);
+    });
+}
+
+function propagateHanaponBoxCarryover(year, month, companyKey = hanaponBoxActiveCompany) {
+    if (!HANAPON_BOX_COMPANIES.some(company => company.key === companyKey)) {
+        companyKey = HANAPON_BOX_LEGACY_COMPANY_KEY;
+    }
+
+    let currentYear = parseInt(year, 10);
+    let currentMonth = parseInt(month, 10);
+    let changed = false;
+
+    for (let index = 0; index < 24; index++) {
+        const currentKey = `${currentYear}-${currentMonth}`;
+        const currentData = hanaponBoxAllData[currentKey];
+        const currentCompanyData = currentData?.[companyKey];
+        if (!isHanaponBoxObject(currentData) || !isHanaponBoxObject(currentCompanyData)) break;
+
+        let nextMonth = currentMonth + 1;
+        let nextYear = currentYear;
+        if (nextMonth > 12) { nextMonth = 1; nextYear++; }
+        const nextKey = `${nextYear}-${nextMonth}`;
+        const nextData = hanaponBoxAllData[nextKey];
+        const nextCompanyData = nextData?.[companyKey];
+        if (!isHanaponBoxObject(nextData) || !isHanaponBoxObject(nextCompanyData)) break;
+
+        HANAPON_BOX_TYPES.forEach(type => {
+            const currentType = currentCompanyData[type.key];
+            const nextType = nextCompanyData[type.key];
+            if (!currentType || !nextType) return;
+            const nextCarry = calculateHanaponBoxEndBalance(currentType, currentYear, currentMonth);
+            if (nextType.carryover !== nextCarry) {
+                nextType.carryover = nextCarry;
+                changed = true;
+            }
+        });
+
+        if (companyKey === HANAPON_BOX_LEGACY_COMPANY_KEY) {
+            syncHanaponBoxLegacyMonth(currentData);
+            syncHanaponBoxLegacyMonth(nextData);
+        }
+
+        currentYear = nextYear;
+        currentMonth = nextMonth;
+    }
+
+    if (changed) {
+        localStorage.setItem(HANAPON_BOX_STORAGE_KEY, JSON.stringify(hanaponBoxAllData));
+        scheduleDailyBackupRefresh();
+    }
 }
 
 // ==========================================
@@ -9902,6 +10474,9 @@ window.selectHistoryBackup = function(slot) {
                 <input type="checkbox" id="chk-hanapon-hist${slot}" value="hanapon" style="width: 1.2rem; height: 1.2rem; margin: 0; padding: 0; flex-shrink: 0;"> 鼻ぽん在庫
             </label>
             <label style="display: flex; align-items: center; justify-content: flex-start; gap: 0.75rem; cursor: pointer; padding: 0.75rem 1rem; border: 1px solid #e2e8f0; border-radius: 8px; transition: background 0.2s; white-space: nowrap;">
+                <input type="checkbox" id="chk-hanapon-box-hist${slot}" value="hanaponBox" style="width: 1.2rem; height: 1.2rem; margin: 0; padding: 0; flex-shrink: 0;"> 鼻ぽん中箱在庫
+            </label>
+            <label style="display: flex; align-items: center; justify-content: flex-start; gap: 0.75rem; cursor: pointer; padding: 0.75rem 1rem; border: 1px solid #e2e8f0; border-radius: 8px; transition: background 0.2s; white-space: nowrap;">
                 <input type="checkbox" id="chk-snowsprint-hist${slot}" value="snowsprint" style="width: 1.2rem; height: 1.2rem; margin: 0; padding: 0; flex-shrink: 0;"> スノースプリント
             </label>
             <label style="display: flex; align-items: center; justify-content: flex-start; gap: 0.75rem; cursor: pointer; padding: 0.75rem 1rem; border: 1px solid #e2e8f0; border-radius: 8px; transition: background 0.2s; white-space: nowrap;">
@@ -9940,6 +10515,7 @@ window.restoreFromHistory = function(slot) {
         { id: 'chk-roll-' + suffix, key: 'roll', db: ROLL_DB_PATH },
         { id: 'chk-sliver-' + suffix, key: 'sliver', db: SLIVER_DB_PATH },
         { id: 'chk-hanapon-' + suffix, key: 'hanapon', db: HANAPON_DB_PATH },
+        { id: 'chk-hanapon-box-' + suffix, key: 'hanaponBox', db: HANAPON_BOX_DB_PATH },
         { id: 'chk-snowsprint-' + suffix, key: 'snowsprint', db: SNOWSPRINT_DB_PATH },
         { id: 'chk-project-' + suffix, key: 'project', db: PROJECT_DB_PATH },
         { id: 'chk-records-' + suffix, key: 'records', db: DB_PATH },
@@ -9981,7 +10557,10 @@ window.restoreFromHistory = function(slot) {
     const promises = [];
     restorableItems.forEach(item => {
         try {
-            const backupValue = JSON.parse(backupObj[item.key]);
+            const parsedBackupValue = JSON.parse(backupObj[item.key]);
+            const backupValue = item.key === 'hanaponBox'
+                ? normalizeHanaponBoxData(parsedBackupValue)
+                : parsedBackupValue;
             promises.push(new Promise((resolve, reject) => {
                 database.ref(item.db).transaction(currentValue =>
                     SharedSync.mergeRestoreValue(currentValue, backupValue),
@@ -10067,6 +10646,9 @@ window.selectBackupDate = function(dateStr) {
                 <input type="checkbox" id="chk-hanapon-${dateStr}" value="hanapon" style="width: 1.2rem; height: 1.2rem; margin: 0; padding: 0; flex-shrink: 0;"> 鼻ぽん在庫
             </label>
             <label style="display: flex; align-items: center; justify-content: flex-start; gap: 0.75rem; cursor: pointer; padding: 0.75rem 1rem; border: 1px solid #e2e8f0; border-radius: 8px; transition: background 0.2s; white-space: nowrap;">
+                <input type="checkbox" id="chk-hanapon-box-${dateStr}" value="hanaponBox" style="width: 1.2rem; height: 1.2rem; margin: 0; padding: 0; flex-shrink: 0;"> 鼻ぽん中箱在庫
+            </label>
+            <label style="display: flex; align-items: center; justify-content: flex-start; gap: 0.75rem; cursor: pointer; padding: 0.75rem 1rem; border: 1px solid #e2e8f0; border-radius: 8px; transition: background 0.2s; white-space: nowrap;">
                 <input type="checkbox" id="chk-snowsprint-${dateStr}" value="snowsprint" style="width: 1.2rem; height: 1.2rem; margin: 0; padding: 0; flex-shrink: 0;"> スノースプリント
             </label>
             <label style="display: flex; align-items: center; justify-content: flex-start; gap: 0.75rem; cursor: pointer; padding: 0.75rem 1rem; border: 1px solid #e2e8f0; border-radius: 8px; transition: background 0.2s; white-space: nowrap;">
@@ -10102,6 +10684,7 @@ window.restoreFromBackup = function(dateStr) {
         { id: 'chk-roll-' + dateStr, key: 'roll', db: ROLL_DB_PATH },
         { id: 'chk-sliver-' + dateStr, key: 'sliver', db: SLIVER_DB_PATH },
         { id: 'chk-hanapon-' + dateStr, key: 'hanapon', db: HANAPON_DB_PATH },
+        { id: 'chk-hanapon-box-' + dateStr, key: 'hanaponBox', db: HANAPON_BOX_DB_PATH },
         { id: 'chk-snowsprint-' + dateStr, key: 'snowsprint', db: SNOWSPRINT_DB_PATH },
         { id: 'chk-project-' + dateStr, key: 'project', db: PROJECT_DB_PATH },
         { id: 'chk-records-' + dateStr, key: 'records', db: DB_PATH },
@@ -10142,7 +10725,10 @@ window.restoreFromBackup = function(dateStr) {
     const promises = [];
     restorableItems.forEach(item => {
         try {
-            const backupValue = JSON.parse(backupObj[item.key]);
+            const parsedBackupValue = JSON.parse(backupObj[item.key]);
+            const backupValue = item.key === 'hanaponBox'
+                ? normalizeHanaponBoxData(parsedBackupValue)
+                : parsedBackupValue;
             promises.push(new Promise((resolve, reject) => {
                 database.ref(item.db).transaction(currentValue =>
                     SharedSync.mergeRestoreValue(currentValue, backupValue),
@@ -10175,5 +10761,3 @@ window.restoreFromBackup = function(dateStr) {
 if (window.SharedSync && typeof SharedSync.startVersionGuard === 'function') SharedSync.startVersionGuard();
 startAppVersionGuard();
 init();
-
-
