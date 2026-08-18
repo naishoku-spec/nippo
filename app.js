@@ -1611,8 +1611,8 @@ const firebaseConfig = {
     measurementId: "G-SR8Y5NKQTZ"
 };
 
-const APP_BUILD_ID = '20260817-sync-v32';
-const APP_BUILD_NUMBER = 2026081732;
+const APP_BUILD_ID = '20260817-sync-v33';
+const APP_BUILD_NUMBER = 2026081733;
 const APP_VERSION_METADATA_PATH = 'app-version.json';
 const APP_VERSION_CHECK_INTERVAL_MS = 30000;
 const APP_LATEST_BUILD_LS_KEY = 'nippo_latest_app_build_number';
@@ -9034,10 +9034,6 @@ function renderHanaponBox() {
     const body = document.getElementById('hanaponBoxBody');
     const foot = document.getElementById('hanaponBoxFoot');
     if (!monthData || !companyData || !head || !body || !foot) return;
-    const isStockCompany = hanaponBoxActiveCompany === 'stock';
-    const table = document.getElementById('hanaponBoxTable');
-    table?.classList.toggle('hanapon-box-stock-table', isStockCompany);
-
     document.querySelectorAll('#hanaponBoxCompanyTabs [data-company]').forEach(button => {
         const isActive = button.dataset.company === hanaponBoxActiveCompany;
         button.classList.toggle('active', isActive);
@@ -9047,8 +9043,8 @@ function renderHanaponBox() {
     let mainHeader = '<tr class="header-main-stock"><th rowspan="2" class="date-col-stock">日付</th>';
     let subHeader = '<tr class="header-sub-stock">';
     HANAPON_BOX_TYPES.forEach(type => {
-        mainHeader += `<th colspan="${isStockCompany ? 3 : 2}" class="group-film-stock" style="background: ${type.bg}; color: ${type.color}; border: 1px solid var(--border);">${type.name}</th>`;
-        if (isStockCompany) subHeader += '<th class="sub-film-stock">入荷</th>';
+        mainHeader += `<th colspan="3" class="group-film-stock" style="background: ${type.bg}; color: ${type.color}; border: 1px solid var(--border);">${type.name}</th>`;
+        subHeader += '<th class="sub-film-stock">入荷</th>';
         subHeader += '<th class="sub-film-stock">使用数</th><th class="sub-film-stock remaining-stock">残数</th>';
     });
     head.innerHTML = mainHeader + '</tr>' + subHeader + '</tr>';
@@ -9057,7 +9053,7 @@ function renderHanaponBox() {
     HANAPON_BOX_TYPES.forEach(type => {
         const typeData = companyData[type.key] || { carryover: 0, days: {} };
         const carry = parseInt(typeData.carryover, 10) || 0;
-        if (isStockCompany) carryRow += '<td style="border:1px solid var(--border);"></td>';
+        carryRow += '<td style="border:1px solid var(--border);"></td>';
         carryRow += '<td style="border:1px solid var(--border);"></td>';
         carryRow += `<td class="remaining-stock" style="border:1px solid var(--border);"><input type="number" min="0" class="hanapon-box-input carry-input" data-type="${type.key}" data-field="carryover" value="${carry}" style="width:90%; background:transparent; border:none; font-weight:800; color:var(--primary); text-align:center; padding:2px;"></td>`;
     });
@@ -9086,7 +9082,7 @@ function renderHanaponBox() {
             const incoming = dayData.incoming || '';
             const usage = dayData.usage || '';
             const balance = calculateHanaponBoxEndBalance(typeData, hanaponBoxCurrentYear, hanaponBoxCurrentMonth, day);
-            if (isStockCompany) rows += `<td style="border:1px solid var(--border); padding:0.25rem;"><input type="number" min="0" class="hanapon-box-input stock-input" data-type="${type.key}" data-field="incoming" data-day="${day}" value="${incoming}" style="width:100%; border:none; padding:4px; text-align:center;"></td>`;
+            rows += `<td style="border:1px solid var(--border); padding:0.25rem;"><input type="number" min="0" class="hanapon-box-input stock-input" data-type="${type.key}" data-field="incoming" data-day="${day}" value="${incoming}" style="width:100%; border:none; padding:4px; text-align:center;"></td>`;
             rows += `<td style="border:1px solid var(--border); padding:0.25rem;"><input type="number" min="0" class="hanapon-box-input stock-input" data-type="${type.key}" data-field="usage" data-day="${day}" value="${usage}" style="width:100%; border:none; padding:4px; text-align:center;"></td>`;
             rows += `<td class="remaining-stock ${balance < STOCK_LOW_THRESHOLD ? 'low-stock' : ''}" style="border:1px solid var(--border);">${balance}</td>`;
         });
@@ -9098,8 +9094,7 @@ function renderHanaponBox() {
     HANAPON_BOX_TYPES.forEach(type => {
         const typeData = companyData[type.key] || { carryover: 0, days: {} };
         const balance = calculateHanaponBoxEndBalance(typeData, hanaponBoxCurrentYear, hanaponBoxCurrentMonth);
-        if (isStockCompany) footer += '<td style="border:1px solid var(--border);"></td>';
-        footer += `<td style="border:1px solid var(--border);"></td><td class="remaining-stock" style="font-weight:800; border:1px solid var(--border); background:rgba(var(--primary-rgb), 0.05);">${balance}</td>`;
+        footer += `<td style="border:1px solid var(--border);"></td><td style="border:1px solid var(--border);"></td><td class="remaining-stock" style="font-weight:800; border:1px solid var(--border); background:rgba(var(--primary-rgb), 0.05);">${balance}</td>`;
     });
     foot.innerHTML = footer + '</tr>';
 
