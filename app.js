@@ -1611,8 +1611,8 @@ const firebaseConfig = {
     measurementId: "G-SR8Y5NKQTZ"
 };
 
-const APP_BUILD_ID = '20260817-sync-v29';
-const APP_BUILD_NUMBER = 2026081729;
+const APP_BUILD_ID = '20260817-sync-v32';
+const APP_BUILD_NUMBER = 2026081732;
 const APP_VERSION_METADATA_PATH = 'app-version.json';
 const APP_VERSION_CHECK_INTERVAL_MS = 30000;
 const APP_LATEST_BUILD_LS_KEY = 'nippo_latest_app_build_number';
@@ -8796,9 +8796,46 @@ function calculateHanaponBoxEndBalance(typeData, year, month, throughDay = null)
     const daysInMonth = throughDay || new Date(year, month, 0).getDate();
     for (let day = 1; day <= daysInMonth; day++) {
         const dayData = typeData.days && typeData.days[day];
+        balance += parseInt(dayData?.incoming, 10) || 0;
         balance -= parseInt(dayData?.usage, 10) || 0;
     }
     return balance;
+}
+
+function refreshHanaponBoxMonthCarryover(year, month, companyKey = hanaponBoxActiveCompany) {
+    if (!HANAPON_BOX_COMPANIES.some(company => company.key === companyKey)) {
+        companyKey = HANAPON_BOX_LEGACY_COMPANY_KEY;
+    }
+
+    const currentYear = parseInt(year, 10);
+    const currentMonth = parseInt(month, 10);
+    const previousMonth = currentMonth === 1 ? 12 : currentMonth - 1;
+    const previousYear = currentMonth === 1 ? currentYear - 1 : currentYear;
+    const currentData = hanaponBoxAllData[`${currentYear}-${currentMonth}`];
+    const previousData = hanaponBoxAllData[`${previousYear}-${previousMonth}`];
+    const currentCompanyData = currentData?.[companyKey];
+    if (!isHanaponBoxObject(currentData)
+        || !isHanaponBoxObject(previousData)
+        || !isHanaponBoxObject(currentCompanyData)) return false;
+
+    let changed = false;
+    HANAPON_BOX_TYPES.forEach(type => {
+        const currentType = currentCompanyData[type.key];
+        const previousType = getHanaponBoxPreviousType(previousData, companyKey, type.key);
+        if (!isHanaponBoxObject(currentType) || !isHanaponBoxObject(previousType)) return;
+
+        const expectedCarry = calculateHanaponBoxEndBalance(previousType, previousYear, previousMonth);
+        const currentCarry = parseInt(currentType.carryover, 10);
+        if (Number.isNaN(currentCarry) || currentCarry !== expectedCarry) {
+            currentType.carryover = expectedCarry;
+            changed = true;
+        }
+    });
+
+    if (changed && companyKey === HANAPON_BOX_LEGACY_COMPANY_KEY) {
+        syncHanaponBoxLegacyMonth(currentData);
+    }
+    return changed;
 }
 
 function initHanaponBox() {
@@ -8896,6 +8933,10 @@ function setupHanaponBoxMonthSelector() {
         hanaponBoxCurrentYear = parseInt(yearSelect.value, 10);
         hanaponBoxCurrentMonth = parseInt(monthSelect.value, 10);
         ensureHanaponBoxMonth(hanaponBoxCurrentYear, hanaponBoxCurrentMonth);
+        if (canWriteAppData()
+            && refreshHanaponBoxMonthCarryover(hanaponBoxCurrentYear, hanaponBoxCurrentMonth, hanaponBoxActiveCompany)) {
+            saveHanaponBoxData(false);
+        }
         renderHanaponBox();
     };
 
@@ -8956,17 +8997,19 @@ function handleHanaponBoxInput(event) {
     const parsed = target.value.trim() === '' ? 0 : parseInt(target.value, 10);
     if (Number.isNaN(parsed)) return;
 
-    if (target.dataset.field === 'carryover') {
+    const field = target.dataset.field;
+    if (field === 'carryover') {
         typeData.carryover = parsed;
     } else {
         const day = target.dataset.day;
+        if (!field || !day) return;
         if (!typeData.days) typeData.days = {};
         if (!typeData.days[day]) typeData.days[day] = {};
         if (parsed === 0) {
-            delete typeData.days[day].usage;
+            delete typeData.days[day][field];
             if (Object.keys(typeData.days[day]).length === 0) delete typeData.days[day];
         } else {
-            typeData.days[day].usage = parsed;
+            typeData.days[day][field] = parsed;
         }
     }
 
@@ -8991,6 +9034,9 @@ function renderHanaponBox() {
     const body = document.getElementById('hanaponBoxBody');
     const foot = document.getElementById('hanaponBoxFoot');
     if (!monthData || !companyData || !head || !body || !foot) return;
+    const isStockCompany = hanaponBoxActiveCompany === 'stock';
+    const table = document.getElementById('hanaponBoxTable');
+    table?.classList.toggle('hanapon-box-stock-table', isStockCompany);
 
     document.querySelectorAll('#hanaponBoxCompanyTabs [data-company]').forEach(button => {
         const isActive = button.dataset.company === hanaponBoxActiveCompany;
@@ -9001,7 +9047,8 @@ function renderHanaponBox() {
     let mainHeader = '<tr class="header-main-stock"><th rowspan="2" class="date-col-stock">日付</th>';
     let subHeader = '<tr class="header-sub-stock">';
     HANAPON_BOX_TYPES.forEach(type => {
-        mainHeader += `<th colspan="2" class="group-film-stock" style="background: ${type.bg}; color: ${type.color}; border: 1px solid var(--border);">${type.name}</th>`;
+        mainHeader += `<th colspan="${isStockCompany ? 3 : 2}" class="group-film-stock" style="background: ${type.bg}; color: ${type.color}; border: 1px solid var(--border);">${type.name}</th>`;
+        if (isStockCompany) subHeader += '<th class="sub-film-stock">入荷</th>';
         subHeader += '<th class="sub-film-stock">使用数</th><th class="sub-film-stock remaining-stock">残数</th>';
     });
     head.innerHTML = mainHeader + '</tr>' + subHeader + '</tr>';
@@ -9010,6 +9057,7 @@ function renderHanaponBox() {
     HANAPON_BOX_TYPES.forEach(type => {
         const typeData = companyData[type.key] || { carryover: 0, days: {} };
         const carry = parseInt(typeData.carryover, 10) || 0;
+        if (isStockCompany) carryRow += '<td style="border:1px solid var(--border);"></td>';
         carryRow += '<td style="border:1px solid var(--border);"></td>';
         carryRow += `<td class="remaining-stock" style="border:1px solid var(--border);"><input type="number" min="0" class="hanapon-box-input carry-input" data-type="${type.key}" data-field="carryover" value="${carry}" style="width:90%; background:transparent; border:none; font-weight:800; color:var(--primary); text-align:center; padding:2px;"></td>`;
     });
@@ -9035,8 +9083,10 @@ function renderHanaponBox() {
         HANAPON_BOX_TYPES.forEach(type => {
             const typeData = companyData[type.key] || { carryover: 0, days: {} };
             const dayData = typeData.days?.[day] || {};
+            const incoming = dayData.incoming || '';
             const usage = dayData.usage || '';
             const balance = calculateHanaponBoxEndBalance(typeData, hanaponBoxCurrentYear, hanaponBoxCurrentMonth, day);
+            if (isStockCompany) rows += `<td style="border:1px solid var(--border); padding:0.25rem;"><input type="number" min="0" class="hanapon-box-input stock-input" data-type="${type.key}" data-field="incoming" data-day="${day}" value="${incoming}" style="width:100%; border:none; padding:4px; text-align:center;"></td>`;
             rows += `<td style="border:1px solid var(--border); padding:0.25rem;"><input type="number" min="0" class="hanapon-box-input stock-input" data-type="${type.key}" data-field="usage" data-day="${day}" value="${usage}" style="width:100%; border:none; padding:4px; text-align:center;"></td>`;
             rows += `<td class="remaining-stock ${balance < STOCK_LOW_THRESHOLD ? 'low-stock' : ''}" style="border:1px solid var(--border);">${balance}</td>`;
         });
@@ -9048,6 +9098,7 @@ function renderHanaponBox() {
     HANAPON_BOX_TYPES.forEach(type => {
         const typeData = companyData[type.key] || { carryover: 0, days: {} };
         const balance = calculateHanaponBoxEndBalance(typeData, hanaponBoxCurrentYear, hanaponBoxCurrentMonth);
+        if (isStockCompany) footer += '<td style="border:1px solid var(--border);"></td>';
         footer += `<td style="border:1px solid var(--border);"></td><td class="remaining-stock" style="font-weight:800; border:1px solid var(--border); background:rgba(var(--primary-rgb), 0.05);">${balance}</td>`;
     });
     foot.innerHTML = footer + '</tr>';
@@ -9102,8 +9153,7 @@ function propagateHanaponBoxCarryover(year, month, companyKey = hanaponBoxActive
     }
 
     if (changed) {
-        localStorage.setItem(HANAPON_BOX_STORAGE_KEY, JSON.stringify(hanaponBoxAllData));
-        scheduleDailyBackupRefresh();
+        saveHanaponBoxData(false);
     }
 }
 
