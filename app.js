@@ -1611,8 +1611,8 @@ const firebaseConfig = {
     measurementId: "G-SR8Y5NKQTZ"
 };
 
-const APP_BUILD_ID = '20260817-sync-v33';
-const APP_BUILD_NUMBER = 2026081733;
+const APP_BUILD_ID = '20260817-sync-v35';
+const APP_BUILD_NUMBER = 2026081735;
 const APP_VERSION_METADATA_PATH = 'app-version.json';
 const APP_VERSION_CHECK_INTERVAL_MS = 30000;
 const APP_LATEST_BUILD_LS_KEY = 'nippo_latest_app_build_number';

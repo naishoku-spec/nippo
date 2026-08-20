@@ -43,14 +43,78 @@ let dailyNotes = JSON.parse(localStorage.getItem(NOTES_LS_KEY)) || {};
 let noteSaveTimeout = null;
 let recordsSync = null;
 let notesSync = null;
+let recordsNeedCleanup = false;
 
 
 // Real-time synchronization from Firebase
+function get1fRecordSyncKey(record) {
+    if (!record || typeof record !== 'object') return null;
+    const date = String(record.date || '').trim();
+    const machine = String(record.machine || '').trim();
+    if (!date || !machine) return null;
+    return `1f:${date}:${machine}`;
+}
+
+function merge1fDuplicateRecords(primary, duplicate) {
+    const merged = { ...primary };
+    const primaryCount = Number(merged.count);
+    const duplicateCount = Number(duplicate.count);
+    if (Number.isFinite(duplicateCount)
+        && (!Number.isFinite(primaryCount) || duplicateCount > primaryCount)) {
+        merged.count = duplicate.count;
+    }
+
+    const noteValues = [merged.notes, duplicate.notes]
+        .filter(value => typeof value === 'string' && value.trim());
+    if (noteValues.length > 0) {
+        merged.notes = [...new Set(noteValues)].join('\n');
+    }
+
+    Object.entries(duplicate).forEach(([key, value]) => {
+        if (key === 'id' || key === '_syncKey' || key === 'count' || key === 'notes') return;
+        const currentValue = merged[key];
+        if ((currentValue === undefined || currentValue === null || currentValue === '')
+            && value !== undefined) {
+            merged[key] = value;
+        }
+    });
+
+    merged._syncKey = primary._syncKey || duplicate._syncKey;
+    return merged;
+}
+
 function normalize1fRecords(value) {
     const list = Array.isArray(value)
         ? value
         : Object.values(value && typeof value === 'object' ? value : {});
-    return list.filter(item => item && typeof item === 'object');
+    const result = [];
+    const keyedIndexes = new Map();
+    let changed = false;
+
+    list.filter(item => item && typeof item === 'object').forEach(item => {
+        const record = { ...item };
+        const syncKey = get1fRecordSyncKey(record);
+        if (!syncKey) {
+            result.push(record);
+            return;
+        }
+
+        if (record._syncKey !== syncKey) changed = true;
+        record._syncKey = syncKey;
+
+        const existingIndex = keyedIndexes.get(syncKey);
+        if (existingIndex !== undefined) {
+            result[existingIndex] = merge1fDuplicateRecords(result[existingIndex], record);
+            changed = true;
+            return;
+        }
+
+        keyedIndexes.set(syncKey, result.length);
+        result.push(record);
+    });
+
+    if (changed) recordsNeedCleanup = true;
+    return result;
 }
 
 function normalize1fNotes(value) {
@@ -343,16 +407,29 @@ function handleAddRecord(e) {
     startTimeInput.value = normalizeTime(startTimeInput.value);
     endTimeInput.value = normalizeTime(endTimeInput.value);
 
+    const machine = document.getElementById('machine-1f').value.trim();
+    if (!machine) {
+        alert('機械名を入力または選択してください。');
+        return;
+    }
 
     const record = {
         id: Date.now() + Math.random(),
         date: currentDate,
-        machine: document.getElementById('machine-1f').value,
+        machine,
         startTime: startTimeInput.value,
         endTime: endTimeInput.value,
         count: parseInt(document.getElementById('count-1f').value || 0)
     };
-    records.push(record);
+
+    const existingRecord = records.find(item => item.date === currentDate && item.machine === machine);
+    if (existingRecord) {
+        existingRecord.startTime = record.startTime;
+        existingRecord.endTime = record.endTime;
+        existingRecord.count = record.count;
+    } else {
+        records.push(record);
+    }
     saveRecords(record);
     renderRecords();
     document.getElementById('count-1f').value = '';
@@ -389,11 +466,18 @@ function isJapaneseHoliday(dateStr) {
 
 // Ensure machines R1-R4 exist for a specific date
 function ensureDayRecords(date) {
+    const originalLength = records.length;
+    records = normalize1fRecords(records);
+    let updated = recordsNeedCleanup || records.length !== originalLength;
+    recordsNeedCleanup = false;
+
     const dayOfWeek = new Date(date).getDay();
-    if (dayOfWeek === 0 || dayOfWeek === 6 || isJapaneseHoliday(date)) return;
+    if (dayOfWeek === 0 || dayOfWeek === 6 || isJapaneseHoliday(date)) {
+        if (updated) saveRecords();
+        return;
+    }
 
     const existingMachines = records.filter(r => r.date === date).map(r => r.machine);
-    let updated = false;
 
     MACHINES.forEach(m => {
         if (!existingMachines.includes(m)) {
