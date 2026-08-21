@@ -475,15 +475,19 @@ function renderRecords() {
                 <span class="row-number">${index + 1}</span>
                 <input type="text" class="saidan-inline-input" value="${record.product || ''}"
                        placeholder="製品名を入力"
+                       oninput="updateRecord(${record.id}, 'product', this.value)"
                        onblur="updateRecord(${record.id}, 'product', this.value)">
                 <input type="text" class="saidan-inline-input time-input" value="${record.startTime || ''}"
                        placeholder="開始" inputmode="numeric" onfocus="this.select()"
+                       oninput="updateRecord(${record.id}, 'startTime', this.value)"
                        onblur="this.value = normalizeTime(this.value); updateRecord(${record.id}, 'startTime', this.value)">
                 <input type="text" class="saidan-inline-input time-input" value="${record.endTime || ''}"
                        placeholder="終了" inputmode="numeric" onfocus="this.select()"
+                       oninput="updateRecord(${record.id}, 'endTime', this.value)"
                        onblur="this.value = normalizeTime(this.value); updateRecord(${record.id}, 'endTime', this.value)">
                 <input type="text" class="saidan-inline-input time-input" value="${record.worker || ''}"
                        placeholder="作業者"
+                       oninput="updateRecord(${record.id}, 'worker', this.value)"
                        onblur="updateRecord(${record.id}, 'worker', this.value)">
             </div>
             <!-- 2段目: 備考欄 (幅100%・文章量に応じて縦に自動で伸びるテキストエリア) -->

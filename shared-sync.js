@@ -1,8 +1,8 @@
 (function (global) {
     'use strict';
 
-    const BUILD_ID = '20260817-sync-v35';
-    const BUILD_NUMBER = 2026081735;
+    const BUILD_ID = '20260821-date-persist-v39';
+    const BUILD_NUMBER = 2026082139;
     const VERSION_PATH = 'app-version.json';
     const VERSION_CHECK_INTERVAL_MS = 30000;
     const LATEST_BUILD_KEY = 'nippo_latest_app_build_number';
@@ -11,12 +11,40 @@
     let versionCheckInFlight = false;
     let versionCheckTimer = null;
     let versionGuardStarted = false;
+    const pathSyncFlushers = new Set();
+    let pathSyncLifecycleBound = false;
 
     const WRITE_METHODS = new Set(['set', 'update', 'remove', 'setWithPriority', 'transaction']);
     const REFERENCE_CHAIN_METHODS = new Set([
         'child', 'orderByChild', 'orderByKey', 'orderByValue',
         'limitToFirst', 'limitToLast', 'startAt', 'endAt', 'equalTo'
     ]);
+
+    function flushRegisteredPathSyncs() {
+        pathSyncFlushers.forEach(flush => {
+            try {
+                flush();
+            } catch (error) {
+                console.warn('Pending data sync flush skipped:', error);
+            }
+        });
+    }
+
+    function registerPathSyncFlusher(flush) {
+        if (typeof flush !== 'function') return;
+        pathSyncFlushers.add(flush);
+        if (pathSyncLifecycleBound) return;
+
+        pathSyncLifecycleBound = true;
+        const flushBeforeSuspend = () => flushRegisteredPathSyncs();
+        window.addEventListener('pagehide', flushBeforeSuspend);
+        window.addEventListener('freeze', flushBeforeSuspend);
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden') flushBeforeSuspend();
+        });
+        window.addEventListener('online', flushBeforeSuspend);
+        window.addEventListener('pageshow', flushBeforeSuspend);
+    }
 
     function cloneValue(value) {
         if (value === undefined) return undefined;
@@ -692,6 +720,8 @@
 
         if (pending) setLocal(pending.local, { source: 'pending' });
 
+        registerPathSyncFlusher(flush);
+
         if (database) {
             database.ref(path).on('value', snapshot => handleRemote(snapshot.val()));
         }
@@ -717,6 +747,7 @@
         guardDatabase,
         canWrite,
         startVersionGuard,
+        flushAll: flushRegisteredPathSyncs,
         createPathSync
     };
 })(window);

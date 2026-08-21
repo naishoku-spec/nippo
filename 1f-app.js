@@ -563,11 +563,13 @@ function renderRecords() {
             <td class="time-cell">
                 <input type="text" class="inline-input" value="${record.startTime}"
                        placeholder="HH:mm" inputmode="numeric" onfocus="this.select()"
+                       oninput="updateRecord(${record.id}, 'startTime', this.value)"
                        onblur="this.value = normalizeTime(this.value); updateRecord(${record.id}, 'startTime', this.value)" >
             </td>
             <td class="time-cell">
                 <input type="text" class="inline-input" value="${record.endTime}"
                        placeholder="HH:mm" inputmode="numeric" onfocus="this.select()"
+                       oninput="updateRecord(${record.id}, 'endTime', this.value)"
                        onblur="this.value = normalizeTime(this.value); updateRecord(${record.id}, 'endTime', this.value)" >
             </td>
 
@@ -777,11 +779,11 @@ window.instantUpdateCount = function(id, value, inputEl) {
     // Update all global display elements (Summary cards, stats)
     calculateAndDisplayStats();
 
-    // Debounce a full save to Firebase so it persists even if user doesn't blur soon
+    // Store every keystroke in SharedSync immediately. Safari can suspend the
+    // page before a delayed or blur-only save gets a chance to run.
     clearTimeout(window.instantSaveTimeout);
-    window.instantSaveTimeout = setTimeout(() => {
-        saveRecords();
-    }, 2000);
+    window.instantSaveTimeout = null;
+    saveRecords();
 };
 
 
@@ -791,6 +793,17 @@ function renderDailyNotes() {
     const textarea = document.getElementById('day-note-text-1f');
     if (textarea) {
         textarea.value = dailyNotes[currentDate] || "";
+    }
+}
+
+function syncDailyNotes1fNow() {
+    noteSaveTimeout = null;
+    if (notesSync) notesSync.save(dailyNotes);
+
+    const saveStatus = document.getElementById('saveStatusNotes1f');
+    if (saveStatus) {
+        saveStatus.textContent = "\u4fdd\u5b58\u3057\u307e\u3057\u305f";
+        setTimeout(() => saveStatus.textContent = "", 3000);
     }
 }
 
@@ -810,15 +823,7 @@ window.saveDailyNotes1f = function() {
     localStorage.setItem(NOTES_LS_KEY, JSON.stringify(dailyNotes));
 
     clearTimeout(noteSaveTimeout);
-    noteSaveTimeout = setTimeout(() => {
-        if (notesSync) notesSync.save(dailyNotes);
-
-        const saveStatus = document.getElementById('saveStatusNotes1f');
-        if (saveStatus) {
-            saveStatus.textContent = "\u4fdd\u5b58\u3057\u307e\u3057\u305f";
-            setTimeout(() => saveStatus.textContent = "", 3000);
-        }
-    }, 1000);
+    syncDailyNotes1fNow();
 };
 
 

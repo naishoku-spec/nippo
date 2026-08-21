@@ -117,10 +117,14 @@ function init() {
 
     const notesTextarea = document.getElementById('notes-textarea');
     if (notesTextarea) {
-        notesTextarea.addEventListener('change', function() {
+        notesTextarea.addEventListener('input', function(event) {
+            if (event.isComposing) return;
             if (activeRecordId) {
-                updateField(activeRecordId, 'notes', this.value);
+                updateFieldLive(activeRecordId, 'notes', this.value);
             }
+        });
+        notesTextarea.addEventListener('blur', function() {
+            if (activeRecordId) updateField(activeRecordId, 'notes', this.value);
         });
     }
 
@@ -249,21 +253,21 @@ function renderRecords() {
 
         tr.innerHTML = `
             <td class="cell-day">${idx === 0 ? dayLabel : '/'}</td>
-            <td><input type="text" class="cell-input" list="customersList" value="${r.customer || ''}" title="${r.customer || ''}" onblur="updateField(${r.id}, 'customer', this.value)"></td>
-            <td><input type="text" class="cell-input" list="typesList" value="${r.type || ''}" title="${r.type || ''}" onblur="updateField(${r.id}, 'type', this.value)"></td>
-            <td><input type="text" class="cell-input" value="${r.lot || ''}" title="${r.lot || ''}" onblur="updateField(${r.id}, 'lot', this.value)"></td>
-            <td><input type="time" class="cell-input" value="${r.startTime || ''}" onchange="updateField(${r.id}, 'startTime', this.value)"></td>
-            <td><input type="time" class="cell-input" value="${r.endTime || ''}" onchange="updateField(${r.id}, 'endTime', this.value)"></td>
+            <td><input type="text" class="cell-input" data-field="customer" list="customersList" value="${r.customer || ''}" title="${r.customer || ''}" oninput="if(!event.isComposing) updateFieldLive(${r.id}, 'customer', this.value)" onblur="updateField(${r.id}, 'customer', this.value)"></td>
+            <td><input type="text" class="cell-input" data-field="type" list="typesList" value="${r.type || ''}" title="${r.type || ''}" oninput="if(!event.isComposing) updateFieldLive(${r.id}, 'type', this.value)" onblur="updateField(${r.id}, 'type', this.value)"></td>
+            <td><input type="text" class="cell-input" data-field="lot" value="${r.lot || ''}" title="${r.lot || ''}" oninput="if(!event.isComposing) updateFieldLive(${r.id}, 'lot', this.value)" onblur="updateField(${r.id}, 'lot', this.value)"></td>
+            <td><input type="time" class="cell-input" data-field="startTime" value="${r.startTime || ''}" oninput="updateFieldLive(${r.id}, 'startTime', this.value)" onchange="updateField(${r.id}, 'startTime', this.value)"></td>
+            <td><input type="time" class="cell-input" data-field="endTime" value="${r.endTime || ''}" oninput="updateFieldLive(${r.id}, 'endTime', this.value)" onchange="updateField(${r.id}, 'endTime', this.value)"></td>
             <td class="cell-readonly">${duration}</td>
-            <td><input type="number" class="cell-input" value="${r.orderCount || ''}" onblur="updateField(${r.id}, 'orderCount', this.value)"></td>
-            <td><input type="number" class="cell-input" value="${r.productCount || ''}" onblur="updateField(${r.id}, 'productCount', this.value)"></td>
-            <td><input type="number" class="cell-input" value="${r.rejectUp || ''}" onblur="updateField(${r.id}, 'rejectUp', this.value)"></td>
-            <td><input type="number" class="cell-input" value="${r.rejectDown || ''}" onblur="updateField(${r.id}, 'rejectDown', this.value)"></td>
-            <td><input type="number" class="cell-input" value="${r.rejectA || ''}" onblur="updateField(${r.id}, 'rejectA', this.value)"></td>
-            <td><input type="number" class="cell-input" value="${r.rejectB || ''}" onblur="updateField(${r.id}, 'rejectB', this.value)"></td>
-            <td><input type="number" class="cell-input" value="${r.rejectSide || ''}" onblur="updateField(${r.id}, 'rejectSide', this.value)"></td>
+            <td><input type="number" class="cell-input" data-field="orderCount" value="${r.orderCount || ''}" oninput="updateFieldLive(${r.id}, 'orderCount', this.value)" onblur="updateField(${r.id}, 'orderCount', this.value)"></td>
+            <td><input type="number" class="cell-input" data-field="productCount" value="${r.productCount || ''}" oninput="updateFieldLive(${r.id}, 'productCount', this.value)" onblur="updateField(${r.id}, 'productCount', this.value)"></td>
+            <td><input type="number" class="cell-input" data-field="rejectUp" value="${r.rejectUp || ''}" oninput="updateFieldLive(${r.id}, 'rejectUp', this.value)" onblur="updateField(${r.id}, 'rejectUp', this.value)"></td>
+            <td><input type="number" class="cell-input" data-field="rejectDown" value="${r.rejectDown || ''}" oninput="updateFieldLive(${r.id}, 'rejectDown', this.value)" onblur="updateField(${r.id}, 'rejectDown', this.value)"></td>
+            <td><input type="number" class="cell-input" data-field="rejectA" value="${r.rejectA || ''}" oninput="updateFieldLive(${r.id}, 'rejectA', this.value)" onblur="updateField(${r.id}, 'rejectA', this.value)"></td>
+            <td><input type="number" class="cell-input" data-field="rejectB" value="${r.rejectB || ''}" oninput="updateFieldLive(${r.id}, 'rejectB', this.value)" onblur="updateField(${r.id}, 'rejectB', this.value)"></td>
+            <td><input type="number" class="cell-input" data-field="rejectSide" value="${r.rejectSide || ''}" oninput="updateFieldLive(${r.id}, 'rejectSide', this.value)" onblur="updateField(${r.id}, 'rejectSide', this.value)"></td>
             <td class="cell-rate">${rate ? rate + '%' : ''}</td>
-            <td><input type="text" class="cell-input" list="operatorsList" value="${r.operator || ''}" onblur="updateField(${r.id}, 'operator', this.value)"></td>
+            <td><input type="text" class="cell-input" data-field="operator" list="operatorsList" value="${r.operator || ''}" oninput="if(!event.isComposing) updateFieldLive(${r.id}, 'operator', this.value)" onblur="updateField(${r.id}, 'operator', this.value)"></td>
         `;
         list.appendChild(tr);
     });
@@ -290,13 +294,18 @@ function renderRecords() {
             <td class="cell-rate"></td>
             <td><input type="text" class="cell-input blank-input" data-field="operator" list="operatorsList"></td>
         `;
-        // Auto-create record on input in blank row
+        // Create the backing record on the first committed input, rather than
+        // waiting for blur. This is important when Safari suspends the page.
         const inputs = tr.querySelectorAll('.blank-input');
         inputs.forEach(input => {
-            input.addEventListener('blur', function() {
+            input.addEventListener('input', function(event) {
+                if (event.isComposing) return;
                 if (this.value.trim()) {
                     createRecordFromBlank(this);
                 }
+            });
+            input.addEventListener('blur', function() {
+                if (this.value.trim()) createRecordFromBlank(this);
             });
         });
         list.appendChild(tr);
@@ -304,6 +313,9 @@ function renderRecords() {
 }
 
 function createRecordFromBlank(inputEl) {
+    if (inputEl.dataset.recordCreated === 'true') return;
+    inputEl.dataset.recordCreated = 'true';
+
     const record = {
         id: Date.now() + Math.random(),
         date: currentDate,
@@ -323,28 +335,58 @@ function createRecordFromBlank(inputEl) {
         notes: ''
     };
     const field = inputEl.getAttribute('data-field');
-    record[field] = inputEl.value;
+    record[field] = normalizeFieldValue(field, inputEl.value);
     records.push(record);
     save();
     renderRecords();
+
+    requestAnimationFrame(() => {
+        const selector = `tr[data-id="${record.id}"] .cell-input[data-field="${field}"]`;
+        const replacementInput = document.querySelector(selector);
+        if (!replacementInput) return;
+        try {
+            replacementInput.focus({ preventScroll: true });
+        } catch (error) {
+            replacementInput.focus();
+        }
+        try {
+            const length = replacementInput.value.length;
+            replacementInput.setSelectionRange(length, length);
+        } catch (error) {
+            // Time and number inputs do not always support selection ranges.
+        }
+    });
 }
 
-function updateField(id, field, val) {
+function normalizeFieldValue(field, val) {
+    if (['productCount', 'rejectUp', 'rejectDown', 'rejectA', 'rejectB', 'rejectSide', 'orderCount'].includes(field)) {
+        return parseInt(val, 10) || 0;
+    }
+    return val;
+}
+
+function updateField(id, field, val, options = {}) {
     const r = records.find(x => x.id == id);
     if (!r) return;
+    const parsedVal = normalizeFieldValue(field, val);
     
-    let parsedVal = val;
-    if (['productCount', 'rejectUp', 'rejectDown', 'rejectA', 'rejectB', 'rejectSide', 'orderCount'].includes(field)) {
-        parsedVal = parseInt(val) || 0;
+    // Live input has already persisted the value. Keep the blur render so
+    // calculated cells refresh without writing the same value twice.
+    if (String(r[field]) === String(parsedVal)) {
+        if (options.render !== false) renderRecords();
+        return;
     }
-    
-    // Prevent redundant saves/renders if nothing actually changed
-    if (String(r[field]) === String(parsedVal)) return;
 
     r[field] = parsedVal;
     save();
-    renderRecords();
+    if (options.render !== false) renderRecords();
 }
+
+function updateFieldLive(id, field, val) {
+    updateField(id, field, val, { render: false });
+}
+
+window.updateFieldLive = updateFieldLive;
 
 function deleteRec(id) {
     if (!confirm('削除しますか？')) return;

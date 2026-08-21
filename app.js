@@ -1611,8 +1611,8 @@ const firebaseConfig = {
     measurementId: "G-SR8Y5NKQTZ"
 };
 
-const APP_BUILD_ID = '20260817-sync-v35';
-const APP_BUILD_NUMBER = 2026081735;
+const APP_BUILD_ID = '20260821-date-persist-v39';
+const APP_BUILD_NUMBER = 2026082139;
 const APP_VERSION_METADATA_PATH = 'app-version.json';
 const APP_VERSION_CHECK_INTERVAL_MS = 30000;
 const APP_LATEST_BUILD_LS_KEY = 'nippo_latest_app_build_number';
@@ -2361,6 +2361,7 @@ let hanaponDataSync = null;
 let hanaponBoxDataSync = null;
 let snowsprintDataSync = null;
 const CURRENT_DATE_LS_KEY = 'nippo_current_date';
+const CURRENT_DATE_SESSION_KEY = CURRENT_DATE_LS_KEY + '_session';
 const CURRENT_VIEW_LS_KEY = 'nippo_current_view';
 const CURRENT_VIEW_SESSION_KEY = CURRENT_VIEW_LS_KEY + '_session';
 
@@ -2393,11 +2394,50 @@ function saveCurrentView(view) {
         console.warn('Local view state could not be saved:', error);
     }
 }
+function isValidCurrentDateValue(value) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value || '')) return false;
+    const [year, month, day] = value.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+    return date.getFullYear() === year
+        && date.getMonth() === month - 1
+        && date.getDate() === day;
+}
+
 function getInitialCurrentDate() {
-    const storedDate = localStorage.getItem(CURRENT_DATE_LS_KEY);
-    return /^\d{4}-\d{2}-\d{2}$/.test(storedDate || '')
-        ? storedDate
-        : new Date().toLocaleDateString('sv-SE');
+    const storedDates = [];
+    try {
+        storedDates.push(sessionStorage.getItem(CURRENT_DATE_SESSION_KEY));
+    } catch (error) {
+        console.warn('Session date state unavailable:', error);
+    }
+    try {
+        storedDates.push(localStorage.getItem(CURRENT_DATE_LS_KEY));
+    } catch (error) {
+        console.warn('Local date state unavailable:', error);
+    }
+    return storedDates.find(isValidCurrentDateValue)
+        || getTodayDateValue();
+}
+
+function getTodayDateValue() {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+}
+
+function persistCurrentDate(value) {
+    if (!isValidCurrentDateValue(value)) return false;
+    currentDate = value;
+    try {
+        sessionStorage.setItem(CURRENT_DATE_SESSION_KEY, value);
+    } catch (error) {
+        console.warn('Session date state could not be saved:', error);
+    }
+    try {
+        localStorage.setItem(CURRENT_DATE_LS_KEY, value);
+    } catch (error) {
+        console.warn('Local date state could not be saved:', error);
+    }
+    return true;
 }
 let currentDate = getInitialCurrentDate(); // YYYY-MM-DD format
 let isFirstLoad = true;
@@ -2415,6 +2455,9 @@ let rollLastEditTime = 0;
 let rollCurrentYear = new Date().getFullYear();
 let rollCurrentMonth = new Date().getMonth() + 1;
 let isFirstRollLoad = true;
+let rollAutoSaveTimer = null;
+let rollHasUnsyncedChanges = false;
+let rollLifecycleSyncBound = false;
 
 function renderDailySyncLoadingState() {
     // Keep the cached records visible while the background sync is running.
@@ -2730,13 +2773,12 @@ function init() {
 
     // Initialize Flatpickr for better styling control (like weekend colors)
     if (typeof flatpickr === "function" && datePicker) {
-        flatpickr(datePicker, {
+        const datePickerInstance = flatpickr(datePicker, {
         locale: "ja",
-        defaultValue: currentDate,
+        defaultDate: currentDate,
         disableMobile: true, // Force consistent UI on mobile
         onChange: function (selectedDates, dateStr) {
-            currentDate = dateStr;
-            localStorage.setItem(CURRENT_DATE_LS_KEY, currentDate);
+            if (!persistCurrentDate(dateStr)) return;
             ensureDayRecords(currentDate);
             renderActiveDailyView();
             renderDailyNotes();
@@ -2751,17 +2793,18 @@ function init() {
             }
         }
         });
+        // Keep Flatpickr's internal selected date and the saved date in sync
+        // after initialization, including Safari/iPhone reloads.
+        datePickerInstance.setDate(currentDate, false);
     } else if (datePicker) {
         datePicker.addEventListener("change", function () {
-            currentDate = datePicker.value;
-            localStorage.setItem(CURRENT_DATE_LS_KEY, currentDate);
+            if (!persistCurrentDate(datePicker.value)) return;
             ensureDayRecords(currentDate);
             renderActiveDailyView();
             renderDailyNotes();
         });
+        datePicker.value = currentDate;
     }
-
-    datePicker.value = currentDate;
     // ensureDayRecords is now called inside Firebase listener after sync
 
 
@@ -2782,6 +2825,10 @@ function init() {
 
     // Initialize Project Management
     initProjectManagement();
+
+    // iPhone/Safari can suspend a page before a short inventory debounce finishes.
+    // Flush only the pending calculation work whenever the page is about to pause.
+    setupDeferredDataSyncLifecycle();
 
     // Check URL parameters or localStorage for view
     const urlParams = new URLSearchParams(window.location.search);
@@ -2812,6 +2859,29 @@ function init() {
     // Mobile Menu Setup
     setupMobileMenu();
 
+}
+
+let deferredDataSyncLifecycleBound = false;
+
+function flushDeferredInventorySaves() {
+    flushSliverPendingSave();
+    flushHanaponPendingSave();
+    flushSnowsprintPendingSave();
+    flushHanaponBoxPendingSave();
+}
+
+function setupDeferredDataSyncLifecycle() {
+    if (deferredDataSyncLifecycleBound) return;
+    deferredDataSyncLifecycleBound = true;
+
+    const flushBeforeSuspend = () => flushDeferredInventorySaves();
+    window.addEventListener('pagehide', flushBeforeSuspend);
+    window.addEventListener('freeze', flushBeforeSuspend);
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') flushBeforeSuspend();
+    });
+    window.addEventListener('online', flushBeforeSuspend);
+    window.addEventListener('pageshow', flushBeforeSuspend);
 }
 
 function setupMobileMenu() {
@@ -3148,6 +3218,16 @@ function renderDailyNotes() {
     }
 }
 
+function syncDailyNotesNow() {
+    noteSaveTimeout = null;
+    if (dailyNotesSync) dailyNotesSync.save(dailyNotes);
+    const saveStatus = document.getElementById('saveStatusNotes');
+    if (saveStatus) {
+        saveStatus.textContent = "\u4fdd\u5b58\u3057\u307e\u3057\u305f";
+        setTimeout(() => saveStatus.textContent = "", 3000);
+    }
+}
+
 // Global function to be called on textarea input
 window.saveDailyNotes = function() {
     if (!canWriteAppData()) return;
@@ -3166,16 +3246,10 @@ window.saveDailyNotes = function() {
                 scheduleDailyBackupRefresh();
     triggerHistorySave();
     
-    // Debounce the Firebase save to avoid excessive writes
+    // SharedSync stores the pending change first, so an immediate save also
+    // survives Safari suspending the page before the user leaves the field.
     clearTimeout(noteSaveTimeout);
-    noteSaveTimeout = setTimeout(() => {
-        if (dailyNotesSync) dailyNotesSync.save(dailyNotes);
-        const saveStatus = document.getElementById('saveStatusNotes');
-        if (saveStatus) {
-            saveStatus.textContent = "\u4fdd\u5b58\u3057\u307e\u3057\u305f";
-            setTimeout(() => saveStatus.textContent = "", 3000);
-        }
-    }, 1000);
+    syncDailyNotesNow();
 }
 
 // Japanese Holiday Calculation
@@ -3288,7 +3362,7 @@ function ensureDayRecords(date) {
 }
 
 // Update a specific field in a record
-function updateRecord(id, field, value) {
+function updateRecord(id, field, value, options = {}) {
     if (!canWriteAppData()) return;
 
     const record = records.find(r => r.id == id);
@@ -3304,7 +3378,7 @@ function updateRecord(id, field, value) {
     const updatedAt = Date.now();
     record[DAILY_RECORD_UPDATED_AT_FIELD] = updatedAt;
 
-    if (field === 'product') {
+    if (field === 'product' && options.propagateProduct !== false) {
         const realToday = new Date().toLocaleDateString('sv-SE');
         // Propagation only happens if we are editing today's or a future record
         if (record.date >= realToday) {
@@ -3321,6 +3395,10 @@ function updateRecord(id, field, value) {
 
     saveRecords();
     calculateAndDisplayStats();
+}
+
+function updateRecordLive(id, field, value) {
+    updateRecord(id, field, value, { propagateProduct: false });
 }
 
 // Calculate Duration
@@ -3471,7 +3549,7 @@ function renderRecords() {
                     <input type="text" class="inline-input product-combobox-input" value="${record.product || ''}"
                            placeholder="選択または入力..."
                            onfocus="openComboboxMenu(this, ${record.id})"
-                           oninput="filterComboboxMenu(this)"
+                           oninput="filterComboboxMenu(this); updateRecordLive(${record.id}, 'product', this.value)"
                            onblur="handleComboboxBlur(this, ${record.id})">
                     <span class="combobox-arrow" onclick="toggleComboboxMenu(this.previousElementSibling, ${record.id})">▼</span>
                     <div class="combobox-dropdown" style="display: none;"></div>
@@ -3480,17 +3558,20 @@ function renderRecords() {
             <td class="time-cell">
                 <input type="text" class="inline-input" value="${record.startTime}" 
                        placeholder="HH:mm" inputmode="numeric" onfocus="this.select()"
+                       oninput="updateRecordLive(${record.id}, 'startTime', this.value)"
                        onblur="this.value = normalizeTime(this.value); updateRecord(${record.id}, 'startTime', this.value)" >
             </td>
             <td class="time-cell">
                 <input type="text" class="inline-input" value="${record.endTime}" 
                        placeholder="HH:mm" inputmode="numeric" onfocus="this.select()"
+                       oninput="updateRecordLive(${record.id}, 'endTime', this.value)"
                        onblur="this.value = normalizeTime(this.value); updateRecord(${record.id}, 'endTime', this.value)" >
             </td>
 
 
             <td class="count-cell">
                 <input type="number" class="inline-input" value="${record.count == 0 ? '' : record.count}" 
+                       oninput="updateRecordLive(${record.id}, 'count', this.value)"
                        onblur="updateRecord(${record.id}, 'count', this.value)">
             </td>
         `;
@@ -3712,6 +3793,7 @@ function initRollStock() {
     }
     setupRollSelectors();
     setupRollEventListeners();
+    setupRollLifecycleSync();
 }
 
 function loadRollData() {
@@ -3807,9 +3889,9 @@ function saveRollData() {
         // 空データ保護: データが空の場合はFirebaseへの書き込みをブロック
         if (Object.keys(rollAllData).length === 0) {
             console.warn('BLOCKED: Attempted to save empty rollAllData to Firebase');
-            return;
+            return false;
         }
-        if (rollDataSync) rollDataSync.save(rollAllData);
+        if (rollDataSync && rollDataSync.save(rollAllData) === false) return false;
     }
 
     // Sync to Google Sheets (Temporarily disabled)
@@ -3820,6 +3902,7 @@ function saveRollData() {
         const now = new Date();
         status.textContent = `最終保存: ${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}`;
     }
+    return true;
 }
 
 function getRollMonthData(year, month) {
@@ -3879,15 +3962,20 @@ function renderRollStock() {
     body.appendChild(carryRow);
 
     carryRow.querySelectorAll('.carry-input').forEach(input => {
-        input.addEventListener('input', () => { rollLastEditTime = Date.now(); });
-        input.addEventListener('change', (e) => {
-            const type = e.target.dataset.type;
+        const saveCarryover = (value, flushNow = false) => {
+            const type = input.dataset.type;
             const currentData = getRollMonthData(rollCurrentYear, rollCurrentMonth);
-            currentData[type].carryover = parseInt(e.target.value) || 0;
-            propagateCarryover(rollCurrentYear, rollCurrentMonth); // Added
+            currentData[type].carryover = parseRollInputValue(value);
+            propagateCarryover(rollCurrentYear, rollCurrentMonth, false);
             recalculateRollStock();
-            autoSaveRoll();
+            autoSaveRoll({ flushNow });
+        };
+        input.addEventListener('input', (e) => {
+            rollLastEditTime = Date.now();
+            saveCarryover(e.target.value);
         });
+        input.addEventListener('change', (e) => saveCarryover(e.target.value, true));
+        input.addEventListener('blur', flushRollPendingSave);
         input.addEventListener('focus', (e) => e.target.select());
     });
 
@@ -3925,12 +4013,11 @@ function renderRollStock() {
         body.appendChild(tr);
 
         tr.querySelectorAll('input').forEach(input => {
-            input.addEventListener('input', () => { rollLastEditTime = Date.now(); });
-            input.addEventListener('change', (e) => {
-                const type = e.target.dataset.type;
-                const d = e.target.dataset.day;
-                const field = e.target.dataset.field;
-                const val = parseInt(e.target.value) || 0;
+            const saveDailyValue = (target, flushNow = false) => {
+                const type = target.dataset.type;
+                const d = target.dataset.day;
+                const field = target.dataset.field;
+                const val = parseRollInputValue(target.value);
 
                 const currentData = getRollMonthData(rollCurrentYear, rollCurrentMonth);
 
@@ -3947,10 +4034,16 @@ function renderRollStock() {
                     }
                 }
 
-                propagateCarryover(rollCurrentYear, rollCurrentMonth); // Added
+                propagateCarryover(rollCurrentYear, rollCurrentMonth, false);
                 recalculateRollStock();
-                autoSaveRoll();
+                autoSaveRoll({ flushNow });
+            };
+            input.addEventListener('input', (e) => {
+                rollLastEditTime = Date.now();
+                saveDailyValue(e.target);
             });
+            input.addEventListener('change', (e) => saveDailyValue(e.target, true));
+            input.addEventListener('blur', flushRollPendingSave);
             input.addEventListener('focus', (e) => e.target.select());
         });
     }
@@ -3958,18 +4051,57 @@ function renderRollStock() {
     recalculateRollStock();
 }
 
-let rollAutoSaveTimer = null;
-function autoSaveRoll() {
-    // Save to local storage immediately
+function parseRollInputValue(value) {
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function setupRollLifecycleSync() {
+    if (rollLifecycleSyncBound) return;
+    rollLifecycleSyncBound = true;
+
+    const flushBeforeSuspend = () => flushRollPendingSave();
+    window.addEventListener('pagehide', flushBeforeSuspend);
+    window.addEventListener('freeze', flushBeforeSuspend);
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') flushBeforeSuspend();
+    });
+    window.addEventListener('online', () => {
+        if (rollDataSync) rollDataSync.flush();
+    });
+    window.addEventListener('pageshow', () => {
+        if (rollDataSync) rollDataSync.flush();
+    });
+}
+
+function flushRollPendingSave() {
+    if (rollAutoSaveTimer) {
+        clearTimeout(rollAutoSaveTimer);
+        rollAutoSaveTimer = null;
+    }
+    if (rollHasUnsyncedChanges && saveRollData()) {
+        rollHasUnsyncedChanges = false;
+    }
+    if (rollDataSync) rollDataSync.flush();
+}
+
+function autoSaveRoll(options = {}) {
+    const flushNow = options.flushNow === true;
+    // Save to local storage immediately so iOS can safely suspend the page.
     localStorage.setItem(ROLL_STORAGE_KEY, JSON.stringify(rollAllData));
                 scheduleDailyBackupRefresh();
     triggerHistorySave();
+    rollHasUnsyncedChanges = true;
 
-    // Throttle Firebase sync
-    clearTimeout(rollAutoSaveTimer);
+    if (rollAutoSaveTimer) clearTimeout(rollAutoSaveTimer);
+    if (flushNow) {
+        flushRollPendingSave();
+        return;
+    }
     rollAutoSaveTimer = setTimeout(() => {
-        saveRollData();
-    }, 500); // Shorter throttle for better responsiveness
+        rollAutoSaveTimer = null;
+        flushRollPendingSave();
+    }, 200);
 }
 
 function recalculateRollStock() {
@@ -4024,7 +4156,7 @@ function recalculateRollStock() {
     renderRollFooter(data, daysInMonth);
 }
 
-function propagateCarryover(year, month) {
+function propagateCarryover(year, month, persist = true) {
     let currentYear = year;
     let currentMonth = month;
 
@@ -4065,9 +4197,11 @@ function propagateCarryover(year, month) {
             break;
         }
     }
-    localStorage.setItem(ROLL_STORAGE_KEY, JSON.stringify(rollAllData));
-                scheduleDailyBackupRefresh();
-    triggerHistorySave();
+    if (persist) {
+        localStorage.setItem(ROLL_STORAGE_KEY, JSON.stringify(rollAllData));
+        scheduleDailyBackupRefresh();
+        triggerHistorySave();
+    }
 }
 
 function renderRollFooter(data, daysInMonth) {
@@ -4122,6 +4256,7 @@ const SLIVER_DAY_NAMES = ['日', '月', '火', '水', '木', '金', '土'];
 
 let sliverAllData = {};
 let sliverLastEditTime = 0;
+let sliverPendingSaveContext = null;
 let sliverCurrentYear = new Date().getFullYear();
 let sliverCurrentMonth = new Date().getMonth() + 1;
 let isFirstSliverLoad = true;
@@ -4425,15 +4560,15 @@ function renderSliverSection(section, sectionData, typesDef) {
             // 入庫
             rowsHtml += `<td><input type="number" class="sliver-input" value="${incoming || ''}" 
                 data-section="${sectionKey}" data-type="${t.key}" data-day="${d}" data-field="incoming"
-                oninput="updateSliverCell(this)" onfocus="this.select()"></td>`;
+                oninput="updateSliverCell(this)" onblur="flushSliverPendingSave()" onfocus="this.select()"></td>`;
             // 朝出庫
             rowsHtml += `<td><input type="number" class="sliver-input" value="${morning || ''}" 
                 data-section="${sectionKey}" data-type="${t.key}" data-day="${d}" data-field="morning"
-                oninput="updateSliverCell(this)" onfocus="this.select()"></td>`;
+                oninput="updateSliverCell(this)" onblur="flushSliverPendingSave()" onfocus="this.select()"></td>`;
             // 夕出庫
             rowsHtml += `<td><input type="number" class="sliver-input" value="${evening || ''}" 
                 data-section="${sectionKey}" data-type="${t.key}" data-day="${d}" data-field="evening"
-                oninput="updateSliverCell(this)" onfocus="this.select()"></td>`;
+                oninput="updateSliverCell(this)" onblur="flushSliverPendingSave()" onfocus="this.select()"></td>`;
             // 出庫後 (calculated)
             const lowClass = rem <= 5 ? ' low-stock' : '';
             rowsHtml += `<td class="sliver-remaining${lowClass}" id="sliver-rem-${sectionKey}-${t.key}-${d}">${rem}</td>`;
@@ -4509,6 +4644,7 @@ function updateSliverCell(input) {
     localStorage.setItem(SLIVER_STORAGE_KEY, JSON.stringify(sliverAllData));
                 scheduleDailyBackupRefresh();
     triggerHistorySave();
+    if (sliverDataSync) sliverDataSync.save(sliverAllData);
 
     // Show save status immediately
     const statusEl = document.getElementById('saveStatusSliver');
@@ -4519,11 +4655,21 @@ function updateSliverCell(input) {
     }
 
     // Debounce propagation and Firebase save to prevent UI freeze
+    sliverPendingSaveContext = { year: sliverCurrentYear, month: sliverCurrentMonth };
     clearTimeout(window.sliverSaveTimer);
-    window.sliverSaveTimer = setTimeout(() => {
-        propagateSliverCarryover(sliverCurrentYear, sliverCurrentMonth);
-        saveSliverData();
-    }, 500);
+    window.sliverSaveTimer = setTimeout(flushSliverPendingSave, 500);
+}
+
+function flushSliverPendingSave() {
+    const context = sliverPendingSaveContext;
+    if (!context) return;
+
+    clearTimeout(window.sliverSaveTimer);
+    window.sliverSaveTimer = null;
+    sliverPendingSaveContext = null;
+    propagateSliverCarryover(context.year, context.month);
+    saveSliverData();
+    if (sliverDataSync) sliverDataSync.flush();
 }
 
 function recalculateSliver() {
@@ -4653,6 +4799,7 @@ const HANAPON_ANAAKI_TYPES = [
 
 let hanaponAllData = {};
 let hanaponLastEditTime = 0;
+let hanaponPendingSaveContext = null;
 let hanaponCurrentYear = new Date().getFullYear();
 let hanaponCurrentMonth = new Date().getMonth() + 1;
 let isFirstHanaponLoad = true;
@@ -5094,19 +5241,19 @@ function renderHanaponSection(sectionId, monthData, typesDef) {
             // 製造
             rowsHtml += `<td><input type="number" class="sliver-input hanapon-input" value="${production}" 
                 data-type="${t.key}" data-day="${d}" data-field="production"
-                oninput="updateHanaponCell(this)" onfocus="this.select()"></td>`;
+                oninput="updateHanaponCell(this)" onblur="flushHanaponPendingSave()" onfocus="this.select()"></td>`;
             
             // キューライズ (optional)
             if (t.hasCurerise) {
                 rowsHtml += `<td><input type="number" class="sliver-input hanapon-input" value="${curerise}" 
                     data-type="${t.key}" data-day="${d}" data-field="curerise"
-                    oninput="updateHanaponCell(this)" onfocus="this.select()"></td>`;
+                    oninput="updateHanaponCell(this)" onblur="flushHanaponPendingSave()" onfocus="this.select()"></td>`;
             }
             
             // 内職
             rowsHtml += `<td><input type="number" class="sliver-input hanapon-input" value="${naishoku}" 
                 data-type="${t.key}" data-day="${d}" data-field="naishoku"
-                oninput="updateHanaponCell(this)" onfocus="this.select()"></td>`;
+                oninput="updateHanaponCell(this)" onblur="flushHanaponPendingSave()" onfocus="this.select()"></td>`;
             
             // 残数(ケース)
             const lowClass = rem <= 5 ? ' low-stock' : '';
@@ -5203,6 +5350,7 @@ function updateHanaponCell(input) {
     localStorage.setItem(HANAPON_STORAGE_KEY, JSON.stringify(hanaponAllData));
                 scheduleDailyBackupRefresh();
     triggerHistorySave();
+    if (hanaponDataSync) hanaponDataSync.save(hanaponAllData);
 
     // Show save status
     const statusEl = document.getElementById('saveStatusHanapon');
@@ -5213,11 +5361,21 @@ function updateHanaponCell(input) {
     }
 
     // Debounce propagation and Firebase save to prevent UI freeze
+    hanaponPendingSaveContext = { year: hanaponCurrentYear, month: hanaponCurrentMonth };
     clearTimeout(window.hanaponSaveTimer);
-    window.hanaponSaveTimer = setTimeout(() => {
-        propagateHanaponCarryover(hanaponCurrentYear, hanaponCurrentMonth);
-        saveHanaponData();
-    }, 500);
+    window.hanaponSaveTimer = setTimeout(flushHanaponPendingSave, 500);
+}
+
+function flushHanaponPendingSave() {
+    const context = hanaponPendingSaveContext;
+    if (!context) return;
+
+    clearTimeout(window.hanaponSaveTimer);
+    window.hanaponSaveTimer = null;
+    hanaponPendingSaveContext = null;
+    propagateHanaponCarryover(context.year, context.month);
+    saveHanaponData();
+    if (hanaponDataSync) hanaponDataSync.flush();
 }
 
 function recalculateHanapon() {
@@ -5353,12 +5511,20 @@ const SNOWSPRINT_DB_PATH = `${SECRET_KEY}/${isProduction ? 'snowsprint_inventory
 let snowsprintAllData = {};
 let snowsprintLastEditTime = 0;
 let snowsprintSaveTimer = null;
+let snowsprintPendingSaveContext = null;
 let snowsprintCurrentYear = new Date().getFullYear();
 let snowsprintCurrentMonth = new Date().getMonth() + 1;
 let isFirstSnowsprintLoad = true;
 let snowsprintActiveProduct = 0;
 let snowsprintActiveSize = 0;
+let snowsprintConfigNeedsSync = false;
 let snCommentCurrentCell = null;
+
+const SNOWSPRINT_IWATSUKI_BAG_CONFIG = [{
+    id: 'bag', title: '袋', bg: '#c084fc', color: '#4c1d95', items: [
+        { id: 'bag', title: '袋', bg: '#f3e8ff' }
+    ]
+}];
 
 const SNOWSPRINT_TAB_CONFIG = [
     {
@@ -5405,7 +5571,8 @@ const SNOWSPRINT_TAB_CONFIG = [
                 { id: 'metal', title: '金具', bg: '#f3e8ff' },
                 { id: 'inner_box', title: '中箱', bg: '#f3e8ff' },
                 { id: 'outer_box', title: '外箱', bg: '#f3e8ff' }
-            ]}], category: 'iwatsuki' }
+            ]}], category: 'iwatsuki' },
+            { id: 'bag', label: '袋', config: SNOWSPRINT_IWATSUKI_BAG_CONFIG, category: 'iwatsuki' }
         ]
     },
     {
@@ -7838,6 +8005,47 @@ const SNOWSPRINT_INITIAL_DATA = {
   }
 };;
 
+function ensureSnowsprintBagData(monthData) {
+    if (!monthData || typeof monthData !== 'object' || Array.isArray(monthData)) return false;
+
+    let changed = false;
+    if (!monthData.iwatsuki || typeof monthData.iwatsuki !== 'object' || Array.isArray(monthData.iwatsuki)) {
+        monthData.iwatsuki = {};
+        changed = true;
+    }
+
+    const iwatsukiData = monthData.iwatsuki;
+    if (!iwatsukiData.bag || typeof iwatsukiData.bag !== 'object' || Array.isArray(iwatsukiData.bag)) {
+        iwatsukiData.bag = {};
+        changed = true;
+    }
+
+    const bagData = iwatsukiData.bag;
+    if (!bagData.bag || typeof bagData.bag !== 'object' || Array.isArray(bagData.bag)) {
+        bagData.bag = { carryover: 0, days: {} };
+        changed = true;
+    } else {
+        if (!Object.prototype.hasOwnProperty.call(bagData.bag, 'carryover')) {
+            bagData.bag.carryover = 0;
+            changed = true;
+        }
+        if (!bagData.bag.days || typeof bagData.bag.days !== 'object' || Array.isArray(bagData.bag.days)) {
+            bagData.bag.days = {};
+            changed = true;
+        }
+    }
+
+    return changed;
+}
+
+function ensureSnowsprintConfiguredItems() {
+    let changed = false;
+    Object.keys(snowsprintAllData || {}).forEach(key => {
+        if (ensureSnowsprintBagData(snowsprintAllData[key])) changed = true;
+    });
+    return changed;
+}
+
 function initSnowsprint() {
     const stored = localStorage.getItem(SNOWSPRINT_STORAGE_KEY);
     if (stored) {
@@ -7853,6 +8061,7 @@ function initSnowsprint() {
     }
 
     ensureSnowsprintMonth(snowsprintCurrentYear, snowsprintCurrentMonth, false);
+    const snowsprintConfigChanged = ensureSnowsprintConfiguredItems();
     // Initial catch-up propagation
     propagateSnowSprintCarryover(snowsprintCurrentYear, snowsprintCurrentMonth);
     setupSnowsprintMonthSelector();
@@ -7867,16 +8076,31 @@ function initSnowsprint() {
             getLocal: () => snowsprintAllData,
             setLocal: value => {
                 snowsprintAllData = value;
+                if (ensureSnowsprintConfiguredItems()) snowsprintConfigNeedsSync = true;
                 localStorage.setItem(SNOWSPRINT_STORAGE_KEY, JSON.stringify(snowsprintAllData));
                 scheduleDailyBackupRefresh();
             },
             onRemote: () => {
+                const configChanged = ensureSnowsprintConfiguredItems() || snowsprintConfigNeedsSync;
+                if (configChanged && snowsprintDataSync) {
+                    snowsprintConfigNeedsSync = false;
+                    snowsprintDataSync.save(snowsprintAllData);
+                }
                 const activeEl = document.activeElement;
                 ensureSnowsprintMonth(snowsprintCurrentYear, snowsprintCurrentMonth, true);
                 if (!activeEl?.closest('#snowsprint-view-container')
                     && snowsprintViewContainer.style.display === 'block') renderSnowsprint();
             }
         });
+    }
+
+    if (snowsprintConfigChanged) {
+        localStorage.setItem(SNOWSPRINT_STORAGE_KEY, JSON.stringify(snowsprintAllData));
+        scheduleDailyBackupRefresh();
+        if (snowsprintDataSync) {
+            snowsprintConfigNeedsSync = false;
+            snowsprintDataSync.save(snowsprintAllData);
+        }
     }
 }
 
@@ -8022,12 +8246,32 @@ function handleSnowsprintInput(e) {
             dataObj.days[day][field] = val;
         }
     }
-    
+
+    // Persist the edited value before the delayed carryover calculation.
+    // This creates a SharedSync pending record immediately on iPhone too.
+    localStorage.setItem(SNOWSPRINT_STORAGE_KEY, JSON.stringify(snowsprintAllData));
+    scheduleDailyBackupRefresh();
+    triggerHistorySave();
+    if (snowsprintDataSync) snowsprintDataSync.save(snowsprintAllData);
+
+    snowsprintPendingSaveContext = {
+        year: snowsprintCurrentYear,
+        month: snowsprintCurrentMonth
+    };
     clearTimeout(snowsprintSaveTimer);
-    snowsprintSaveTimer = setTimeout(() => {
-        saveSnowsprintData();
-        propagateSnowSprintCarryover(snowsprintCurrentYear, snowsprintCurrentMonth);
-    }, 500);
+    snowsprintSaveTimer = setTimeout(flushSnowsprintPendingSave, 500);
+}
+
+function flushSnowsprintPendingSave() {
+    const context = snowsprintPendingSaveContext;
+    if (!context) return;
+
+    clearTimeout(snowsprintSaveTimer);
+    snowsprintSaveTimer = null;
+    snowsprintPendingSaveContext = null;
+    propagateSnowSprintCarryover(context.year, context.month);
+    saveSnowsprintData();
+    if (snowsprintDataSync) snowsprintDataSync.flush();
 }
 
 function handleSnowsprintChange(e) {
@@ -8187,6 +8431,7 @@ function renderSnowsprintGeneric(headId, bodyId, footId, configGroups, category)
             handleSnowsprintInput(e);
         });
         el.addEventListener('change', handleSnowsprintChange);
+        el.addEventListener('blur', flushSnowsprintPendingSave);
     });
 
     // Attach right-click (PC) and gestures (Mobile) for comment popup on input cells
@@ -8618,6 +8863,7 @@ const HANAPON_BOX_LEGACY_COMPANY_KEY = 'limited';
 
 let hanaponBoxAllData = {};
 let hanaponBoxSaveTimer = null;
+let hanaponBoxPendingSaveContext = null;
 let hanaponBoxCurrentYear = new Date().getFullYear();
 let hanaponBoxCurrentMonth = new Date().getMonth() + 1;
 let hanaponBoxActiveCompany = HANAPON_BOX_LEGACY_COMPANY_KEY;
@@ -9017,11 +9263,32 @@ function handleHanaponBoxInput(event) {
         syncHanaponBoxLegacyMonth(monthData);
     }
 
+    // Preserve the edit locally and in SharedSync before waiting to calculate
+    // future-month carryover values.
+    localStorage.setItem(HANAPON_BOX_STORAGE_KEY, JSON.stringify(hanaponBoxAllData));
+    scheduleDailyBackupRefresh();
+    triggerHistorySave();
+    if (hanaponBoxDataSync) hanaponBoxDataSync.save(hanaponBoxAllData);
+
+    hanaponBoxPendingSaveContext = {
+        year: inputYear,
+        month: inputMonth,
+        company: inputCompany
+    };
     clearTimeout(hanaponBoxSaveTimer);
-    hanaponBoxSaveTimer = setTimeout(() => {
-        saveHanaponBoxData();
-        propagateHanaponBoxCarryover(inputYear, inputMonth, inputCompany);
-    }, 500);
+    hanaponBoxSaveTimer = setTimeout(flushHanaponBoxPendingSave, 500);
+}
+
+function flushHanaponBoxPendingSave() {
+    const context = hanaponBoxPendingSaveContext;
+    if (!context) return;
+
+    clearTimeout(hanaponBoxSaveTimer);
+    hanaponBoxSaveTimer = null;
+    hanaponBoxPendingSaveContext = null;
+    propagateHanaponBoxCarryover(context.year, context.month, context.company);
+    saveHanaponBoxData();
+    if (hanaponBoxDataSync) hanaponBoxDataSync.flush();
 }
 
 function renderHanaponBox() {
@@ -9101,6 +9368,7 @@ function renderHanaponBox() {
     body.querySelectorAll('.hanapon-box-input').forEach(input => {
         input.addEventListener('input', handleHanaponBoxInput);
         input.addEventListener('change', renderHanaponBox);
+        input.addEventListener('blur', flushHanaponBoxPendingSave);
     });
 }
 
@@ -10149,7 +10417,7 @@ function renderBoard() {
         colEl.innerHTML = `
             <div class="kanban-column-header">
                 <div style="display: flex; align-items: center; gap: 0.25rem; flex: 1;">
-                    <input type="text" class="kanban-column-title-input" value="${col.title}" placeholder="カラム名を入力" onblur="onColumnTitleChange('${col.id}', this.value)" onkeydown="if(event.key==='Enter'){this.blur();}">
+                    <input type="text" class="kanban-column-title-input" value="${col.title}" placeholder="カラム名を入力" oninput="onColumnTitleChange('${col.id}', this.value)" onblur="onColumnTitleChange('${col.id}', this.value)" onkeydown="if(event.key==='Enter'){this.blur();}">
                     <span class="kanban-count">${taskCount}</span>
                 </div>
                 <button class="kanban-column-delete" onclick="deleteColumn('${col.id}')" title="カラムを削除">✕</button>
