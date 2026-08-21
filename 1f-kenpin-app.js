@@ -1,3 +1,17 @@
+const warnedStorageKeys = new Set();
+function safeLocalStorageSetItem(key, value) {
+    try {
+        window.localStorage.setItem(key, value);
+        return true;
+    } catch (error) {
+        if (!warnedStorageKeys.has(key)) {
+            warnedStorageKeys.add(key);
+            console.warn(`Local storage write skipped for ${key}:`, error);
+        }
+        return false;
+    }
+}
+
 // Firebase Configuration (shared)
 const firebaseConfig = {
     apiKey: "AIzaSyAz4YDGJDcJ6-e6l5N9-LKin7TbWMb68As",
@@ -64,7 +78,7 @@ if (database && window.SharedSync) {
         getLocal: () => records,
         setLocal: value => {
             records = normalizeKenpinRecords(value);
-            localStorage.setItem(LS_KEY, JSON.stringify(records));
+            safeLocalStorageSetItem(LS_KEY, JSON.stringify(records));
         },
         onRemote: () => {
             const activeEl = document.activeElement;
@@ -406,7 +420,7 @@ function deleteRec(id) {
 function save() {
     if (window.SharedSync && !SharedSync.canWrite()) return false;
 
-    localStorage.setItem(LS_KEY, JSON.stringify(records));
+    safeLocalStorageSetItem(LS_KEY, JSON.stringify(records));
 
     if (recordsSync) return recordsSync.save(records);
     return false;

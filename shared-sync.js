@@ -1,11 +1,30 @@
 (function (global) {
     'use strict';
 
-    const BUILD_ID = '20260821-ios-storage-recovery-v40';
-    const BUILD_NUMBER = 2026082140;
+    const BUILD_ID = '20260821-ios-storage-recovery-v41';
+    const BUILD_NUMBER = 2026082141;
     const VERSION_PATH = 'app-version.json';
     const VERSION_CHECK_INTERVAL_MS = 30000;
     const LATEST_BUILD_KEY = 'nippo_latest_app_build_number';
+
+    function clearRefreshMarker() {
+        try {
+            const url = new URL(window.location.href);
+            if (!url.searchParams.has('_app_refresh')) return;
+            url.searchParams.delete('_app_refresh');
+            window.history.replaceState(window.history.state, '', url.toString());
+        } catch (error) {
+            console.warn('Refresh marker cleanup skipped:', error);
+        }
+    }
+
+    function reloadCurrentPageFresh() {
+        const url = new URL(window.location.href);
+        url.searchParams.set('_app_refresh', `${BUILD_NUMBER}-${Date.now()}`);
+        window.location.replace(url.toString());
+    }
+
+    clearRefreshMarker();
 
     let versionIsStale = false;
     let versionCheckInFlight = false;
@@ -458,7 +477,7 @@
         ].join('');
 
         overlay.querySelector('#app-update-lock-reload').addEventListener('click', () => {
-            window.location.reload();
+            reloadCurrentPageFresh();
         });
         document.body.appendChild(overlay);
     }

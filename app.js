@@ -1,3 +1,43 @@
+// Safari can reject a localStorage operation when the device storage quota is
+// full or the browser temporarily blocks storage access. Keep those failures
+// from aborting the whole application; Firebase remains the shared source.
+const warnedStorageKeys = new Set();
+function warnStorageOnce(operation, key, error) {
+    const warningKey = `${operation}:${key}`;
+    if (warnedStorageKeys.has(warningKey)) return;
+    warnedStorageKeys.add(warningKey);
+    console.warn(`Local storage ${operation} skipped for ${key}:`, error);
+}
+
+function safeLocalStorageGetItem(key) {
+    try {
+        return window.localStorage.getItem(key);
+    } catch (error) {
+        warnStorageOnce('read', key, error);
+        return null;
+    }
+}
+
+function safeLocalStorageSetItem(key, value) {
+    try {
+        window.localStorage.setItem(key, value);
+        return true;
+    } catch (error) {
+        warnStorageOnce('write', key, error);
+        return false;
+    }
+}
+
+function safeLocalStorageRemoveItem(key) {
+    try {
+        window.localStorage.removeItem(key);
+        return true;
+    } catch (error) {
+        warnStorageOnce('remove', key, error);
+        return false;
+    }
+}
+
 const ROLL_INITIAL_DATA = {
     "2024-12": {
         "film": {
@@ -1611,8 +1651,8 @@ const firebaseConfig = {
     measurementId: "G-SR8Y5NKQTZ"
 };
 
-const APP_BUILD_ID = '20260821-ios-storage-recovery-v40';
-const APP_BUILD_NUMBER = 2026082140;
+const APP_BUILD_ID = '20260821-ios-storage-recovery-v41';
+const APP_BUILD_NUMBER = 2026082141;
 const APP_VERSION_METADATA_PATH = 'app-version.json';
 const APP_VERSION_CHECK_INTERVAL_MS = 30000;
 const APP_LATEST_BUILD_LS_KEY = 'nippo_latest_app_build_number';
@@ -1716,7 +1756,9 @@ function showAppUpdateRequired() {
     ].join('');
 
     overlay.querySelector('#app-update-lock-reload').addEventListener('click', () => {
-        window.location.reload();
+        const url = new URL(window.location.href);
+        url.searchParams.set('_app_refresh', `${APP_BUILD_NUMBER}-${Date.now()}`);
+        window.location.replace(url.toString());
     });
     document.body.appendChild(overlay);
 }
@@ -1768,11 +1810,11 @@ async function checkAppVersion() {
 
 function startAppVersionGuard() {
     try {
-        const knownBuildNumber = Number(localStorage.getItem(APP_LATEST_BUILD_LS_KEY));
+        const knownBuildNumber = Number(safeLocalStorageGetItem(APP_LATEST_BUILD_LS_KEY));
         if (Number.isFinite(knownBuildNumber) && knownBuildNumber > APP_BUILD_NUMBER) {
             markAppVersionStale();
         } else if (!Number.isFinite(knownBuildNumber) || knownBuildNumber < APP_BUILD_NUMBER) {
-            localStorage.setItem(APP_LATEST_BUILD_LS_KEY, String(APP_BUILD_NUMBER));
+            safeLocalStorageSetItem(APP_LATEST_BUILD_LS_KEY, String(APP_BUILD_NUMBER));
         }
     } catch (error) {
         console.warn('App version marker unavailable:', error);
@@ -1824,17 +1866,17 @@ let dailyBackupRefreshTimer = null;
 
 function getLocalBackupSnapshot() {
     return {
-        records: localStorage.getItem(LS_KEY),
-        dailyNotes: localStorage.getItem(NOTES_LS_KEY),
-        roll: localStorage.getItem('rollInventoryData'),
-        sliver: localStorage.getItem('sliverInventoryData'),
-        hanapon: localStorage.getItem('hanaponInventoryData'),
-        hanaponBox: localStorage.getItem('hanaponBoxInventoryData'),
-        snowsprint: localStorage.getItem('snowsprintInventoryData'),
-        project: localStorage.getItem('nippo_boards_data'),
-        records1f: localStorage.getItem(isProduction ? '1f_nippo_records' : '1f_nippo_records_dev'),
-        kenpin1f: localStorage.getItem(isProduction ? '1f_kenpin_records' : '1f_kenpin_records_dev'),
-        saidan: localStorage.getItem(isProduction ? 'saidan_records' : 'saidan_records_dev')
+        records: safeLocalStorageGetItem(LS_KEY),
+        dailyNotes: safeLocalStorageGetItem(NOTES_LS_KEY),
+        roll: safeLocalStorageGetItem('rollInventoryData'),
+        sliver: safeLocalStorageGetItem('sliverInventoryData'),
+        hanapon: safeLocalStorageGetItem('hanaponInventoryData'),
+        hanaponBox: safeLocalStorageGetItem('hanaponBoxInventoryData'),
+        snowsprint: safeLocalStorageGetItem('snowsprintInventoryData'),
+        project: safeLocalStorageGetItem('nippo_boards_data'),
+        records1f: safeLocalStorageGetItem(isProduction ? '1f_nippo_records' : '1f_nippo_records_dev'),
+        kenpin1f: safeLocalStorageGetItem(isProduction ? '1f_kenpin_records' : '1f_kenpin_records_dev'),
+        saidan: safeLocalStorageGetItem(isProduction ? 'saidan_records' : 'saidan_records_dev')
     };
 }
 
@@ -1892,7 +1934,7 @@ function pruneOldDailyBackups() {
     if (keys.length <= MAX_AUTO_BACKUP_DAYS) return;
 
     keys.sort();
-    keys.slice(0, keys.length - MAX_AUTO_BACKUP_DAYS).forEach(k => localStorage.removeItem(k));
+    keys.slice(0, keys.length - MAX_AUTO_BACKUP_DAYS).forEach(k => safeLocalStorageRemoveItem(k));
 }
 
 function performDailyBackup(options = {}) {
@@ -1901,10 +1943,10 @@ function performDailyBackup(options = {}) {
 
     try {
         const backupData = getLocalBackupSnapshot();
-        const existingBackup = localStorage.getItem(backupKey);
+        const existingBackup = safeLocalStorageGetItem(backupKey);
         if (!shouldReplaceDailyBackup(existingBackup, backupData, options.refreshExisting === true)) return;
 
-        localStorage.setItem(backupKey, JSON.stringify(backupData));
+        safeLocalStorageSetItem(backupKey, JSON.stringify(backupData));
         pruneOldDailyBackups();
         console.log("Daily backup of localStorage completed successfully.");
     } catch (e) {
@@ -1939,26 +1981,26 @@ function saveHistoryBackup() {
         
         const backupData = {
             timestamp: timestamp,
-            records: localStorage.getItem(LS_KEY),
-            dailyNotes: localStorage.getItem(NOTES_LS_KEY),
-            roll: localStorage.getItem('rollInventoryData'),
-            sliver: localStorage.getItem('sliverInventoryData'),
-            hanapon: localStorage.getItem('hanaponInventoryData'),
-            hanaponBox: localStorage.getItem('hanaponBoxInventoryData'),
-            snowsprint: localStorage.getItem('snowsprintInventoryData'),
-            project: localStorage.getItem('nippo_boards_data'),
-            records1f: localStorage.getItem(isProduction ? '1f_nippo_records' : '1f_nippo_records_dev'),
-            kenpin1f: localStorage.getItem(isProduction ? '1f_kenpin_records' : '1f_kenpin_records_dev'),
-            saidan: localStorage.getItem(isProduction ? 'saidan_records' : 'saidan_records_dev')
+            records: safeLocalStorageGetItem(LS_KEY),
+            dailyNotes: safeLocalStorageGetItem(NOTES_LS_KEY),
+            roll: safeLocalStorageGetItem('rollInventoryData'),
+            sliver: safeLocalStorageGetItem('sliverInventoryData'),
+            hanapon: safeLocalStorageGetItem('hanaponInventoryData'),
+            hanaponBox: safeLocalStorageGetItem('hanaponBoxInventoryData'),
+            snowsprint: safeLocalStorageGetItem('snowsprintInventoryData'),
+            project: safeLocalStorageGetItem('nippo_boards_data'),
+            records1f: safeLocalStorageGetItem(isProduction ? '1f_nippo_records' : '1f_nippo_records_dev'),
+            kenpin1f: safeLocalStorageGetItem(isProduction ? '1f_kenpin_records' : '1f_kenpin_records_dev'),
+            saidan: safeLocalStorageGetItem(isProduction ? 'saidan_records' : 'saidan_records_dev')
         };
 
         // スライド処理: 3→削除、2→3、1→2、新規→1
-        localStorage.removeItem(HISTORY_BACKUP_PREFIX + '3');
-        const slot2 = localStorage.getItem(HISTORY_BACKUP_PREFIX + '2');
-        if (slot2) localStorage.setItem(HISTORY_BACKUP_PREFIX + '3', slot2);
-        const slot1 = localStorage.getItem(HISTORY_BACKUP_PREFIX + '1');
-        if (slot1) localStorage.setItem(HISTORY_BACKUP_PREFIX + '2', slot1);
-        localStorage.setItem(HISTORY_BACKUP_PREFIX + '1', JSON.stringify(backupData));
+        safeLocalStorageRemoveItem(HISTORY_BACKUP_PREFIX + '3');
+        const slot2 = safeLocalStorageGetItem(HISTORY_BACKUP_PREFIX + '2');
+        if (slot2) safeLocalStorageSetItem(HISTORY_BACKUP_PREFIX + '3', slot2);
+        const slot1 = safeLocalStorageGetItem(HISTORY_BACKUP_PREFIX + '1');
+        if (slot1) safeLocalStorageSetItem(HISTORY_BACKUP_PREFIX + '2', slot1);
+        safeLocalStorageSetItem(HISTORY_BACKUP_PREFIX + '1', JSON.stringify(backupData));
 
         console.log("History backup saved at " + timestamp);
     } catch (e) {
@@ -2098,9 +2140,9 @@ function cloneDailyRecords(input) {
 function persistPendingRecordsSync() {
     try {
         if (recordsPendingSync) {
-            localStorage.setItem(DAILY_RECORDS_PENDING_LS_KEY, JSON.stringify(recordsPendingSync));
+            safeLocalStorageSetItem(DAILY_RECORDS_PENDING_LS_KEY, JSON.stringify(recordsPendingSync));
         } else {
-            localStorage.removeItem(DAILY_RECORDS_PENDING_LS_KEY);
+            safeLocalStorageRemoveItem(DAILY_RECORDS_PENDING_LS_KEY);
         }
     } catch (e) {
         console.error('Failed to persist pending daily-record sync:', e);
@@ -2109,7 +2151,7 @@ function persistPendingRecordsSync() {
 
 function loadPendingRecordsSync() {
     try {
-        const stored = localStorage.getItem(DAILY_RECORDS_PENDING_LS_KEY);
+        const stored = safeLocalStorageGetItem(DAILY_RECORDS_PENDING_LS_KEY);
         if (!stored) return null;
         const parsed = JSON.parse(stored);
         if (!Array.isArray(parsed?.base) || !Array.isArray(parsed?.local)) return null;
@@ -2125,7 +2167,7 @@ function loadPendingRecordsSync() {
 
 function persistDailyServerSnapshot(snapshot) {
     try {
-        localStorage.setItem(DAILY_RECORDS_SERVER_LS_KEY, JSON.stringify(snapshot || []));
+        safeLocalStorageSetItem(DAILY_RECORDS_SERVER_LS_KEY, JSON.stringify(snapshot || []));
     } catch (e) {
         console.error('Failed to persist daily-record server snapshot:', e);
     }
@@ -2133,7 +2175,7 @@ function persistDailyServerSnapshot(snapshot) {
 
 function loadDailyServerSnapshot() {
     try {
-        const stored = localStorage.getItem(DAILY_RECORDS_SERVER_LS_KEY);
+        const stored = safeLocalStorageGetItem(DAILY_RECORDS_SERVER_LS_KEY);
         return stored ? normalizeDailyRecords(JSON.parse(stored)) : null;
     } catch (e) {
         console.error('Failed to load daily-record server snapshot:', e);
@@ -2316,7 +2358,7 @@ function flushPendingRecordsSync() {
         }
         persistPendingRecordsSync();
 
-        localStorage.setItem(LS_KEY, JSON.stringify(records));
+        safeLocalStorageSetItem(LS_KEY, JSON.stringify(records));
         scheduleDailyBackupRefresh();
         if (recordsPendingSync) flushPendingRecordsSync();
     });
@@ -2385,7 +2427,7 @@ function getStoredView() {
     }
     if (!storedView) {
         try {
-            storedView = localStorage.getItem(CURRENT_VIEW_LS_KEY);
+            storedView = safeLocalStorageGetItem(CURRENT_VIEW_LS_KEY);
         } catch (error) {
             console.warn('Local view state unavailable:', error);
         }
@@ -2400,7 +2442,7 @@ function saveCurrentView(view) {
         console.warn('Session view state could not be saved:', error);
     }
     try {
-        localStorage.setItem(CURRENT_VIEW_LS_KEY, view);
+        safeLocalStorageSetItem(CURRENT_VIEW_LS_KEY, view);
     } catch (error) {
         console.warn('Local view state could not be saved:', error);
     }
@@ -2422,7 +2464,7 @@ function getInitialCurrentDate() {
         console.warn('Session date state unavailable:', error);
     }
     try {
-        storedDates.push(localStorage.getItem(CURRENT_DATE_LS_KEY));
+        storedDates.push(safeLocalStorageGetItem(CURRENT_DATE_LS_KEY));
     } catch (error) {
         console.warn('Local date state unavailable:', error);
     }
@@ -2444,7 +2486,7 @@ function persistCurrentDate(value) {
         console.warn('Session date state could not be saved:', error);
     }
     try {
-        localStorage.setItem(CURRENT_DATE_LS_KEY, value);
+        safeLocalStorageSetItem(CURRENT_DATE_LS_KEY, value);
     } catch (error) {
         console.warn('Local date state could not be saved:', error);
     }
@@ -2539,7 +2581,7 @@ if (database) {
             recordsSyncReady = true;
             isFirstLoad = false;
             flushPendingRecordsSync();
-            localStorage.setItem(LS_KEY, JSON.stringify(records));
+            safeLocalStorageSetItem(LS_KEY, JSON.stringify(records));
             scheduleDailyBackupRefresh();
             ensureDayRecords(currentDate);
             // Render only after the initial server snapshot has been merged.
@@ -2573,7 +2615,7 @@ if (database) {
                 persistPendingRecordsSync();
             }
             if (isDifferent) {
-                localStorage.setItem(LS_KEY, JSON.stringify(records));
+                safeLocalStorageSetItem(LS_KEY, JSON.stringify(records));
                 scheduleDailyBackupRefresh();
 
                 const activeEl = document.activeElement;
@@ -2601,7 +2643,7 @@ if (database) {
         getLocal: () => dailyNotes,
         setLocal: value => {
             dailyNotes = value;
-            localStorage.setItem(NOTES_LS_KEY, JSON.stringify(dailyNotes));
+            safeLocalStorageSetItem(NOTES_LS_KEY, JSON.stringify(dailyNotes));
             scheduleDailyBackupRefresh();
         },
         onRemote: () => {
@@ -2819,23 +2861,14 @@ function init() {
     // ensureDayRecords is now called inside Firebase listener after sync
 
 
-    // Initialize Roll Stock Management BEFORE switching views to ensure data is loaded
-    initRollStock();
-
-    // Initialize Sliver Management
-    initSliver();
-
-    // Initialize Hanapon Management
-    initHanapon();
-
-    // Initialize Hanapon Box Inventory Management
-    initHanaponBox();
-
-    // Initialize Snow Sprint Management
-    initSnowsprint();
-
-    // Initialize Project Management
-    initProjectManagement();
+    // A damaged or quota-blocked optional module must not prevent the daily
+    // report and the other modules from opening on the same device.
+    initializeModuleSafely('ロール在庫', initRollStock);
+    initializeModuleSafely('スライバー在庫', initSliver);
+    initializeModuleSafely('鼻ぽん在庫', initHanapon);
+    initializeModuleSafely('鼻ぽん中箱在庫', initHanaponBox);
+    initializeModuleSafely('スノースプリント資材', initSnowsprint);
+    initializeModuleSafely('プロジェクト進捗管理', initProjectManagement);
 
     // iPhone/Safari can suspend a page before a short inventory debounce finishes.
     // Flush only the pending calculation work whenever the page is about to pause.
@@ -2870,6 +2903,16 @@ function init() {
     // Mobile Menu Setup
     setupMobileMenu();
 
+}
+
+function initializeModuleSafely(label, initializer) {
+    try {
+        initializer();
+        return true;
+    } catch (error) {
+        console.error(`${label} の初期化をスキップしました:`, error);
+        return false;
+    }
 }
 
 let deferredDataSyncLifecycleBound = false;
@@ -3253,7 +3296,7 @@ window.saveDailyNotes = function() {
     }
     
     // Save to local storage immediately
-    localStorage.setItem(NOTES_LS_KEY, JSON.stringify(dailyNotes));
+    safeLocalStorageSetItem(NOTES_LS_KEY, JSON.stringify(dailyNotes));
                 scheduleDailyBackupRefresh();
     triggerHistorySave();
     
@@ -3431,7 +3474,7 @@ function saveRecords(triggerHistory = true) {
 
     try {
         records = normalizeDailyRecords(records);
-        localStorage.setItem(LS_KEY, JSON.stringify(records));
+        safeLocalStorageSetItem(LS_KEY, JSON.stringify(records));
         scheduleDailyBackupRefresh();
         if (triggerHistory) triggerHistorySave();
     } catch (e) {
@@ -3792,7 +3835,7 @@ function initRollStock() {
             getLocal: () => rollAllData,
             setLocal: value => {
                 rollAllData = value;
-                localStorage.setItem(ROLL_STORAGE_KEY, JSON.stringify(rollAllData));
+                safeLocalStorageSetItem(ROLL_STORAGE_KEY, JSON.stringify(rollAllData));
                 scheduleDailyBackupRefresh();
             },
             onRemote: () => {
@@ -3808,7 +3851,7 @@ function initRollStock() {
 }
 
 function loadRollData() {
-    const stored = localStorage.getItem(ROLL_STORAGE_KEY);
+    const stored = safeLocalStorageGetItem(ROLL_STORAGE_KEY);
     if (stored) {
         try {
             const parsed = JSON.parse(stored);
@@ -3893,7 +3936,7 @@ function updateRollSelectors() {
 
 function saveRollData() {
     if (!canWriteAppData()) return false;
-    localStorage.setItem(ROLL_STORAGE_KEY, JSON.stringify(rollAllData));
+    safeLocalStorageSetItem(ROLL_STORAGE_KEY, JSON.stringify(rollAllData));
                 scheduleDailyBackupRefresh();
     triggerHistorySave();
     if (database) {
@@ -4099,7 +4142,7 @@ function flushRollPendingSave() {
 function autoSaveRoll(options = {}) {
     const flushNow = options.flushNow === true;
     // Save to local storage immediately so iOS can safely suspend the page.
-    localStorage.setItem(ROLL_STORAGE_KEY, JSON.stringify(rollAllData));
+    safeLocalStorageSetItem(ROLL_STORAGE_KEY, JSON.stringify(rollAllData));
                 scheduleDailyBackupRefresh();
     triggerHistorySave();
     rollHasUnsyncedChanges = true;
@@ -4209,7 +4252,7 @@ function propagateCarryover(year, month, persist = true) {
         }
     }
     if (persist) {
-        localStorage.setItem(ROLL_STORAGE_KEY, JSON.stringify(rollAllData));
+        safeLocalStorageSetItem(ROLL_STORAGE_KEY, JSON.stringify(rollAllData));
         scheduleDailyBackupRefresh();
         triggerHistorySave();
     }
@@ -4320,16 +4363,19 @@ const SLIVER_INITIAL_DATA = {
 
 function initSliver() {
     // Load from localStorage or use initial data
-    const stored = localStorage.getItem(SLIVER_STORAGE_KEY);
+    const stored = safeLocalStorageGetItem(SLIVER_STORAGE_KEY);
     if (stored) {
         try {
-            sliverAllData = JSON.parse(stored);
+            const parsed = JSON.parse(stored);
+            sliverAllData = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+                ? parsed
+                : JSON.parse(JSON.stringify(SLIVER_INITIAL_DATA));
         } catch (e) {
             sliverAllData = JSON.parse(JSON.stringify(SLIVER_INITIAL_DATA));
         }
     } else {
         sliverAllData = JSON.parse(JSON.stringify(SLIVER_INITIAL_DATA));
-        localStorage.setItem(SLIVER_STORAGE_KEY, JSON.stringify(sliverAllData));
+        safeLocalStorageSetItem(SLIVER_STORAGE_KEY, JSON.stringify(sliverAllData));
                 scheduleDailyBackupRefresh();
     }
 
@@ -4349,7 +4395,7 @@ function initSliver() {
             getLocal: () => sliverAllData,
             setLocal: value => {
                 sliverAllData = value;
-                localStorage.setItem(SLIVER_STORAGE_KEY, JSON.stringify(sliverAllData));
+                safeLocalStorageSetItem(SLIVER_STORAGE_KEY, JSON.stringify(sliverAllData));
                 scheduleDailyBackupRefresh();
             },
             onRemote: () => {
@@ -4466,7 +4512,7 @@ function saveSliverData(triggerHistory = true) {
     if (!canWriteAppData()) return false;
 
     try {
-        localStorage.setItem(SLIVER_STORAGE_KEY, JSON.stringify(sliverAllData));
+        safeLocalStorageSetItem(SLIVER_STORAGE_KEY, JSON.stringify(sliverAllData));
                 scheduleDailyBackupRefresh();
         if (triggerHistory) triggerHistorySave();
     } catch (e) {
@@ -4652,7 +4698,7 @@ function updateSliverCell(input) {
     recalculateSliverSection(section);
 
     // Save to local storage immediately for fast local reflection
-    localStorage.setItem(SLIVER_STORAGE_KEY, JSON.stringify(sliverAllData));
+    safeLocalStorageSetItem(SLIVER_STORAGE_KEY, JSON.stringify(sliverAllData));
                 scheduleDailyBackupRefresh();
     triggerHistorySave();
     if (sliverDataSync) sliverDataSync.save(sliverAllData);
@@ -4782,7 +4828,7 @@ function propagateSliverCarryover(year, month) {
         currentMonth = nextMonth;
     }
 
-    localStorage.setItem(SLIVER_STORAGE_KEY, JSON.stringify(sliverAllData));
+    safeLocalStorageSetItem(SLIVER_STORAGE_KEY, JSON.stringify(sliverAllData));
                 scheduleDailyBackupRefresh();
     triggerHistorySave();
 }
@@ -4992,16 +5038,19 @@ const HANAPON_INITIAL_DATA = {
 
 function initHanapon() {
     // Load from localStorage or use initial data
-    const stored = localStorage.getItem(HANAPON_STORAGE_KEY);
+    const stored = safeLocalStorageGetItem(HANAPON_STORAGE_KEY);
     if (stored) {
         try {
-            hanaponAllData = JSON.parse(stored);
+            const parsed = JSON.parse(stored);
+            hanaponAllData = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+                ? parsed
+                : JSON.parse(JSON.stringify(HANAPON_INITIAL_DATA));
         } catch (e) {
             hanaponAllData = JSON.parse(JSON.stringify(HANAPON_INITIAL_DATA));
         }
     } else {
         hanaponAllData = JSON.parse(JSON.stringify(HANAPON_INITIAL_DATA));
-        localStorage.setItem(HANAPON_STORAGE_KEY, JSON.stringify(hanaponAllData));
+        safeLocalStorageSetItem(HANAPON_STORAGE_KEY, JSON.stringify(hanaponAllData));
                 scheduleDailyBackupRefresh();
     }
 
@@ -5021,7 +5070,7 @@ function initHanapon() {
             getLocal: () => hanaponAllData,
             setLocal: value => {
                 hanaponAllData = value;
-                localStorage.setItem(HANAPON_STORAGE_KEY, JSON.stringify(hanaponAllData));
+                safeLocalStorageSetItem(HANAPON_STORAGE_KEY, JSON.stringify(hanaponAllData));
                 scheduleDailyBackupRefresh();
             },
             onRemote: () => {
@@ -5134,7 +5183,7 @@ function saveHanaponData(triggerHistory = true) {
     if (!canWriteAppData()) return false;
 
     try {
-        localStorage.setItem(HANAPON_STORAGE_KEY, JSON.stringify(hanaponAllData));
+        safeLocalStorageSetItem(HANAPON_STORAGE_KEY, JSON.stringify(hanaponAllData));
                 scheduleDailyBackupRefresh();
         if (triggerHistory) triggerHistorySave();
     } catch (e) {
@@ -5358,7 +5407,7 @@ function updateHanaponCell(input) {
     recalculateHanapon();
     
     // Save to local storage immediately for fast local reflection
-    localStorage.setItem(HANAPON_STORAGE_KEY, JSON.stringify(hanaponAllData));
+    safeLocalStorageSetItem(HANAPON_STORAGE_KEY, JSON.stringify(hanaponAllData));
                 scheduleDailyBackupRefresh();
     triggerHistorySave();
     if (hanaponDataSync) hanaponDataSync.save(hanaponAllData);
@@ -5504,7 +5553,7 @@ function propagateHanaponCarryover(year, month) {
         currentMonth = nextMonth;
     }
 
-    localStorage.setItem(HANAPON_STORAGE_KEY, JSON.stringify(hanaponAllData));
+    safeLocalStorageSetItem(HANAPON_STORAGE_KEY, JSON.stringify(hanaponAllData));
                 scheduleDailyBackupRefresh();
     triggerHistorySave();
 }
@@ -8058,16 +8107,19 @@ function ensureSnowsprintConfiguredItems() {
 }
 
 function initSnowsprint() {
-    const stored = localStorage.getItem(SNOWSPRINT_STORAGE_KEY);
+    const stored = safeLocalStorageGetItem(SNOWSPRINT_STORAGE_KEY);
     if (stored) {
         try {
-            snowsprintAllData = JSON.parse(stored);
+            const parsed = JSON.parse(stored);
+            snowsprintAllData = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+                ? parsed
+                : JSON.parse(JSON.stringify(SNOWSPRINT_INITIAL_DATA));
         } catch (e) {
             snowsprintAllData = JSON.parse(JSON.stringify(SNOWSPRINT_INITIAL_DATA));
         }
     } else {
         snowsprintAllData = JSON.parse(JSON.stringify(SNOWSPRINT_INITIAL_DATA));
-        localStorage.setItem(SNOWSPRINT_STORAGE_KEY, JSON.stringify(snowsprintAllData));
+        safeLocalStorageSetItem(SNOWSPRINT_STORAGE_KEY, JSON.stringify(snowsprintAllData));
                 scheduleDailyBackupRefresh();
     }
 
@@ -8088,7 +8140,7 @@ function initSnowsprint() {
             setLocal: value => {
                 snowsprintAllData = value;
                 if (ensureSnowsprintConfiguredItems()) snowsprintConfigNeedsSync = true;
-                localStorage.setItem(SNOWSPRINT_STORAGE_KEY, JSON.stringify(snowsprintAllData));
+                safeLocalStorageSetItem(SNOWSPRINT_STORAGE_KEY, JSON.stringify(snowsprintAllData));
                 scheduleDailyBackupRefresh();
             },
             onRemote: () => {
@@ -8106,7 +8158,7 @@ function initSnowsprint() {
     }
 
     if (snowsprintConfigChanged) {
-        localStorage.setItem(SNOWSPRINT_STORAGE_KEY, JSON.stringify(snowsprintAllData));
+        safeLocalStorageSetItem(SNOWSPRINT_STORAGE_KEY, JSON.stringify(snowsprintAllData));
         scheduleDailyBackupRefresh();
         if (snowsprintDataSync) {
             snowsprintConfigNeedsSync = false;
@@ -8211,7 +8263,7 @@ function setupSnowsprintMonthSelector() {
 
 function saveSnowsprintData() {
     if (!canWriteAppData()) return false;
-    localStorage.setItem(SNOWSPRINT_STORAGE_KEY, JSON.stringify(snowsprintAllData));
+    safeLocalStorageSetItem(SNOWSPRINT_STORAGE_KEY, JSON.stringify(snowsprintAllData));
                 scheduleDailyBackupRefresh();
     triggerHistorySave();
     if (database) {
@@ -8260,7 +8312,7 @@ function handleSnowsprintInput(e) {
 
     // Persist the edited value before the delayed carryover calculation.
     // This creates a SharedSync pending record immediately on iPhone too.
-    localStorage.setItem(SNOWSPRINT_STORAGE_KEY, JSON.stringify(snowsprintAllData));
+    safeLocalStorageSetItem(SNOWSPRINT_STORAGE_KEY, JSON.stringify(snowsprintAllData));
     scheduleDailyBackupRefresh();
     triggerHistorySave();
     if (snowsprintDataSync) snowsprintDataSync.save(snowsprintAllData);
@@ -8851,7 +8903,7 @@ function propagateSnowSprintCarryover(year, month) {
         curY = nextY;
         curM = nextM;
     }
-    localStorage.setItem(SNOWSPRINT_STORAGE_KEY, JSON.stringify(snowsprintAllData));
+    safeLocalStorageSetItem(SNOWSPRINT_STORAGE_KEY, JSON.stringify(snowsprintAllData));
     scheduleDailyBackupRefresh();
 }
 
@@ -9096,7 +9148,7 @@ function refreshHanaponBoxMonthCarryover(year, month, companyKey = hanaponBoxAct
 }
 
 function initHanaponBox() {
-    const stored = localStorage.getItem(HANAPON_BOX_STORAGE_KEY);
+    const stored = safeLocalStorageGetItem(HANAPON_BOX_STORAGE_KEY);
     if (stored) {
         try {
             hanaponBoxAllData = normalizeHanaponBoxData(JSON.parse(stored));
@@ -9108,7 +9160,7 @@ function initHanaponBox() {
     }
 
     ensureHanaponBoxMonth(hanaponBoxCurrentYear, hanaponBoxCurrentMonth, false);
-    localStorage.setItem(HANAPON_BOX_STORAGE_KEY, JSON.stringify(hanaponBoxAllData));
+    safeLocalStorageSetItem(HANAPON_BOX_STORAGE_KEY, JSON.stringify(hanaponBoxAllData));
     scheduleDailyBackupRefresh();
     setupHanaponBoxMonthSelector();
     setupHanaponBoxCompanyTabs();
@@ -9126,7 +9178,7 @@ function initHanaponBox() {
             setLocal: value => {
                 hanaponBoxAllData = normalizeHanaponBoxData(value);
                 ensureHanaponBoxMonth(hanaponBoxCurrentYear, hanaponBoxCurrentMonth, false);
-                localStorage.setItem(HANAPON_BOX_STORAGE_KEY, JSON.stringify(hanaponBoxAllData));
+                safeLocalStorageSetItem(HANAPON_BOX_STORAGE_KEY, JSON.stringify(hanaponBoxAllData));
                 scheduleDailyBackupRefresh();
             },
             onRemote: () => {
@@ -9222,7 +9274,7 @@ function setupHanaponBoxMonthSelector() {
 function saveHanaponBoxData(triggerHistory = true) {
     if (!canWriteAppData()) return false;
     hanaponBoxAllData = normalizeHanaponBoxData(hanaponBoxAllData);
-    localStorage.setItem(HANAPON_BOX_STORAGE_KEY, JSON.stringify(hanaponBoxAllData));
+    safeLocalStorageSetItem(HANAPON_BOX_STORAGE_KEY, JSON.stringify(hanaponBoxAllData));
     scheduleDailyBackupRefresh();
     if (triggerHistory) triggerHistorySave();
 
@@ -9276,7 +9328,7 @@ function handleHanaponBoxInput(event) {
 
     // Preserve the edit locally and in SharedSync before waiting to calculate
     // future-month carryover values.
-    localStorage.setItem(HANAPON_BOX_STORAGE_KEY, JSON.stringify(hanaponBoxAllData));
+    safeLocalStorageSetItem(HANAPON_BOX_STORAGE_KEY, JSON.stringify(hanaponBoxAllData));
     scheduleDailyBackupRefresh();
     triggerHistorySave();
     if (hanaponBoxDataSync) hanaponBoxDataSync.save(hanaponBoxAllData);
@@ -9831,10 +9883,10 @@ function normalizeProjectBoards(value) {
 
 function initProjectManagement() {
     // 1. ローカルストレージからの読み込み（確実なデータ復旧）
-    const localData = localStorage.getItem(BOARDS_STORAGE_KEY);
+    const localData = safeLocalStorageGetItem(BOARDS_STORAGE_KEY);
     if (localData) {
         try {
-            boardsData = JSON.parse(localData);
+            boardsData = normalizeProjectBoards(JSON.parse(localData));
             if (boardsData.length > 0 && !currentBoardId) {
                 currentBoardId = boardsData[0].id;
             }
@@ -9857,7 +9909,7 @@ function initProjectManagement() {
         getLocal: () => boardsData,
         setLocal: value => {
             boardsData = normalizeProjectBoards(value);
-            localStorage.setItem(BOARDS_STORAGE_KEY, JSON.stringify(boardsData));
+            safeLocalStorageSetItem(BOARDS_STORAGE_KEY, JSON.stringify(boardsData));
             scheduleDailyBackupRefresh();
         },
         onRemote: () => {
@@ -9895,7 +9947,7 @@ function saveBoardsToFirebase() {
     });
 
     // 必ずローカルストレージにも保存してデータ消失を防ぐ
-    localStorage.setItem(BOARDS_STORAGE_KEY, JSON.stringify(boardsData));
+    safeLocalStorageSetItem(BOARDS_STORAGE_KEY, JSON.stringify(boardsData));
                 scheduleDailyBackupRefresh();
     triggerHistorySave();
 
@@ -10678,7 +10730,7 @@ window.renderBackupList = function() {
     const HIST_PREFIX = 'nippo_history_backup_';
     const historySlots = [];
     for (let i = 1; i <= 3; i++) {
-        const data = localStorage.getItem(HIST_PREFIX + i);
+        const data = safeLocalStorageGetItem(HIST_PREFIX + i);
         if (data) {
             try {
                 const parsed = JSON.parse(data);
@@ -10751,7 +10803,7 @@ window.selectHistoryBackup = function(slot) {
     if (!panel) return;
 
     const HIST_PREFIX = 'nippo_history_backup_';
-    const dataStr = localStorage.getItem(HIST_PREFIX + slot);
+    const dataStr = safeLocalStorageGetItem(HIST_PREFIX + slot);
 
     if (!dataStr) {
         panel.innerHTML = '<p style="color: #ef4444; text-align: center; padding: 2rem;">データが見つかりません。</p>';
@@ -10825,7 +10877,7 @@ window.selectHistoryBackup = function(slot) {
 // Restore selected history data by merging backup-only values into current data.
 window.restoreFromHistory = function(slot) {
     if (!canWriteAppData()) return;
-    const dataStr = localStorage.getItem('nippo_history_backup_' + slot);
+    const dataStr = safeLocalStorageGetItem('nippo_history_backup_' + slot);
     if (!dataStr) return;
 
     let backupObj = {};
@@ -10929,7 +10981,7 @@ window.selectBackupDate = function(dateStr) {
 
     const BACKUP_PREFIX = 'nippo_auto_backup_';
     const key = BACKUP_PREFIX + dateStr;
-    const dataStr = localStorage.getItem(key);
+    const dataStr = safeLocalStorageGetItem(key);
     
     if (!dataStr) {
         panel.innerHTML = '<p style="color: #ef4444; text-align: center; padding: 2rem;">データが見つかりません。</p>';
@@ -10995,7 +11047,7 @@ window.selectBackupDate = function(dateStr) {
 
 window.restoreFromBackup = function(dateStr) {
     if (!canWriteAppData()) return;
-    const dataStr = localStorage.getItem('nippo_auto_backup_' + dateStr);
+    const dataStr = safeLocalStorageGetItem('nippo_auto_backup_' + dateStr);
     if (!dataStr) return;
 
     let backupObj = {};

@@ -1,3 +1,17 @@
+const warnedStorageKeys = new Set();
+function safeLocalStorageSetItem(key, value) {
+    try {
+        window.localStorage.setItem(key, value);
+        return true;
+    } catch (error) {
+        if (!warnedStorageKeys.has(key)) {
+            warnedStorageKeys.add(key);
+            console.warn(`Local storage write skipped for ${key}:`, error);
+        }
+        return false;
+    }
+}
+
 // Firebase Configuration (shared with 2F app)
 const firebaseConfig = {
     apiKey: "AIzaSyAz4YDGJDcJ6-e6l5N9-LKin7TbWMb68As",
@@ -149,7 +163,7 @@ if (database && window.SharedSync) {
         getLocal: () => records,
         setLocal: value => {
             records = normalize1fRecords(value);
-            localStorage.setItem(LS_KEY, JSON.stringify(records));
+            safeLocalStorageSetItem(LS_KEY, JSON.stringify(records));
         },
         onRemote: () => {
             isFirebaseSynced = true;
@@ -176,7 +190,7 @@ if (database && window.SharedSync) {
         getLocal: () => dailyNotes,
         setLocal: value => {
             dailyNotes = normalize1fNotes(value);
-            localStorage.setItem(NOTES_LS_KEY, JSON.stringify(dailyNotes));
+            safeLocalStorageSetItem(NOTES_LS_KEY, JSON.stringify(dailyNotes));
         },
         onRemote: () => {
             const activeEl = document.activeElement;
@@ -545,7 +559,7 @@ function saveRecords() {
     if (window.SharedSync && !SharedSync.canWrite()) return false;
 
     try {
-        localStorage.setItem(LS_KEY, JSON.stringify(records));
+        safeLocalStorageSetItem(LS_KEY, JSON.stringify(records));
     } catch (e) {
         console.error('LocalStorage save failed:', e);
     }
@@ -836,7 +850,7 @@ window.saveDailyNotes1f = function() {
         delete dailyNotes[currentDate];
     }
 
-    localStorage.setItem(NOTES_LS_KEY, JSON.stringify(dailyNotes));
+    safeLocalStorageSetItem(NOTES_LS_KEY, JSON.stringify(dailyNotes));
 
     clearTimeout(noteSaveTimeout);
     syncDailyNotes1fNow();
