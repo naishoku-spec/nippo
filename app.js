@@ -1611,8 +1611,8 @@ const firebaseConfig = {
     measurementId: "G-SR8Y5NKQTZ"
 };
 
-const APP_BUILD_ID = '20260821-date-persist-v39';
-const APP_BUILD_NUMBER = 2026082139;
+const APP_BUILD_ID = '20260821-ios-storage-recovery-v40';
+const APP_BUILD_NUMBER = 2026082140;
 const APP_VERSION_METADATA_PATH = 'app-version.json';
 const APP_VERSION_CHECK_INTERVAL_MS = 30000;
 const APP_LATEST_BUILD_LS_KEY = 'nippo_latest_app_build_number';
@@ -2337,12 +2337,20 @@ function queueRecordsSync() {
     flushPendingRecordsSync();
 }
 
-let records = normalizeDailyRecords(JSON.parse(localStorage.getItem(LS_KEY)) || []);
+const storedRecordsState = window.SharedSync && typeof SharedSync.readLocalJson === 'function'
+    ? SharedSync.readLocalJson(LS_KEY, [])
+    : { value: [], valid: false, found: false };
+let records = normalizeDailyRecords(storedRecordsState.value || []);
 const storedDailyServerSnapshot = loadDailyServerSnapshot();
 recordsPendingSync = loadPendingRecordsSync();
 if (recordsPendingSync) {
     records = cloneDailyRecords(recordsPendingSync.local);
     recordsServerSnapshot = cloneDailyRecords(recordsPendingSync.base);
+} else if (!storedRecordsState.valid && storedDailyServerSnapshot) {
+    // A damaged device cache must not be treated as an intentional deletion.
+    // Use the last acknowledged server snapshot until the realtime value arrives.
+    records = cloneDailyRecords(storedDailyServerSnapshot);
+    recordsServerSnapshot = cloneDailyRecords(storedDailyServerSnapshot);
 } else {
     recordsServerSnapshot = storedDailyServerSnapshot || cloneDailyRecords(records);
     if (storedDailyServerSnapshot && !dailyRecordsEqual(records, storedDailyServerSnapshot)) {
@@ -2353,7 +2361,10 @@ if (recordsPendingSync) {
         persistPendingRecordsSync();
     }
 }
-let dailyNotes = JSON.parse(localStorage.getItem(NOTES_LS_KEY)) || {};
+const storedDailyNotesState = window.SharedSync && typeof SharedSync.readLocalJson === 'function'
+    ? SharedSync.readLocalJson(NOTES_LS_KEY, {})
+    : { value: {}, valid: false, found: false };
+let dailyNotes = storedDailyNotesState.value || {};
 let dailyNotesSync = null;
 let rollDataSync = null;
 let sliverDataSync = null;

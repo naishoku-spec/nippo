@@ -31,7 +31,15 @@ const MIN_ROWS = 5; // あらかじめ常時５項目常に表示
 console.log(`Saidan App: Running in ${isProduction ? 'PRODUCTION' : 'DEVELOPMENT'} mode. Data path: ${DB_PATH}`);
 
 // State
-let records = JSON.parse(localStorage.getItem(LS_KEY)) || [];
+const storedSaidanRecordsState = window.SharedSync && typeof SharedSync.readLocalJson === 'function'
+    ? SharedSync.readLocalJson(LS_KEY, [])
+    : { value: [], valid: false, found: false };
+const storedSaidanRecordsSnapshot = window.SharedSync && typeof SharedSync.readLocalJson === 'function'
+    ? SharedSync.readLocalJson(LS_KEY + '_server_snapshot', [])
+    : { value: [], valid: false, found: false };
+let records = storedSaidanRecordsState.valid
+    ? (storedSaidanRecordsState.value || [])
+    : (storedSaidanRecordsSnapshot.found ? storedSaidanRecordsSnapshot.value || [] : []);
 let currentDate = new Date().toLocaleDateString('sv-SE');
 let currentView = 'day'; // 'day' or 'month'
 let isFirstLoad = true;

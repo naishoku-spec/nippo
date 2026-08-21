@@ -30,7 +30,15 @@ const LS_KEY = isProduction ? '1f_kenpin_records' : '1f_kenpin_records_dev';
 const BLANK_ROWS = 10;
 
 // State
-let records = JSON.parse(localStorage.getItem(LS_KEY)) || [];
+const storedKenpinRecordsState = window.SharedSync && typeof SharedSync.readLocalJson === 'function'
+    ? SharedSync.readLocalJson(LS_KEY, [])
+    : { value: [], valid: false, found: false };
+const storedKenpinRecordsSnapshot = window.SharedSync && typeof SharedSync.readLocalJson === 'function'
+    ? SharedSync.readLocalJson(LS_KEY + '_server_snapshot', [])
+    : { value: [], valid: false, found: false };
+let records = storedKenpinRecordsState.valid
+    ? (storedKenpinRecordsState.value || [])
+    : (storedKenpinRecordsSnapshot.found ? storedKenpinRecordsSnapshot.value || [] : []);
 let currentDate = new Date().toLocaleDateString('sv-SE');
 let isFirstLoad = true;
 let activeRecordId = null;

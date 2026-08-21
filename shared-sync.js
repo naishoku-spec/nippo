@@ -1,8 +1,8 @@
 (function (global) {
     'use strict';
 
-    const BUILD_ID = '20260821-date-persist-v39';
-    const BUILD_NUMBER = 2026082139;
+    const BUILD_ID = '20260821-ios-storage-recovery-v40';
+    const BUILD_NUMBER = 2026082140;
     const VERSION_PATH = 'app-version.json';
     const VERSION_CHECK_INTERVAL_MS = 30000;
     const LATEST_BUILD_KEY = 'nippo_latest_app_build_number';
@@ -52,6 +52,47 @@
             return JSON.parse(JSON.stringify(value));
         } catch (error) {
             return value;
+        }
+    }
+
+    function preserveCorruptLocalValue(key, rawValue) {
+        const recoveryKey = key + '_corrupt_backup';
+        try {
+            if (!localStorage.getItem(recoveryKey)) {
+                localStorage.setItem(recoveryKey, JSON.stringify({
+                    sourceKey: key,
+                    savedAt: new Date().toISOString(),
+                    rawValue
+                }));
+            }
+            return recoveryKey;
+        } catch (error) {
+            console.warn('Corrupt local value could not be preserved:', key, error);
+            return '';
+        }
+    }
+
+    // Read JSON without allowing one damaged local entry to stop the whole app.
+    // The original string is retained under a separate key for manual recovery.
+    function readLocalJson(key, fallback) {
+        let rawValue;
+        try {
+            rawValue = localStorage.getItem(key);
+        } catch (error) {
+            console.warn('Local value could not be read:', key, error);
+            return { value: cloneValue(fallback), valid: false, found: false, recoveryKey: '' };
+        }
+
+        if (rawValue === null || rawValue === '') {
+            return { value: cloneValue(fallback), valid: true, found: false, recoveryKey: '' };
+        }
+
+        try {
+            return { value: JSON.parse(rawValue), valid: true, found: true, recoveryKey: '' };
+        } catch (error) {
+            const recoveryKey = preserveCorruptLocalValue(key, rawValue);
+            console.error('Invalid local JSON was ignored safely:', key, error);
+            return { value: cloneValue(fallback), valid: false, found: true, recoveryKey };
         }
     }
 
@@ -739,6 +780,7 @@
         BUILD_ID,
         BUILD_NUMBER,
         cloneValue,
+        readLocalJson,
         valuesEqual,
         mergeThreeWay,
         mergeInitialValue,

@@ -35,11 +35,27 @@ const NOTES_DB_PATH = `${SECRET_KEY}/${isProduction ? '1f_nippo_daily_notes' : '
 console.log(`1F App: Running in ${isProduction ? 'PRODUCTION' : 'DEVELOPMENT'} mode. Data path: ${DB_PATH}`);
 
 // State Management
-let records = JSON.parse(localStorage.getItem(LS_KEY)) || [];
+const stored1fRecordsState = window.SharedSync && typeof SharedSync.readLocalJson === 'function'
+    ? SharedSync.readLocalJson(LS_KEY, [])
+    : { value: [], valid: false, found: false };
+const stored1fRecordsSnapshot = window.SharedSync && typeof SharedSync.readLocalJson === 'function'
+    ? SharedSync.readLocalJson(LS_KEY + '_server_snapshot', [])
+    : { value: [], valid: false, found: false };
+let records = stored1fRecordsState.valid
+    ? (stored1fRecordsState.value || [])
+    : (stored1fRecordsSnapshot.found ? stored1fRecordsSnapshot.value || [] : []);
 let currentDate = new Date().toLocaleDateString('sv-SE');
 let isFirstLoad = true;
 let isFirebaseSynced = false; 
-let dailyNotes = JSON.parse(localStorage.getItem(NOTES_LS_KEY)) || {};
+const stored1fNotesState = window.SharedSync && typeof SharedSync.readLocalJson === 'function'
+    ? SharedSync.readLocalJson(NOTES_LS_KEY, {})
+    : { value: {}, valid: false, found: false };
+const stored1fNotesSnapshot = window.SharedSync && typeof SharedSync.readLocalJson === 'function'
+    ? SharedSync.readLocalJson(NOTES_LS_KEY + '_server_snapshot', {})
+    : { value: {}, valid: false, found: false };
+let dailyNotes = stored1fNotesState.valid
+    ? (stored1fNotesState.value || {})
+    : (stored1fNotesSnapshot.found ? stored1fNotesSnapshot.value || {} : {});
 let noteSaveTimeout = null;
 let recordsSync = null;
 let notesSync = null;
