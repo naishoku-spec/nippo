@@ -1,11 +1,12 @@
 (function (global) {
     'use strict';
 
-    const BUILD_ID = '20260821-ios-storage-recovery-v41';
-    const BUILD_NUMBER = 2026082141;
+    const BUILD_ID = '20260821-ios-cache-quarantine-v42';
+    const BUILD_NUMBER = 2026082142;
     const VERSION_PATH = 'app-version.json';
     const VERSION_CHECK_INTERVAL_MS = 30000;
     const LATEST_BUILD_KEY = 'nippo_latest_app_build_number';
+    const PENDING_TRUST_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
     function clearRefreshMarker() {
         try {
@@ -569,7 +570,22 @@
             const parsed = JSON.parse(stored);
             if (!parsed || !Object.prototype.hasOwnProperty.call(parsed, 'base')
                 || !Object.prototype.hasOwnProperty.call(parsed, 'local')) return null;
-            return { base: cloneValue(parsed.base), local: cloneValue(parsed.local) };
+            const savedAtTime = Date.parse(parsed.savedAt || '');
+            const age = Date.now() - savedAtTime;
+            const pendingBuildNumber = Number(parsed.buildNumber) || 0;
+            const trusted = parsed.trusted === true
+                && pendingBuildNumber === BUILD_NUMBER
+                && Number.isFinite(savedAtTime)
+                && age >= -5 * 60 * 1000
+                && age <= PENDING_TRUST_WINDOW_MS;
+            return {
+                base: cloneValue(parsed.base),
+                local: cloneValue(parsed.local),
+                savedAt: parsed.savedAt || '',
+                buildNumber: pendingBuildNumber,
+                _trusted: trusted,
+                _raw: stored
+            };
         } catch (error) {
             console.warn('Pending sync load skipped:', error);
             return null;
@@ -577,12 +593,42 @@
     }
 
     function persistPending(key, pending) {
-        if (!key) return;
+        if (!key) return false;
         try {
-            if (pending) localStorage.setItem(key, JSON.stringify(pending));
-            else localStorage.removeItem(key);
+            if (pending) {
+                const payload = {
+                    base: cloneValue(pending.base),
+                    local: cloneValue(pending.local),
+                    savedAt: pending.savedAt || new Date().toISOString(),
+                    buildNumber: BUILD_NUMBER,
+                    trusted: pending._trusted !== false
+                };
+                localStorage.setItem(key, JSON.stringify(payload));
+            } else {
+                localStorage.removeItem(key);
+            }
+            return true;
         } catch (error) {
             console.warn('Pending sync persistence skipped:', error);
+            return false;
+        }
+    }
+
+    function preserveStalePending(key, rawValue) {
+        if (!key || !rawValue) return true;
+        const recoveryKey = key + '_stale_backup';
+        try {
+            if (!localStorage.getItem(recoveryKey)) {
+                localStorage.setItem(recoveryKey, JSON.stringify({
+                    sourceKey: key,
+                    savedAt: new Date().toISOString(),
+                    rawValue
+                }));
+            }
+            return true;
+        } catch (error) {
+            console.warn('Stale pending data could not be preserved:', key, error);
+            return false;
         }
     }
 
@@ -616,10 +662,20 @@
             : value => value === null || value === undefined ? cloneValue(emptyValue) : cloneValue(value);
         const merge = typeof options.merge === 'function' ? options.merge : mergeThreeWay;
         const mergeInitial = options.mergeInitial === true;
+        // Every data path is protected by default. A pending write produced by
+        // an older build is only a recovery copy; replaying it automatically can
+        // overwrite newer Firebase data when a long-lived Safari tab returns.
+        const protectFromStalePending = options.protectFromStalePending !== false;
+        const mergeUntrustedPending = typeof options.mergeUntrustedPending === 'function'
+            ? options.mergeUntrustedPending
+            : mergeInitialValue;
         const pendingKey = options.pendingStorageKey || '';
         const serverSnapshotKey = options.serverSnapshotStorageKey || '';
         const storedServerSnapshot = loadSnapshot(serverSnapshotKey);
         let pending = loadPending(pendingKey);
+        const loadedUntrustedPending = Boolean(pending && protectFromStalePending && !pending._trusted);
+        let retainUntrustedStoredPending = loadedUntrustedPending
+            && !preserveStalePending(pendingKey, pending._raw);
         let serverSnapshot = pending
             ? cloneValue(pending.base)
             : storedServerSnapshot.found ? cloneValue(storedServerSnapshot.value) : cloneValue(emptyValue);
@@ -637,6 +693,12 @@
             if (typeof options.onRemote === 'function') {
                 options.onRemote(normalize(value), meta || {});
             }
+        };
+        const persistCurrentPending = () => {
+            if (!pending && retainUntrustedStoredPending) return false;
+            const persisted = persistPending(pendingKey, pending);
+            if (persisted) retainUntrustedStoredPending = false;
+            return persisted;
         };
 
         function flush() {
@@ -676,7 +738,7 @@
                     pending.local = merge(pending.base, pending.local, committedValue);
                     setLocal(pending.local, { source: 'sync', committed: true, pending: true });
                 }
-                persistPending(pendingKey, pending);
+                persistCurrentPending();
                 notify(getLocal(), { source: 'sync', committed: true });
                 if (pending) flush();
             });
@@ -688,12 +750,18 @@
             if (!pending) {
                 pending = {
                     base: cloneValue(serverSnapshot),
-                    local: cloneValue(localValue)
+                    local: cloneValue(localValue),
+                    _trusted: true
                 };
             } else {
                 pending.local = cloneValue(localValue);
             }
-            persistPending(pendingKey, pending);
+            pending.savedAt = new Date().toISOString();
+            pending.buildNumber = BUILD_NUMBER;
+            if (!(protectFromStalePending && !ready && loadedUntrustedPending)) {
+                pending._trusted = true;
+            }
+            persistCurrentPending();
             flush();
             return true;
         }
@@ -706,14 +774,25 @@
                 const previousServer = storedServerSnapshot.found ? cloneValue(storedServerSnapshot.value) : null;
                 serverSnapshot = cloneValue(remote);
                 if (pending) {
-                    const noKnownBaseline = !storedServerSnapshot.found
-                        && isEmptyValue(pending.base)
-                        && !isEmptyValue(remote);
-                    const merged = noKnownBaseline
-                        ? mergeInitialValue(pending.local, remote)
-                        : merge(pending.base, pending.local, remote);
-                    pending = { base: cloneValue(remote), local: cloneValue(merged) };
-                    setLocal(merged, { source: 'initial', pending: true });
+                    if (protectFromStalePending && !pending._trusted) {
+                        // The raw pending payload was preserved by
+                        // preserveStalePending(). Do not replay unknown old state
+                        // into Firebase; use the current server value as truth.
+                        pending = null;
+                        setLocal(remote, {
+                            source: 'initial',
+                            quarantinedStalePending: true
+                        });
+                    } else {
+                        const noKnownBaseline = !storedServerSnapshot.found
+                            && isEmptyValue(pending.base)
+                            && !isEmptyValue(remote);
+                        const merged = noKnownBaseline
+                            ? mergeInitialValue(pending.local, remote)
+                            : merge(pending.base, pending.local, remote);
+                        pending = { base: cloneValue(remote), local: cloneValue(merged), _trusted: true };
+                        setLocal(merged, { source: 'initial', pending: true });
+                    }
                 } else if (previousServer !== null) {
                     // A cached local collection can be incomplete after a failed
                     // sync. Treat the server snapshot as the baseline and keep
@@ -742,7 +821,7 @@
                 }
                 ready = true;
                 persistSnapshot(serverSnapshotKey, serverSnapshot);
-                persistPending(pendingKey, pending);
+                persistCurrentPending();
                 notify(getLocal(), { source: 'initial', pending: Boolean(pending) });
                 flush();
                 return;
@@ -756,7 +835,7 @@
                 pending.base = cloneValue(remote);
                 pending.local = cloneValue(merged);
                 setLocal(merged, { source: 'remote', pending: true });
-                persistPending(pendingKey, pending);
+                persistCurrentPending();
                 notify(getLocal(), { source: 'remote', pending: true });
                 flush();
                 return;
@@ -766,7 +845,7 @@
             if (!valuesEqual(merged, remote)) {
                 pending = { base: cloneValue(previousServer), local: cloneValue(merged) };
                 setLocal(merged, { source: 'remote', pending: true });
-                persistPending(pendingKey, pending);
+                persistCurrentPending();
                 notify(getLocal(), { source: 'remote', pending: true });
                 flush();
                 return;
@@ -778,7 +857,9 @@
             }
         }
 
-        if (pending) setLocal(pending.local, { source: 'pending' });
+        if (pending && (!protectFromStalePending || pending._trusted)) {
+            setLocal(pending.local, { source: 'pending' });
+        }
 
         registerPathSyncFlusher(flush);
 

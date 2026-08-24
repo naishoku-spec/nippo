@@ -1651,8 +1651,8 @@ const firebaseConfig = {
     measurementId: "G-SR8Y5NKQTZ"
 };
 
-const APP_BUILD_ID = '20260821-ios-storage-recovery-v41';
-const APP_BUILD_NUMBER = 2026082141;
+const APP_BUILD_ID = '20260821-ios-cache-quarantine-v42';
+const APP_BUILD_NUMBER = 2026082142;
 const APP_VERSION_METADATA_PATH = 'app-version.json';
 const APP_VERSION_CHECK_INTERVAL_MS = 30000;
 const APP_LATEST_BUILD_LS_KEY = 'nippo_latest_app_build_number';
@@ -2140,6 +2140,9 @@ function cloneDailyRecords(input) {
 function persistPendingRecordsSync() {
     try {
         if (recordsPendingSync) {
+            recordsPendingSync.savedAt = new Date().toISOString();
+            recordsPendingSync.buildNumber = APP_BUILD_NUMBER;
+            recordsPendingSync.trusted = true;
             safeLocalStorageSetItem(DAILY_RECORDS_PENDING_LS_KEY, JSON.stringify(recordsPendingSync));
         } else {
             safeLocalStorageRemoveItem(DAILY_RECORDS_PENDING_LS_KEY);
@@ -2155,9 +2158,32 @@ function loadPendingRecordsSync() {
         if (!stored) return null;
         const parsed = JSON.parse(stored);
         if (!Array.isArray(parsed?.base) || !Array.isArray(parsed?.local)) return null;
+        const savedAtTime = Date.parse(parsed.savedAt || '');
+        const age = Date.now() - savedAtTime;
+        const trusted = parsed.trusted === true
+            && Number(parsed.buildNumber) === APP_BUILD_NUMBER
+            && Number.isFinite(savedAtTime)
+            && age >= -5 * 60 * 1000
+            && age <= 7 * 24 * 60 * 60 * 1000;
+        if (!trusted) {
+            const recoveryKey = DAILY_RECORDS_PENDING_LS_KEY + '_stale_backup';
+            let preserved = Boolean(safeLocalStorageGetItem(recoveryKey));
+            if (!preserved) {
+                preserved = safeLocalStorageSetItem(recoveryKey, JSON.stringify({
+                    sourceKey: DAILY_RECORDS_PENDING_LS_KEY,
+                    savedAt: new Date().toISOString(),
+                    rawValue: stored
+                }));
+            }
+            if (preserved) safeLocalStorageRemoveItem(DAILY_RECORDS_PENDING_LS_KEY);
+            return null;
+        }
         return {
             base: normalizeDailyRecords(parsed.base),
-            local: normalizeDailyRecords(parsed.local)
+            local: normalizeDailyRecords(parsed.local),
+            savedAt: parsed.savedAt,
+            buildNumber: APP_BUILD_NUMBER,
+            trusted: true
         };
     } catch (e) {
         console.error('Failed to load pending daily-record sync:', e);
@@ -2395,13 +2421,8 @@ if (recordsPendingSync) {
     recordsServerSnapshot = cloneDailyRecords(storedDailyServerSnapshot);
 } else {
     recordsServerSnapshot = storedDailyServerSnapshot || cloneDailyRecords(records);
-    if (storedDailyServerSnapshot && !dailyRecordsEqual(records, storedDailyServerSnapshot)) {
-        recordsPendingSync = {
-            base: cloneDailyRecords(storedDailyServerSnapshot),
-            local: cloneDailyRecords(records)
-        };
-        persistPendingRecordsSync();
-    }
+    // A plain local cache is not proof of an unsent edit. Wait for Firebase
+    // unless a versioned pending record above explicitly proves one exists.
 }
 const storedDailyNotesState = window.SharedSync && typeof SharedSync.readLocalJson === 'function'
     ? SharedSync.readLocalJson(NOTES_LS_KEY, {})
@@ -2555,18 +2576,9 @@ if (database) {
                         persistPendingRecordsSync();
                     }
                 } else {
-                    // Treat the first remote snapshot as authoritative for
-                    // existing rows. Local-only records still survive through
-                    // the initial merge, but a stale cache cannot hide rows
-                    // that are already present in Firebase.
-                    const mergedRecords = localRecords.length > 0
-                        ? mergeInitialDailyRecords(localRecords, remoteRecords)
-                        : remoteRecords;
-                    records = mergedRecords;
-                    if (!dailyRecordsEqual(mergedRecords, remoteRecords)) {
-                        recordsPendingSync = { base: remoteRecords, local: mergedRecords };
-                        persistPendingRecordsSync();
-                    }
+                    // Without a trusted same-build pending write, localStorage is
+                    // only a display cache. The server must win on first load.
+                    records = remoteRecords;
                 }
             } else if (localRecords.length > 0) {
                 records = localRecords;
