@@ -1651,8 +1651,8 @@ const firebaseConfig = {
     measurementId: "G-SR8Y5NKQTZ"
 };
 
-const APP_BUILD_ID = '20260821-ios-cache-quarantine-v42';
-const APP_BUILD_NUMBER = 2026082142;
+const APP_BUILD_ID = '20260831-stale-write-protection-v43';
+const APP_BUILD_NUMBER = 2026083143;
 const APP_VERSION_METADATA_PATH = 'app-version.json';
 const APP_VERSION_CHECK_INTERVAL_MS = 30000;
 const APP_LATEST_BUILD_LS_KEY = 'nippo_latest_app_build_number';
@@ -1684,6 +1684,13 @@ function canWriteAppData() {
     if (!appVersionIsStale) return true;
     console.warn('Blocked data write because this page is out of date.');
     return false;
+}
+
+function markSyncUpdated(target, updatedAt = Date.now()) {
+    if (target && typeof target === 'object' && !Array.isArray(target)) {
+        target._syncUpdatedAt = updatedAt;
+    }
+    return updatedAt;
 }
 
 function getBlockedFirebaseWriteError() {
@@ -2248,9 +2255,20 @@ function mergeDailyRecordFields(base, local, remote, syncKey) {
             || JSON.stringify(local?.[field]) !== JSON.stringify(base?.[field]);
         const remoteChanged = remoteHas !== baseHas
             || JSON.stringify(remote?.[field]) !== JSON.stringify(base?.[field]);
-        const source = field === 'id'
-            ? (localHas ? local : (remoteHas ? remote : base))
-            : (localChanged ? local : (remoteChanged ? remote : (remote || local || base)));
+        const localUpdatedAt = getDailyRecordUpdatedAt(local);
+        const remoteUpdatedAt = getDailyRecordUpdatedAt(remote);
+        const bothChangedDifferently = localChanged && remoteChanged
+            && JSON.stringify(local?.[field]) !== JSON.stringify(remote?.[field]);
+        let source;
+        if (field === 'id') {
+            source = localHas ? local : (remoteHas ? remote : base);
+        } else if (bothChangedDifferently
+            && localUpdatedAt !== remoteUpdatedAt
+            && (localUpdatedAt > 0 || remoteUpdatedAt > 0)) {
+            source = localUpdatedAt > remoteUpdatedAt ? local : remote;
+        } else {
+            source = localChanged ? local : (remoteChanged ? remote : (remote || local || base));
+        }
 
         if (source && Object.prototype.hasOwnProperty.call(source, field)) {
             merged[field] = source[field];
@@ -3301,11 +3319,10 @@ window.saveDailyNotes = function() {
     if (!textarea) return;
     
     const text = textarea.value.trim();
-    if (text) {
-        dailyNotes[currentDate] = text;
-    } else {
-        delete dailyNotes[currentDate];
-    }
+    // Keep an explicit empty string. Deleting the key is indistinguishable
+    // from an old page that never received the field, which can resurrect an
+    // earlier note during a three-way merge.
+    dailyNotes[currentDate] = text;
     
     // Save to local storage immediately
     safeLocalStorageSetItem(NOTES_LS_KEY, JSON.stringify(dailyNotes));
@@ -4032,6 +4049,7 @@ function renderRollStock() {
             const type = input.dataset.type;
             const currentData = getRollMonthData(rollCurrentYear, rollCurrentMonth);
             currentData[type].carryover = parseRollInputValue(value);
+            markSyncUpdated(currentData[type]);
             propagateCarryover(rollCurrentYear, rollCurrentMonth, false);
             recalculateRollStock();
             autoSaveRoll({ flushNow });
@@ -4087,18 +4105,12 @@ function renderRollStock() {
 
                 const currentData = getRollMonthData(rollCurrentYear, rollCurrentMonth);
 
-                if (val > 0) {
-                    if (!currentData[type].days) currentData[type].days = {};
-                    if (!currentData[type].days[d]) currentData[type].days[d] = {};
-                    currentData[type].days[d][field] = val;
-                } else {
-                    if (currentData[type].days && currentData[type].days[d]) {
-                        delete currentData[type].days[d][field];
-                        if (Object.keys(currentData[type].days[d]).length === 0) {
-                            delete currentData[type].days[d];
-                        }
-                    }
-                }
+                if (!currentData[type].days) currentData[type].days = {};
+                if (!currentData[type].days[d]) currentData[type].days[d] = {};
+                // Zero is rendered as an empty input, but remains explicit in
+                // storage so an older cached value cannot come back later.
+                currentData[type].days[d][field] = val;
+                markSyncUpdated(currentData[type].days[d]);
 
                 propagateCarryover(rollCurrentYear, rollCurrentMonth, false);
                 recalculateRollStock();
@@ -4695,16 +4707,8 @@ function updateSliverCell(input) {
         dataObj.days[day] = {};
     }
 
-    if (value === 0) {
-        delete dataObj.days[day][field];
-    } else {
-        dataObj.days[day][field] = value;
-    }
-
-    // Clean up empty days
-    if (Object.keys(dataObj.days[day]).length === 0) {
-        delete dataObj.days[day];
-    }
+    dataObj.days[day][field] = value;
+    markSyncUpdated(dataObj.days[day]);
 
     // Recalculate remaining balances for this section (for current month visualization)
     recalculateSliverSection(section);
@@ -5405,16 +5409,8 @@ function updateHanaponCell(input) {
         dataObj.days[day] = {};
     }
 
-    if (value === 0) {
-        delete dataObj.days[day][field];
-    } else {
-        dataObj.days[day][field] = value;
-    }
-
-    // Clean up empty days
-    if (Object.keys(dataObj.days[day]).length === 0) {
-        delete dataObj.days[day];
-    }
+    dataObj.days[day][field] = value;
+    markSyncUpdated(dataObj.days[day]);
 
     recalculateHanapon();
     
@@ -8311,15 +8307,13 @@ function handleSnowsprintInput(e) {
 
     if (field === "carryover") {
         dataObj.carryover = val;
+        markSyncUpdated(dataObj);
     } else {
         const day = target.dataset.day;
         if (!dataObj.days) dataObj.days = {};
         if (!dataObj.days[day]) dataObj.days[day] = {};
-        if (val === 0) {
-            delete dataObj.days[day][field];
-        } else {
-            dataObj.days[day][field] = val;
-        }
+        dataObj.days[day][field] = val;
+        markSyncUpdated(dataObj.days[day]);
     }
 
     // Persist the edited value before the delayed carryover calculation.
@@ -8667,24 +8661,13 @@ function setSnowsprintCellComments(category, type1, type2, field, day, comments)
     const dataObj = secData[type1][type2];
 
     if (field === 'carryover') {
-        if (comments.length > 0) {
-            dataObj.carryover_comments = comments;
-        } else {
-            delete dataObj.carryover_comments;
-        }
+        dataObj.carryover_comments = comments;
+        markSyncUpdated(dataObj);
     } else {
         if (!dataObj.days) dataObj.days = {};
         if (!dataObj.days[day]) dataObj.days[day] = {};
-        if (comments.length > 0) {
-            dataObj.days[day][`${field}_comments`] = comments;
-        } else {
-            delete dataObj.days[day][`${field}_comments`];
-            // Clean up empty day objects (only if no arrival/usage data remains)
-            const remaining = Object.keys(dataObj.days[day]);
-            if (remaining.length === 0) {
-                delete dataObj.days[day];
-            }
-        }
+        dataObj.days[day][`${field}_comments`] = comments;
+        markSyncUpdated(dataObj.days[day]);
     }
 
     snowsprintLastEditTime = Date.now();
@@ -9321,17 +9304,14 @@ function handleHanaponBoxInput(event) {
     const field = target.dataset.field;
     if (field === 'carryover') {
         typeData.carryover = parsed;
+        markSyncUpdated(typeData);
     } else {
         const day = target.dataset.day;
         if (!field || !day) return;
         if (!typeData.days) typeData.days = {};
         if (!typeData.days[day]) typeData.days[day] = {};
-        if (parsed === 0) {
-            delete typeData.days[day][field];
-            if (Object.keys(typeData.days[day]).length === 0) delete typeData.days[day];
-        } else {
-            typeData.days[day][field] = parsed;
-        }
+        typeData.days[day][field] = parsed;
+        markSyncUpdated(typeData.days[day]);
     }
 
     if (inputCompany === HANAPON_BOX_LEGACY_COMPANY_KEY) {
@@ -9517,6 +9497,7 @@ let shiftRotationOrder = [...SHIFT_DEFAULT_ROTATION];
 const SHIFT_DEFAULT_NAMES = ["西岡", "滝沢", "大竹", "臼井", "村田", "今枝"];
 let shiftNames = [...SHIFT_DEFAULT_NAMES];
 let shiftOverrides = {};
+let shiftUpdatedAt = 0;
 
 let shiftBaseDate = new Date("2026-03-30");
 const shiftBaseEarlyIndex = 0;
@@ -9538,13 +9519,15 @@ try {
             members: shiftNames,
             rotation_order: shiftRotationOrder,
             base_date: shiftBaseDate.toISOString().split('T')[0],
-            overrides: shiftOverrides
+            overrides: shiftOverrides,
+            _syncUpdatedAt: shiftUpdatedAt
         }),
         setLocal: value => {
             if (Array.isArray(value.members)) shiftNames = value.members;
             if (Array.isArray(value.rotation_order)) shiftRotationOrder = value.rotation_order;
             if (value.base_date) shiftBaseDate = new Date(value.base_date);
             shiftOverrides = value.overrides && typeof value.overrides === 'object' ? value.overrides : {};
+            shiftUpdatedAt = Number(value._syncUpdatedAt) || 0;
         },
         onRemote: () => {
             const activeEl = document.activeElement;
@@ -9558,11 +9541,13 @@ try {
 
 function shiftSaveAllData() {
     if (!canWriteAppData()) return false;
+    shiftUpdatedAt = Date.now();
     const value = {
         members: shiftNames,
         rotation_order: shiftRotationOrder,
         base_date: shiftBaseDate.toISOString().split('T')[0],
-        overrides: shiftOverrides
+        overrides: shiftOverrides,
+        _syncUpdatedAt: shiftUpdatedAt
     };
     if (shiftDataSync) return shiftDataSync.save(value);
     return false;
@@ -9977,6 +9962,11 @@ function getCurrentBoard() {
     return boardsData.find(b => b.id === currentBoardId) || null;
 }
 
+function markProjectItemUpdated(item, updatedAt = Date.now()) {
+    if (item && typeof item === 'object') item._syncUpdatedAt = updatedAt;
+    return updatedAt;
+}
+
 // ---- Board (Project) CRUD ----
 
 window.createNewBoard = function() {
@@ -9987,8 +9977,9 @@ window.createNewBoard = function() {
         id: Date.now().toString() + '-' + Math.random().toString(36).substr(2, 9),
         name: name.trim(),
         columns: [
-            { id: 'col-' + Date.now() + '-1', title: '', tasks: [] }
-        ]
+            { id: 'col-' + Date.now() + '-1', title: '', tasks: [], _syncUpdatedAt: Date.now() }
+        ],
+        _syncUpdatedAt: Date.now()
     };
 
     boardsData.push(newBoard);
@@ -10083,6 +10074,7 @@ window.editBoardName = function(boardId) {
     const newName = prompt('プロジェクトの新しい名前を入力してください:', board.name);
     if (newName && newName.trim() !== '' && newName.trim() !== board.name) {
         board.name = newName.trim();
+        markProjectItemUpdated(board);
         saveBoardsToFirebase();
         renderBoard();
         renderProjectList();
@@ -10161,7 +10153,8 @@ window.addColumn = function() {
         id: 'col-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
         title: '新しいカラム',
         tasks: [],
-        colorIndex: nextColorIndex
+        colorIndex: nextColorIndex,
+        _syncUpdatedAt: Date.now()
     };
     board.columns.push(newCol);
     saveBoardsToFirebase();
@@ -10191,6 +10184,7 @@ window.onColumnTitleChange = function(colId, newTitle) {
     const col = board.columns.find(c => c.id === colId);
     if (col) {
         col.title = newTitle;
+        markProjectItemUpdated(col);
         saveBoardsToFirebase();
     }
 };
@@ -10263,6 +10257,7 @@ window.handleTaskSubmit = function(e) {
         status: document.getElementById('task-status').value,
         startDate: document.getElementById('task-start-date').value,
         dueDate: document.getElementById('task-due-date').value,
+        _syncUpdatedAt: Date.now()
     };
 
     const col = board.columns.find(c => c.id === columnId);
@@ -10715,7 +10710,8 @@ window.submitTaskComment = function() {
     task.comments.push({
         id: Date.now().toString(),
         text: text,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        _syncUpdatedAt: Date.now()
     });
     
     saveBoardsToFirebase();

@@ -63,7 +63,18 @@ function normalizeKenpinRecords(value) {
     const list = Array.isArray(value)
         ? value
         : Object.values(value && typeof value === 'object' ? value : {});
-    return list.filter(item => item && typeof item === 'object');
+    return list.filter(item => item && typeof item === 'object').map(item => {
+        const record = { ...item };
+        if (!record._syncKey && record.id !== undefined && record.id !== null) {
+            record._syncKey = `kenpin:${record.id}`;
+        }
+        return record;
+    });
+}
+
+function markKenpinRecordUpdated(record, updatedAt = Date.now()) {
+    if (record && typeof record === 'object') record._syncUpdatedAt = updatedAt;
+    return updatedAt;
 }
 
 if (database && window.SharedSync) {
@@ -225,7 +236,8 @@ function addBlankRow() {
         rejectB: 0,
         rejectSide: 0,
         operator: '',
-        notes: ''
+        notes: '',
+        _syncUpdatedAt: Date.now()
     };
     records.push(record);
     save();
@@ -354,7 +366,8 @@ function createRecordFromBlank(inputEl) {
         rejectB: 0,
         rejectSide: 0,
         operator: '',
-        notes: ''
+        notes: '',
+        _syncUpdatedAt: Date.now()
     };
     const field = inputEl.getAttribute('data-field');
     record[field] = normalizeFieldValue(field, inputEl.value);
@@ -400,6 +413,7 @@ function updateField(id, field, val, options = {}) {
     }
 
     r[field] = parsedVal;
+    markKenpinRecordUpdated(r);
     save();
     if (options.render !== false) renderRecords();
 }

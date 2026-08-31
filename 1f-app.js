@@ -74,6 +74,7 @@ let noteSaveTimeout = null;
 let recordsSync = null;
 let notesSync = null;
 let recordsNeedCleanup = false;
+const RECORD_UPDATED_AT_FIELD = '_syncUpdatedAt';
 
 
 // Real-time synchronization from Firebase
@@ -85,7 +86,30 @@ function get1fRecordSyncKey(record) {
     return `1f:${date}:${machine}`;
 }
 
+function get1fRecordUpdatedAt(record) {
+    const updatedAt = Number(record?.[RECORD_UPDATED_AT_FIELD]);
+    return Number.isFinite(updatedAt) && updatedAt > 0 ? updatedAt : 0;
+}
+
+function mark1fRecordUpdated(record, updatedAt = Date.now()) {
+    if (record && typeof record === 'object') record[RECORD_UPDATED_AT_FIELD] = updatedAt;
+    return updatedAt;
+}
+
 function merge1fDuplicateRecords(primary, duplicate) {
+    const primaryUpdatedAt = get1fRecordUpdatedAt(primary);
+    const duplicateUpdatedAt = get1fRecordUpdatedAt(duplicate);
+    if (primaryUpdatedAt !== duplicateUpdatedAt && (primaryUpdatedAt > 0 || duplicateUpdatedAt > 0)) {
+        const newer = primaryUpdatedAt > duplicateUpdatedAt ? primary : duplicate;
+        const older = newer === primary ? duplicate : primary;
+        return {
+            ...older,
+            ...newer,
+            _syncKey: primary._syncKey || duplicate._syncKey,
+            [RECORD_UPDATED_AT_FIELD]: Math.max(primaryUpdatedAt, duplicateUpdatedAt)
+        };
+    }
+
     const merged = { ...primary };
     const primaryCount = Number(merged.count);
     const duplicateCount = Number(duplicate.count);
@@ -110,6 +134,8 @@ function merge1fDuplicateRecords(primary, duplicate) {
     });
 
     merged._syncKey = primary._syncKey || duplicate._syncKey;
+    const updatedAt = Math.max(primaryUpdatedAt, duplicateUpdatedAt);
+    if (updatedAt > 0) merged[RECORD_UPDATED_AT_FIELD] = updatedAt;
     return merged;
 }
 
@@ -449,7 +475,8 @@ function handleAddRecord(e) {
         machine,
         startTime: startTimeInput.value,
         endTime: endTimeInput.value,
-        count: parseInt(document.getElementById('count-1f').value || 0)
+        count: parseInt(document.getElementById('count-1f').value || 0),
+        [RECORD_UPDATED_AT_FIELD]: Date.now()
     };
 
     const existingRecord = records.find(item => item.date === currentDate && item.machine === machine);
@@ -457,6 +484,7 @@ function handleAddRecord(e) {
         existingRecord.startTime = record.startTime;
         existingRecord.endTime = record.endTime;
         existingRecord.count = record.count;
+        mark1fRecordUpdated(existingRecord, record[RECORD_UPDATED_AT_FIELD]);
     } else {
         records.push(record);
     }
@@ -518,7 +546,8 @@ function ensureDayRecords(date) {
                 startTime: '08:45',
                 endTime: '17:00',
                 count: 0,
-                notes: ''
+                notes: '',
+                [RECORD_UPDATED_AT_FIELD]: 0
             });
             updated = true;
         }
@@ -538,6 +567,7 @@ function updateRecord(id, field, value) {
     } else {
         record[field] = value;
     }
+    mark1fRecordUpdated(record);
     
     saveRecords(); // Normal full sync
     calculateAndDisplayStats();
@@ -764,6 +794,7 @@ function clearRow(id) {
     if (!record) return;
     record.count = 0;
     record.notes = '';
+    mark1fRecordUpdated(record);
     saveRecords();
     renderRecords();
 }
@@ -794,6 +825,7 @@ window.instantUpdateCount = function(id, value, inputEl) {
     
     const numVal = parseInt(value);
     record.count = isNaN(numVal) ? 0 : numVal;
+    mark1fRecordUpdated(record);
     
     // Update the duration calculation (if applicable, though row doesn't show it anymore, stats use it)
     // Update the cumulative total cell for this row
@@ -844,11 +876,7 @@ window.saveDailyNotes1f = function() {
     if (!textarea) return;
 
     const text = textarea.value.trim();
-    if (text) {
-        dailyNotes[currentDate] = text;
-    } else {
-        delete dailyNotes[currentDate];
-    }
+    dailyNotes[currentDate] = text;
 
     safeLocalStorageSetItem(NOTES_LS_KEY, JSON.stringify(dailyNotes));
 

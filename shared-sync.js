@@ -1,8 +1,8 @@
 (function (global) {
     'use strict';
 
-    const BUILD_ID = '20260821-ios-cache-quarantine-v42';
-    const BUILD_NUMBER = 2026082142;
+    const BUILD_ID = '20260831-stale-write-protection-v43';
+    const BUILD_NUMBER = 2026083143;
     const VERSION_PATH = 'app-version.json';
     const VERSION_CHECK_INTERVAL_MS = 30000;
     const LATEST_BUILD_KEY = 'nippo_latest_app_build_number';
@@ -137,6 +137,12 @@
             );
         }
         return false;
+    }
+
+    function getSyncUpdatedAt(value) {
+        if (!isPlainObject(value)) return 0;
+        const updatedAt = Number(value._syncUpdatedAt);
+        return Number.isFinite(updatedAt) && updatedAt > 0 ? updatedAt : 0;
     }
 
     function collectionKey(value) {
@@ -282,6 +288,8 @@
 
         if (isPlainObject(base) || isPlainObject(local) || isPlainObject(remote)) {
             const result = {};
+            const localUpdatedAt = getSyncUpdatedAt(local);
+            const remoteUpdatedAt = getSyncUpdatedAt(remote);
             const keys = new Set([
                 ...Object.keys(isPlainObject(base) ? base : {}),
                 ...Object.keys(isPlainObject(local) ? local : {}),
@@ -293,7 +301,37 @@
                 const localHas = isPlainObject(local) && Object.prototype.hasOwnProperty.call(local, key);
                 const remoteHas = isPlainObject(remote) && Object.prototype.hasOwnProperty.call(remote, key);
 
+                if (key === '_syncUpdatedAt') {
+                    const updatedAt = Math.max(
+                        getSyncUpdatedAt(base),
+                        localUpdatedAt,
+                        remoteUpdatedAt
+                    );
+                    if (updatedAt > 0) result[key] = updatedAt;
+                    continue;
+                }
+
                 if (!localHas && !remoteHas) continue;
+
+                const localChanged = localHas !== baseHas
+                    || (localHas && baseHas && !valuesEqual(local[key], base[key]));
+                const remoteChanged = remoteHas !== baseHas
+                    || (remoteHas && baseHas && !valuesEqual(remote[key], base[key]));
+                const localValue = localHas ? local[key] : undefined;
+                const remoteValue = remoteHas ? remote[key] : undefined;
+                const canResolveByTimestamp = localHas && remoteHas
+                    && localChanged && remoteChanged
+                    && !valuesEqual(localValue, remoteValue)
+                    && !isPlainObject(localValue)
+                    && !isPlainObject(remoteValue)
+                    && localUpdatedAt !== remoteUpdatedAt
+                    && (localUpdatedAt > 0 || remoteUpdatedAt > 0);
+
+                if (canResolveByTimestamp) {
+                    result[key] = cloneValue(localUpdatedAt > remoteUpdatedAt ? localValue : remoteValue);
+                    continue;
+                }
+
                 if (!baseHas) {
                     if (localHas && remoteHas) {
                         result[key] = mergeThreeWay(undefined, local[key], remote[key]);
@@ -676,7 +714,12 @@
         const loadedUntrustedPending = Boolean(pending && protectFromStalePending && !pending._trusted);
         let retainUntrustedStoredPending = loadedUntrustedPending
             && !preserveStalePending(pendingKey, pending._raw);
-        let serverSnapshot = pending
+        // Once the old payload has been copied to a recovery key, remove it
+        // from the active queue. A new edit made before the first Firebase
+        // response must not be attached to, and then discarded with, that old
+        // Safari payload.
+        if (loadedUntrustedPending && !retainUntrustedStoredPending) pending = null;
+        let serverSnapshot = pending && pending._trusted
             ? cloneValue(pending.base)
             : storedServerSnapshot.found ? cloneValue(storedServerSnapshot.value) : cloneValue(emptyValue);
         let ready = false;
@@ -684,6 +727,10 @@
         let retryTimer = null;
 
         const getLocal = () => normalize(options.getLocal());
+        // This is the exact state the user saw when the page opened. If they
+        // edit before Firebase's first value event, it is the only correct
+        // three-way merge baseline (especially for clearing an old value).
+        const initialLocalBaseline = cloneValue(getLocal());
         const setLocal = (value, meta) => {
             if (typeof options.setLocal === 'function') {
                 options.setLocal(normalize(value), meta || {});
@@ -747,20 +794,19 @@
         function save(value) {
             if (!canWrite()) return false;
             const localValue = normalize(value);
-            if (!pending) {
+            if (!pending || (protectFromStalePending && !pending._trusted)) {
                 pending = {
-                    base: cloneValue(serverSnapshot),
+                    base: cloneValue(ready ? serverSnapshot : initialLocalBaseline),
                     local: cloneValue(localValue),
                     _trusted: true
                 };
+                retainUntrustedStoredPending = false;
             } else {
                 pending.local = cloneValue(localValue);
             }
             pending.savedAt = new Date().toISOString();
             pending.buildNumber = BUILD_NUMBER;
-            if (!(protectFromStalePending && !ready && loadedUntrustedPending)) {
-                pending._trusted = true;
-            }
+            pending._trusted = true;
             persistCurrentPending();
             flush();
             return true;
@@ -784,12 +830,7 @@
                             quarantinedStalePending: true
                         });
                     } else {
-                        const noKnownBaseline = !storedServerSnapshot.found
-                            && isEmptyValue(pending.base)
-                            && !isEmptyValue(remote);
-                        const merged = noKnownBaseline
-                            ? mergeInitialValue(pending.local, remote)
-                            : merge(pending.base, pending.local, remote);
+                        const merged = merge(pending.base, pending.local, remote);
                         pending = { base: cloneValue(remote), local: cloneValue(merged), _trusted: true };
                         setLocal(merged, { source: 'initial', pending: true });
                     }

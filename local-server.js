@@ -6,6 +6,7 @@ const path = require('path');
 
 const HOST = '127.0.0.1';
 const PORT = Number(process.env.PORT || 8765);
+const SAFE_PREVIEW = process.env.SAFE_PREVIEW === '1';
 const ROOT = path.resolve(__dirname);
 
 const CONTENT_TYPES = {
@@ -24,11 +25,13 @@ function isInsideRoot(filePath) {
 }
 
 function send(response, statusCode, body, contentType) {
-    response.writeHead(statusCode, {
+    const headers = {
         'Access-Control-Allow-Origin': '*',
         'Cache-Control': 'no-store',
         'Content-Type': contentType
-    });
+    };
+    if (SAFE_PREVIEW) headers['Content-Security-Policy'] = "connect-src 'none'";
+    response.writeHead(statusCode, headers);
     if (response.req.method !== 'HEAD') response.end(body);
     else response.end();
 }
@@ -83,5 +86,6 @@ server.on('error', error => {
 
 server.listen(PORT, HOST, () => {
     console.log(`Local app: http://${HOST}:${PORT}/index.html`);
+    if (SAFE_PREVIEW) console.log('Safe preview: external data connections are blocked.');
     console.log('Close this window to stop the local server.');
 });

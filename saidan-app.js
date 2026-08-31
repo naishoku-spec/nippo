@@ -65,7 +65,18 @@ function normalizeSaidanRecords(value) {
     const list = Array.isArray(value)
         ? value
         : Object.values(value && typeof value === 'object' ? value : {});
-    return list.filter(item => item && typeof item === 'object');
+    return list.filter(item => item && typeof item === 'object').map(item => {
+        const record = { ...item };
+        if (!record._syncKey && record.id !== undefined && record.id !== null) {
+            record._syncKey = `saidan:${record.id}`;
+        }
+        return record;
+    });
+}
+
+function markSaidanRecordUpdated(record, updatedAt = Date.now()) {
+    if (record && typeof record === 'object') record._syncUpdatedAt = updatedAt;
+    return updatedAt;
 }
 
 if (database && window.SharedSync) {
@@ -155,7 +166,8 @@ function ensureMinRows(date) {
                 startTime: '',
                 endTime: '',
                 worker: '',
-                notes: ''
+                notes: '',
+                _syncUpdatedAt: 0
             });
             updated = true;
         }
@@ -416,6 +428,7 @@ function handleAddRecord(e) {
         emptyRecord.endTime = endTimeInput.value;
         emptyRecord.worker = workerInput ? workerInput.value.trim() : '';
         emptyRecord.notes = noteInput ? noteInput.value.trim() : '';
+        markSaidanRecordUpdated(emptyRecord);
     } else {
         const record = {
             id: Date.now() + Math.random(),
@@ -424,7 +437,8 @@ function handleAddRecord(e) {
             startTime: startTimeInput.value,
             endTime: endTimeInput.value,
             worker: workerInput ? workerInput.value.trim() : '',
-            notes: noteInput ? noteInput.value.trim() : ''
+            notes: noteInput ? noteInput.value.trim() : '',
+            _syncUpdatedAt: Date.now()
         };
         records.push(record);
     }
@@ -456,6 +470,7 @@ function updateRecord(id, field, value) {
     const record = records.find(r => r.id == id);
     if (!record) return;
     record[field] = value;
+    markSaidanRecordUpdated(record);
     saveRecords();
     updateCountDisplay();
     if (currentView === 'month') renderMonthlyRecords();
@@ -589,6 +604,7 @@ function deleteRecord(id) {
                 target.startTime = '';
                 target.endTime = '';
                 target.worker = '';
+                markSaidanRecordUpdated(target);
             }
         }
 
