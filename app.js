@@ -1651,8 +1651,8 @@ const firebaseConfig = {
     measurementId: "G-SR8Y5NKQTZ"
 };
 
-const APP_BUILD_ID = '20260831-stale-write-protection-v43';
-const APP_BUILD_NUMBER = 2026083143;
+const APP_BUILD_ID = '20260902-roll-day-normalization-v44';
+const APP_BUILD_NUMBER = 2026090244;
 const APP_VERSION_METADATA_PATH = 'app-version.json';
 const APP_VERSION_CHECK_INTERVAL_MS = 30000;
 const APP_LATEST_BUILD_LS_KEY = 'nippo_latest_app_build_number';
@@ -3820,6 +3820,24 @@ function isRollHoliday(year, month, day) {
     return isJapaneseHoliday(key);
 }
 
+function normalizeRollDays(value) {
+    if (!value || typeof value !== 'object') return {};
+
+    const normalizedDays = {};
+    Object.keys(value).forEach(rawDay => {
+        if (!/^\d+$/.test(rawDay)) return;
+
+        const day = Number.parseInt(rawDay, 10);
+        const dayData = value[rawDay];
+        if (day < 1 || day > 31 || !dayData || typeof dayData !== 'object' || Array.isArray(dayData)) return;
+
+        // Realtime Database may return a numeric-key map such as { "1": ... }
+        // as an array. Canonical day keys keep every date stable after syncing.
+        normalizedDays[String(day)] = dayData;
+    });
+    return normalizedDays;
+}
+
 function normalizeRollData(value) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
 
@@ -3838,8 +3856,8 @@ function normalizeRollData(value) {
         ROLL_TYPES.forEach(type => {
             if (!monthData[type] || typeof monthData[type] !== 'object' || Array.isArray(monthData[type])) {
                 monthData[type] = { carryover: 0, days: {} };
-            } else if (!monthData[type].days || typeof monthData[type].days !== 'object' || Array.isArray(monthData[type].days)) {
-                monthData[type].days = {};
+            } else {
+                monthData[type].days = normalizeRollDays(monthData[type].days);
             }
         });
     });
@@ -4020,7 +4038,7 @@ function getRollMonthData(year, month) {
     }
     ROLL_TYPES.forEach(type => {
         if (!rollAllData[key][type]) rollAllData[key][type] = { carryover: 0, days: {} };
-        if (!rollAllData[key][type].days) rollAllData[key][type].days = {};
+        rollAllData[key][type].days = normalizeRollDays(rollAllData[key][type].days);
     });
     return rollAllData[key];
 }

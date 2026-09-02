@@ -1,8 +1,8 @@
 (function (global) {
     'use strict';
 
-    const BUILD_ID = '20260831-stale-write-protection-v43';
-    const BUILD_NUMBER = 2026083143;
+    const BUILD_ID = '20260902-roll-day-normalization-v44';
+    const BUILD_NUMBER = 2026090244;
     const VERSION_PATH = 'app-version.json';
     const VERSION_CHECK_INTERVAL_MS = 30000;
     const LATEST_BUILD_KEY = 'nippo_latest_app_build_number';
