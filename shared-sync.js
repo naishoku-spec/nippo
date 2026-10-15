@@ -1,8 +1,8 @@
 (function (global) {
     'use strict';
 
-    const BUILD_ID = '20260902-roll-day-normalization-v44';
-    const BUILD_NUMBER = 2026090244;
+    const BUILD_ID = '20261015-holiday-wheel-blank-v45';
+    const BUILD_NUMBER = 2026101545;
     const VERSION_PATH = 'app-version.json';
     const VERSION_CHECK_INTERVAL_MS = 30000;
     const LATEST_BUILD_KEY = 'nippo_latest_app_build_number';
@@ -26,6 +26,17 @@
     }
 
     clearRefreshMarker();
+
+    // Release focused number fields before the browser applies its native wheel step.
+    if (typeof global.matchMedia === 'function' &&
+        global.matchMedia('(any-hover: hover) and (any-pointer: fine)').matches) {
+        document.addEventListener('wheel', event => {
+            const focusedInput = document.activeElement;
+            if (event.target === focusedInput && focusedInput?.matches?.('input[type="number"]')) {
+                focusedInput.blur();
+            }
+        }, { capture: true, passive: true });
+    }
 
     let versionIsStale = false;
     let versionCheckInFlight = false;

@@ -1651,8 +1651,8 @@ const firebaseConfig = {
     measurementId: "G-SR8Y5NKQTZ"
 };
 
-const APP_BUILD_ID = '20260902-roll-day-normalization-v44';
-const APP_BUILD_NUMBER = 2026090244;
+const APP_BUILD_ID = '20261015-holiday-wheel-blank-v45';
+const APP_BUILD_NUMBER = 2026101545;
 const APP_VERSION_METADATA_PATH = 'app-version.json';
 const APP_VERSION_CHECK_INTERVAL_MS = 30000;
 const APP_LATEST_BUILD_LS_KEY = 'nippo_latest_app_build_number';
@@ -3410,9 +3410,9 @@ function isFixedHoliday(y, m, d) {
 function ensureDayRecords(date) {
     if (!canWriteAppData()) return;
 
-    // Skip if weekend (Saturday=6, Sunday=0) or Holiday
+    // Weekday holidays can have production records; only weekends skip defaults.
     const dayOfWeek = new Date(date).getDay();
-    if (dayOfWeek === 0 || dayOfWeek === 6 || isJapaneseHoliday(date)) return;
+    if (dayOfWeek === 0 || dayOfWeek === 6) return;
 
     const existingMachines = records.filter(r => r.date === date).map(r => r.machine);
     let updated = false;
@@ -5412,8 +5412,8 @@ function updateHanaponCell(input) {
     const day = input.dataset.day;
     const field = input.dataset.field;
     let value = input.value.trim();
-    value = value === '' ? 0 : parseInt(value);
-    if (isNaN(value)) return;
+    value = value === '' ? '' : parseInt(value, 10);
+    if (value !== '' && isNaN(value)) return;
 
     const key = `${hanaponCurrentYear}-${hanaponCurrentMonth}`;
     if (!hanaponAllData[key] || !hanaponAllData[key][typeKey]) return;

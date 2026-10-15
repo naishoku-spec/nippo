@@ -530,7 +530,8 @@ function ensureDayRecords(date) {
     recordsNeedCleanup = false;
 
     const dayOfWeek = new Date(date).getDay();
-    if (dayOfWeek === 0 || dayOfWeek === 6 || isJapaneseHoliday(date)) {
+    // Holidays on weekdays are valid production days; only weekends skip defaults.
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
         if (updated) saveRecords();
         return;
     }
