@@ -1,8 +1,8 @@
 (function (global) {
     'use strict';
 
-    const BUILD_ID = '20261015-holiday-wheel-blank-v45';
-    const BUILD_NUMBER = 2026101545;
+    const BUILD_ID = '20261019-report-display-safety-v52';
+    const BUILD_NUMBER = 2026101952;
     const VERSION_PATH = 'app-version.json';
     const VERSION_CHECK_INTERVAL_MS = 30000;
     const LATEST_BUILD_KEY = 'nippo_latest_app_build_number';
@@ -37,6 +37,59 @@
             }
         }, { capture: true, passive: true });
     }
+
+    function isDigitOnlyInput(target) {
+        if (!(target instanceof global.HTMLInputElement) || target.type !== 'number') return false;
+        if (target.closest('[data-progress-entry], .progress-entry, .task-progress-entry')) return false;
+
+        const fieldDescription = [
+            target.id,
+            target.name,
+            target.className,
+            target.dataset.field,
+            target.dataset.type
+        ].join(' ');
+        return !/(?:progress|進捗)/i.test(fieldDescription);
+    }
+
+    function configureDigitOnlyInput(input) {
+        input.inputMode = 'numeric';
+        input.step = '1';
+        if (!input.hasAttribute('min')) input.min = '0';
+    }
+
+    document.addEventListener('focusin', event => {
+        if (isDigitOnlyInput(event.target)) configureDigitOnlyInput(event.target);
+    }, true);
+
+    document.addEventListener('keydown', event => {
+        if (!isDigitOnlyInput(event.target)) return;
+        configureDigitOnlyInput(event.target);
+        if (event.isComposing || event.ctrlKey || event.metaKey || event.altKey) return;
+        if (event.key.length === 1 && !/^[0-9]$/.test(event.key)) event.preventDefault();
+    }, true);
+
+    document.addEventListener('beforeinput', event => {
+        if (!isDigitOnlyInput(event.target) || !event.inputType.startsWith('insert')) return;
+        configureDigitOnlyInput(event.target);
+        let insertedText = event.data;
+        if (insertedText == null && event.dataTransfer) {
+            insertedText = event.dataTransfer.getData('text/plain');
+        }
+        if (insertedText != null && /[^0-9]/.test(insertedText)) event.preventDefault();
+    }, true);
+
+    document.addEventListener('paste', event => {
+        if (!isDigitOnlyInput(event.target)) return;
+        const pastedText = event.clipboardData?.getData('text/plain');
+        if (pastedText != null && /[^0-9]/.test(pastedText)) event.preventDefault();
+    }, true);
+
+    document.addEventListener('drop', event => {
+        if (!isDigitOnlyInput(event.target)) return;
+        const droppedText = event.dataTransfer?.getData('text/plain');
+        if (droppedText != null && /[^0-9]/.test(droppedText)) event.preventDefault();
+    }, true);
 
     let versionIsStale = false;
     let versionCheckInFlight = false;
@@ -75,6 +128,15 @@
         });
         window.addEventListener('online', flushBeforeSuspend);
         window.addEventListener('pageshow', flushBeforeSuspend);
+    }
+
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
     }
 
     function cloneValue(value) {
@@ -931,6 +993,7 @@
     global.SharedSync = {
         BUILD_ID,
         BUILD_NUMBER,
+        escapeHtml,
         cloneValue,
         readLocalJson,
         valuesEqual,

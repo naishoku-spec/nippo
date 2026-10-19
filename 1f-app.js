@@ -362,14 +362,19 @@ function switchView(view) {
     }
 }
 
+function getMachineBadgeClass(machine) {
+    return MACHINES.includes(machine) ? ` machine-badge-${machine.toLowerCase()}` : '';
+}
+
 // Monthly Records
 function renderMonthlyRecords() {
     const currentMonth = currentDate.substring(0, 7);
     const monthRecords = records.filter(r => r.date && r.date.startsWith(currentMonth));
 
     // Machine-specific monthly data
-    const machineData = {};
-    MACHINES.forEach(m => { machineData[m] = { total: 0, days: 0 }; });
+    const machines = [...new Set([...MACHINES, ...monthRecords.map(r => r.machine)])];
+    const machineData = Object.create(null);
+    machines.forEach(m => { machineData[m] = { total: 0, days: 0 }; });
 
     const dailyData = {};
     let totalMonthCount = 0;
@@ -390,9 +395,9 @@ function renderMonthlyRecords() {
 
     // Machine list
     const machineListEl = document.getElementById('monthly-machine-list');
-    machineListEl.innerHTML = MACHINES.map(m => `
+    machineListEl.innerHTML = machines.map(m => `
         <div class="monthly-machine-item">
-            <span class="machine-badge machine-badge-${m.toLowerCase()}">${m}</span>
+            <span class="machine-badge${getMachineBadgeClass(m)}">${SharedSync.escapeHtml(m)}</span>
             <div class="stats-data">
                 <div class="total-val">${machineData[m].total.toLocaleString()}</div>
                 <div class="avg-val">${machineData[m].days}日 / 平均 ${machineData[m].days > 0 ? Math.round(machineData[m].total / machineData[m].days).toLocaleString() : 0}</div>
@@ -443,9 +448,9 @@ function renderMonthlyRecords() {
         html += `
             <tr>
                 <td style="color: var(--text-muted); font-size: 0.85rem;">${r.date.split('-')[1]}/${r.date.split('-')[2]}</td>
-                <td class="machine-cell"><span class="machine-badge machine-badge-${r.machine.toLowerCase()}">${r.machine}</span></td>
-                <td class="time-cell">${r.startTime || ''}</td>
-                <td class="time-cell">${r.endTime || ''}</td>
+                <td class="machine-cell"><span class="machine-badge${getMachineBadgeClass(r.machine)}">${SharedSync.escapeHtml(r.machine)}</span></td>
+                <td class="time-cell">${SharedSync.escapeHtml(r.startTime)}</td>
+                <td class="time-cell">${SharedSync.escapeHtml(r.endTime)}</td>
                 <td style="text-align: right; font-weight: 700; color: var(--primary);">${r.count > 0 ? r.count.toLocaleString() : ''}</td>
             </tr>
 
@@ -620,15 +625,15 @@ function renderRecords() {
         const tr = document.createElement('tr');
 
         tr.innerHTML = `
-            <td class="machine-cell"><span class="machine-badge machine-badge-${record.machine.toLowerCase()}">${record.machine}</span></td>
+            <td class="machine-cell"><span class="machine-badge${getMachineBadgeClass(record.machine)}">${SharedSync.escapeHtml(record.machine)}</span></td>
             <td class="time-cell">
-                <input type="text" class="inline-input" value="${record.startTime}"
+                <input type="text" class="inline-input" value="${SharedSync.escapeHtml(record.startTime)}"
                        placeholder="HH:mm" inputmode="numeric" onfocus="this.select()"
                        oninput="updateRecord(${record.id}, 'startTime', this.value)"
                        onblur="this.value = normalizeTime(this.value); updateRecord(${record.id}, 'startTime', this.value)" >
             </td>
             <td class="time-cell">
-                <input type="text" class="inline-input" value="${record.endTime}"
+                <input type="text" class="inline-input" value="${SharedSync.escapeHtml(record.endTime)}"
                        placeholder="HH:mm" inputmode="numeric" onfocus="this.select()"
                        oninput="updateRecord(${record.id}, 'endTime', this.value)"
                        onblur="this.value = normalizeTime(this.value); updateRecord(${record.id}, 'endTime', this.value)" >
@@ -695,7 +700,7 @@ function renderTrashList() {
             user-select: none;
         `;
         chip.innerHTML = `
-            <span style="font-weight: 600; color: #c53030;">${record.machine}</span>
+            <span style="font-weight: 600; color: #c53030;">${SharedSync.escapeHtml(record.machine)}</span>
             <span style="color: #718096; max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${record.count > 0 ? record.count.toLocaleString() : '(0)'}</span>
             <svg width="12" height="12" fill="#e53e3e" viewBox="0 0 16 16">
                 <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>

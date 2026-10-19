@@ -285,7 +285,7 @@ function renderMonthlyRecords() {
     const totalCount = validRecords.length;
 
     // 製品別集計
-    const productMap = {};
+    const productMap = Object.create(null);
     validRecords.forEach(r => {
         const p = r.product.trim();
         productMap[p] = (productMap[p] || 0) + 1;
@@ -311,7 +311,7 @@ function renderMonthlyRecords() {
             const sortedProducts = Object.entries(productMap).sort((a, b) => b[1] - a[1]);
             productListContainer.innerHTML = sortedProducts.map(([name, count]) => `
                 <div class="monthly-product-item">
-                    <div class="monthly-product-name" title="${name}">${name}</div>
+                    <div class="monthly-product-name" title="${SharedSync.escapeHtml(name)}">${SharedSync.escapeHtml(name)}</div>
                     <div class="monthly-product-count">${count} 件</div>
                 </div>
             `).join('');
@@ -348,12 +348,11 @@ function renderMonthlyRecords() {
             }
 
             const hasNote = r.notes && r.notes.trim() !== '';
-            // エスケープ処理して安全に属性に埋め込む
-            const safeNote = hasNote ? r.notes.trim().replace(/"/g, '&quot;').replace(/'/g, '&#39;') : '';
+            const safeNote = hasNote ? SharedSync.escapeHtml(r.notes.trim()) : '';
 
             const noteHtml = hasNote ? `
-                <div class="month-note-cell-content" onclick="openSaidanNoteModal('${safeNote.replace(/\n/g, '\\n')}')" title="タップして全文を表示">
-                    <span class="note-text-snippet">${r.notes.trim()}</span>
+                <div class="month-note-cell-content" data-note="${safeNote}" onclick="openSaidanNoteModal(this.dataset.note)" title="タップして全文を表示">
+                    <span class="note-text-snippet">${safeNote}</span>
                     <span style="font-size: 0.75rem;">🔍</span>
                 </div>
             ` : '<span style="color: var(--text-muted);">-</span>';
@@ -361,10 +360,10 @@ function renderMonthlyRecords() {
             html += `
                 <tr>
                     <td class="col-date" style="color: var(--text-muted); font-size: 0.85rem;">${r.date}</td>
-                    <td style="font-weight: 600; text-align: center;">${r.product}</td>
-                    <td style="text-align: center;">${r.startTime || '-'}</td>
-                    <td style="text-align: center;">${r.endTime || '-'}</td>
-                    <td style="text-align: center;">${r.worker || '-'}</td>
+                    <td style="font-weight: 600; text-align: center;">${SharedSync.escapeHtml(r.product)}</td>
+                    <td style="text-align: center;">${SharedSync.escapeHtml(r.startTime || '-')}</td>
+                    <td style="text-align: center;">${SharedSync.escapeHtml(r.endTime || '-')}</td>
+                    <td style="text-align: center;">${SharedSync.escapeHtml(r.worker || '-')}</td>
                     <td class="month-note-td">${noteHtml}</td>
                 </tr>
             `;
@@ -510,19 +509,19 @@ function renderRecords() {
             <!-- 1段目: 番号, 製品名/稼働内容, 開始, 終了, 作業者 -->
             <div class="saidan-row-top">
                 <span class="row-number">${index + 1}</span>
-                <input type="text" class="saidan-inline-input" value="${record.product || ''}"
+                <input type="text" class="saidan-inline-input" value="${SharedSync.escapeHtml(record.product)}"
                        placeholder="製品名を入力"
                        oninput="updateRecord(${record.id}, 'product', this.value)"
                        onblur="updateRecord(${record.id}, 'product', this.value)">
-                <input type="text" class="saidan-inline-input time-input" value="${record.startTime || ''}"
+                <input type="text" class="saidan-inline-input time-input" value="${SharedSync.escapeHtml(record.startTime)}"
                        placeholder="開始" inputmode="numeric" onfocus="this.select()"
                        oninput="updateRecord(${record.id}, 'startTime', this.value)"
                        onblur="this.value = normalizeTime(this.value); updateRecord(${record.id}, 'startTime', this.value)">
-                <input type="text" class="saidan-inline-input time-input" value="${record.endTime || ''}"
+                <input type="text" class="saidan-inline-input time-input" value="${SharedSync.escapeHtml(record.endTime)}"
                        placeholder="終了" inputmode="numeric" onfocus="this.select()"
                        oninput="updateRecord(${record.id}, 'endTime', this.value)"
                        onblur="this.value = normalizeTime(this.value); updateRecord(${record.id}, 'endTime', this.value)">
-                <input type="text" class="saidan-inline-input time-input" value="${record.worker || ''}"
+                <input type="text" class="saidan-inline-input time-input" value="${SharedSync.escapeHtml(record.worker)}"
                        placeholder="作業者"
                        oninput="updateRecord(${record.id}, 'worker', this.value)"
                        onblur="updateRecord(${record.id}, 'worker', this.value)">
@@ -532,7 +531,7 @@ function renderRecords() {
                 <span class="notes-label">📝 備考</span>
                 <textarea class="saidan-notes-textarea" placeholder="備考・特記事項を入力..."
                           oninput="autoResizeTextarea(this); updateRecord(${record.id}, 'notes', this.value)"
-                          onblur="updateRecord(${record.id}, 'notes', this.value)">${record.notes || ''}</textarea>
+                          onblur="updateRecord(${record.id}, 'notes', this.value)">${SharedSync.escapeHtml(record.notes)}</textarea>
             </div>
         `;
         container.appendChild(itemCard);
@@ -579,8 +578,8 @@ function renderTrashList() {
         const chip = document.createElement('div');
         chip.className = 'saidan-trash-chip';
         chip.innerHTML = `
-            <span style="font-weight: 600; color: #c53030;">${record.product || '(未入力)'}</span>
-            <span style="color: #718096;">${record.worker ? record.worker + ' / ' : ''}${record.startTime || ''} - ${record.endTime || ''}</span>
+            <span style="font-weight: 600; color: #c53030;">${SharedSync.escapeHtml(record.product || '(未入力)')}</span>
+            <span style="color: #718096;">${SharedSync.escapeHtml(record.worker ? record.worker + ' / ' : '')}${SharedSync.escapeHtml(record.startTime)} - ${SharedSync.escapeHtml(record.endTime)}</span>
             <svg width="12" height="12" fill="#e53e3e" viewBox="0 0 16 16">
                 <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
                 <path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>

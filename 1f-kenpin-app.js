@@ -287,11 +287,11 @@ function renderRecords() {
 
         tr.innerHTML = `
             <td class="cell-day">${idx === 0 ? dayLabel : '/'}</td>
-            <td><input type="text" class="cell-input" data-field="customer" list="customersList" value="${r.customer || ''}" title="${r.customer || ''}" oninput="if(!event.isComposing) updateFieldLive(${r.id}, 'customer', this.value)" onblur="updateField(${r.id}, 'customer', this.value)"></td>
-            <td><input type="text" class="cell-input" data-field="type" list="typesList" value="${r.type || ''}" title="${r.type || ''}" oninput="if(!event.isComposing) updateFieldLive(${r.id}, 'type', this.value)" onblur="updateField(${r.id}, 'type', this.value)"></td>
-            <td><input type="text" class="cell-input" data-field="lot" value="${r.lot || ''}" title="${r.lot || ''}" oninput="if(!event.isComposing) updateFieldLive(${r.id}, 'lot', this.value)" onblur="updateField(${r.id}, 'lot', this.value)"></td>
-            <td><input type="time" class="cell-input" data-field="startTime" value="${r.startTime || ''}" oninput="updateFieldLive(${r.id}, 'startTime', this.value)" onchange="updateField(${r.id}, 'startTime', this.value)"></td>
-            <td><input type="time" class="cell-input" data-field="endTime" value="${r.endTime || ''}" oninput="updateFieldLive(${r.id}, 'endTime', this.value)" onchange="updateField(${r.id}, 'endTime', this.value)"></td>
+            <td><input type="text" class="cell-input" data-field="customer" list="customersList" value="${SharedSync.escapeHtml(r.customer)}" title="${SharedSync.escapeHtml(r.customer)}" oninput="if(!event.isComposing) updateFieldLive(${r.id}, 'customer', this.value)" onblur="updateField(${r.id}, 'customer', this.value)"></td>
+            <td><input type="text" class="cell-input" data-field="type" list="typesList" value="${SharedSync.escapeHtml(r.type)}" title="${SharedSync.escapeHtml(r.type)}" oninput="if(!event.isComposing) updateFieldLive(${r.id}, 'type', this.value)" onblur="updateField(${r.id}, 'type', this.value)"></td>
+            <td><input type="text" class="cell-input" data-field="lot" value="${SharedSync.escapeHtml(r.lot)}" title="${SharedSync.escapeHtml(r.lot)}" oninput="if(!event.isComposing) updateFieldLive(${r.id}, 'lot', this.value)" onblur="updateField(${r.id}, 'lot', this.value)"></td>
+            <td><input type="time" class="cell-input" data-field="startTime" value="${SharedSync.escapeHtml(r.startTime)}" oninput="updateFieldLive(${r.id}, 'startTime', this.value)" onchange="updateField(${r.id}, 'startTime', this.value)"></td>
+            <td><input type="time" class="cell-input" data-field="endTime" value="${SharedSync.escapeHtml(r.endTime)}" oninput="updateFieldLive(${r.id}, 'endTime', this.value)" onchange="updateField(${r.id}, 'endTime', this.value)"></td>
             <td class="cell-readonly">${duration}</td>
             <td><input type="number" class="cell-input" data-field="orderCount" value="${r.orderCount || ''}" oninput="updateFieldLive(${r.id}, 'orderCount', this.value)" onblur="updateField(${r.id}, 'orderCount', this.value)"></td>
             <td><input type="number" class="cell-input" data-field="productCount" value="${r.productCount || ''}" oninput="updateFieldLive(${r.id}, 'productCount', this.value)" onblur="updateField(${r.id}, 'productCount', this.value)"></td>
@@ -301,7 +301,7 @@ function renderRecords() {
             <td><input type="number" class="cell-input" data-field="rejectB" value="${r.rejectB || ''}" oninput="updateFieldLive(${r.id}, 'rejectB', this.value)" onblur="updateField(${r.id}, 'rejectB', this.value)"></td>
             <td><input type="number" class="cell-input" data-field="rejectSide" value="${r.rejectSide || ''}" oninput="updateFieldLive(${r.id}, 'rejectSide', this.value)" onblur="updateField(${r.id}, 'rejectSide', this.value)"></td>
             <td class="cell-rate">${rate ? rate + '%' : ''}</td>
-            <td><input type="text" class="cell-input" data-field="operator" list="operatorsList" value="${r.operator || ''}" oninput="if(!event.isComposing) updateFieldLive(${r.id}, 'operator', this.value)" onblur="updateField(${r.id}, 'operator', this.value)"></td>
+            <td><input type="text" class="cell-input" data-field="operator" list="operatorsList" value="${SharedSync.escapeHtml(r.operator)}" oninput="if(!event.isComposing) updateFieldLive(${r.id}, 'operator', this.value)" onblur="updateField(${r.id}, 'operator', this.value)"></td>
         `;
         list.appendChild(tr);
     });

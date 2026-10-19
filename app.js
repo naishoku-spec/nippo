@@ -1651,8 +1651,8 @@ const firebaseConfig = {
     measurementId: "G-SR8Y5NKQTZ"
 };
 
-const APP_BUILD_ID = '20261015-holiday-wheel-blank-v45';
-const APP_BUILD_NUMBER = 2026101545;
+const APP_BUILD_ID = '20261019-report-display-safety-v52';
+const APP_BUILD_NUMBER = 2026101952;
 const APP_VERSION_METADATA_PATH = 'app-version.json';
 const APP_VERSION_CHECK_INTERVAL_MS = 30000;
 const APP_LATEST_BUILD_LS_KEY = 'nippo_latest_app_build_number';
@@ -2743,8 +2743,9 @@ function renderComboboxDropdownItems(dropdown, filterText, inputEl, recordId) {
 
     let html = list.map(p => `
         <div class="combobox-item ${p === inputEl.value ? 'active' : ''}"
-             onmousedown="selectComboboxItem(event, '${p.replace(/'/g, "\\'")}', this, ${recordId !== undefined ? recordId : 'null'})">
-            ${p}
+             data-product="${SharedSync.escapeHtml(p)}"
+             onmousedown="selectComboboxItem(event, this.dataset.product, this, ${recordId !== undefined ? recordId : 'null'})">
+            ${SharedSync.escapeHtml(p)}
         </div>
     `).join('');
 
@@ -3002,6 +3003,7 @@ function setupMobileMenu() {
 }
 
 function switchView(view) {
+    if (view !== 'snowsprint') closeSnowsprintComment();
     // Save current view to localStorage so it persists across reloads
     saveCurrentView(view);
     document.documentElement.removeAttribute('data-initial-view');
@@ -3193,7 +3195,7 @@ function renderMonthlyRecords() {
     const monthRecords = records.filter(r => r.date.startsWith(currentMonth));
 
     // Monthly Summary By Product
-    const productTotals = {};
+    const productTotals = Object.create(null);
     const dailyData = {};
     let totalMonthCount = 0;
 
@@ -3217,7 +3219,7 @@ function renderMonthlyRecords() {
     const productListEl = document.getElementById('monthly-product-totals');
     productListEl.innerHTML = Object.entries(productTotals).sort((a, b) => b[1] - a[1]).map(([name, count]) => `
         <div style="display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid var(--border);">
-            <span style="font-weight: 600;">${name}</span>
+            <span style="font-weight: 600;">${SharedSync.escapeHtml(name)}</span>
             <span style="font-weight: 800; color: var(--primary);">${count.toLocaleString()}</span>
         </div>
     `).join('') || '<p style="color:var(--text-muted)">データがありません</p>';
@@ -3247,10 +3249,10 @@ function renderMonthlyRecords() {
         html += `
             <tr>
                 <td style="color: var(--text-muted); font-size: 0.85rem;">${r.date.split('-')[1]}/${r.date.split('-')[2]}</td>
-                <td class="machine-cell"><span class="machine-badge">${r.machine}</span></td>
-                <td class="product-cell" style="font-weight: 600;">${r.product || '-'}</td>
-                <td class="time-cell">${r.startTime}</td>
-                <td class="time-cell">${r.endTime}</td>
+                <td class="machine-cell"><span class="machine-badge">${SharedSync.escapeHtml(r.machine)}</span></td>
+                <td class="product-cell" style="font-weight: 600;">${SharedSync.escapeHtml(r.product || '-')}</td>
+                <td class="time-cell">${SharedSync.escapeHtml(r.startTime)}</td>
+                <td class="time-cell">${SharedSync.escapeHtml(r.endTime)}</td>
                 <td style="text-align: right; font-weight: 700; color: var(--primary);">
                     ${r.count.toLocaleString()}
                 </td>
@@ -3626,10 +3628,10 @@ function renderRecords() {
         const tr = document.createElement('tr');
 
         tr.innerHTML = `
-            <td class="machine-cell"><span class="machine-badge">${record.machine}</span></td>
+            <td class="machine-cell"><span class="machine-badge">${SharedSync.escapeHtml(record.machine)}</span></td>
             <td class="product-cell">
                 <div class="combobox-wrapper">
-                    <input type="text" class="inline-input product-combobox-input" value="${record.product || ''}"
+                    <input type="text" class="inline-input product-combobox-input" value="${SharedSync.escapeHtml(record.product)}"
                            placeholder="選択または入力..."
                            onfocus="openComboboxMenu(this, ${record.id})"
                            oninput="filterComboboxMenu(this); updateRecordLive(${record.id}, 'product', this.value)"
@@ -3639,13 +3641,13 @@ function renderRecords() {
                 </div>
             </td>
             <td class="time-cell">
-                <input type="text" class="inline-input" value="${record.startTime}" 
+                <input type="text" class="inline-input" value="${SharedSync.escapeHtml(record.startTime)}" 
                        placeholder="HH:mm" inputmode="numeric" onfocus="this.select()"
                        oninput="updateRecordLive(${record.id}, 'startTime', this.value)"
                        onblur="this.value = normalizeTime(this.value); updateRecord(${record.id}, 'startTime', this.value)" >
             </td>
             <td class="time-cell">
-                <input type="text" class="inline-input" value="${record.endTime}" 
+                <input type="text" class="inline-input" value="${SharedSync.escapeHtml(record.endTime)}" 
                        placeholder="HH:mm" inputmode="numeric" onfocus="this.select()"
                        oninput="updateRecordLive(${record.id}, 'endTime', this.value)"
                        onblur="this.value = normalizeTime(this.value); updateRecord(${record.id}, 'endTime', this.value)" >
@@ -3707,8 +3709,8 @@ function renderTrashList() {
             user-select: none;
         `;
         chip.innerHTML = `
-            <span style="font-weight: 600; color: #c53030;">${record.machine}</span>
-            <span style="color: #718096; max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${record.product || '(未入力)'}</span>
+            <span style="font-weight: 600; color: #c53030;">${SharedSync.escapeHtml(record.machine)}</span>
+            <span style="color: #718096; max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${SharedSync.escapeHtml(record.product || '(未入力)')}</span>
             <svg width="12" height="12" fill="#e53e3e" viewBox="0 0 16 16">
                 <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
                 <path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
@@ -5605,6 +5607,8 @@ let snowsprintActiveProduct = 0;
 let snowsprintActiveSize = 0;
 let snowsprintConfigNeedsSync = false;
 let snCommentCurrentCell = null;
+let snCommentFocusTimer = null;
+let snCommentListSignature = null;
 
 const SNOWSPRINT_IWATSUKI_BAG_CONFIG = [{
     id: 'bag', title: '袋', bg: '#c084fc', color: '#4c1d95', items: [
@@ -8266,6 +8270,7 @@ function setupSnowsprintMonthSelector() {
     mSel.value = snowsprintCurrentMonth;
 
     const update = () => {
+        closeSnowsprintComment();
         snowsprintCurrentYear = parseInt(ySel.value);
         snowsprintCurrentMonth = parseInt(mSel.value);
         ensureSnowsprintMonth(snowsprintCurrentYear, snowsprintCurrentMonth);
@@ -8536,9 +8541,6 @@ function renderSnowsprintGeneric(headId, bodyId, footId, configGroups, category)
 
         const handleOpen = (e) => {
             if (e && e.preventDefault) e.preventDefault();
-            if (document.activeElement === input) {
-                input.blur();
-            }
             openSnowsprintComment(getCellInfo(), td);
         };
 
@@ -8629,7 +8631,6 @@ function switchSnowsprintSize(idx) {
 window.switchSnowsprintSize = switchSnowsprintSize;
 
 function renderSnowsprint() {
-    closeSnowsprintComment();
     const product = SNOWSPRINT_TAB_CONFIG[snowsprintActiveProduct];
     if (!product) return;
 
@@ -8648,6 +8649,7 @@ function renderSnowsprint() {
     if (!sizeConfig) return;
 
     renderSnowsprintGeneric('snTabHead', 'snTabBody', 'snTabFoot', sizeConfig.config, sizeConfig.category);
+    if (snCommentCurrentCell) renderSnowsprintCommentList();
 }
 
 // ========================================================= //
@@ -8746,10 +8748,18 @@ function openSnowsprintComment(cellInfo, anchorEl) {
 
     // Focus input
     input.value = '';
-    setTimeout(() => input.focus(), 100);
+    clearTimeout(snCommentFocusTimer);
+    snCommentFocusTimer = setTimeout(() => {
+        snCommentFocusTimer = null;
+        if (snCommentCurrentCell === cellInfo && popup.classList.contains('active')) {
+            input.focus({ preventScroll: true });
+        }
+    }, 100);
 }
 
 function closeSnowsprintComment() {
+    clearTimeout(snCommentFocusTimer);
+    snCommentFocusTimer = null;
     const overlay = document.getElementById('snCommentOverlay');
     const popup = document.getElementById('snCommentPopup');
     if (overlay) overlay.classList.remove('active');
@@ -8822,10 +8832,8 @@ function renderSnowsprintCommentList() {
     const { category, type1, type2, field, day } = snCommentCurrentCell;
     const comments = getSnowsprintCellComments(category, type1, type2, field, day);
 
-    if (comments.length === 0) {
-        listEl.innerHTML = '';
-        return;
-    }
+    const signature = JSON.stringify(comments.map(comment => [comment.text, comment.time]));
+    if (signature === snCommentListSignature) return;
 
     listEl.innerHTML = comments.map((c, i) => {
         const date = new Date(c.time);
@@ -8844,12 +8852,26 @@ function renderSnowsprintCommentList() {
             </div>
         `;
     }).join('');
+    snCommentListSignature = signature;
 }
 
 // Wire up comment popup event listeners
 (function initCommentPopup() {
     document.getElementById('snCommentClose')?.addEventListener('click', closeSnowsprintComment);
-    document.getElementById('snCommentOverlay')?.addEventListener('click', closeSnowsprintComment);
+    const overlay = document.getElementById('snCommentOverlay');
+    let overlayPressStarted = false;
+    // The opening gesture began on a cell; only a new overlay press may dismiss.
+    document.addEventListener('pointerdown', event => {
+        overlayPressStarted = event.target === overlay && event.button === 0;
+    }, true);
+    document.addEventListener('pointercancel', () => {
+        overlayPressStarted = false;
+    }, true);
+    overlay?.addEventListener('click', () => {
+        const shouldClose = overlayPressStarted;
+        overlayPressStarted = false;
+        if (shouldClose) closeSnowsprintComment();
+    });
     document.getElementById('snCommentSubmit')?.addEventListener('click', submitSnowsprintComment);
     document.getElementById('snCommentInput')?.addEventListener('keydown', function(e) {
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -9595,7 +9617,7 @@ function shiftRenderMembers() {
     list.innerHTML = shiftNames.map((name, index) => `
         <div class="shift-member-chip" draggable="true" data-index="${index}">
             <span class="shift-drag-handle">☰</span>
-            ${name}
+            ${SharedSync.escapeHtml(name)}
             <span class="shift-delete-btn" onclick="shiftDeleteMember(${index})">×</span>
         </div>
     `).join('');
@@ -9656,7 +9678,6 @@ function shiftHandleDrop(e) {
         const movedName = shiftNames.splice(shiftDraggedIndex, 1)[0];
         shiftNames.splice(targetIndex, 0, movedName);
 
-        shiftOverrides = {};
         shiftSaveAllData();
         shiftRenderMembers();
     }
@@ -9797,7 +9818,7 @@ function shiftGenerateTable() {
 
     const nameOptions = (selectedName) => {
         return shiftNames.map((name) =>
-            `<option value="${name}" ${name === selectedName ? 'selected' : ''}>${name}</option>`
+            `<option value="${SharedSync.escapeHtml(name)}" ${name === selectedName ? 'selected' : ''}>${SharedSync.escapeHtml(name)}</option>`
         ).join('');
     };
 
@@ -9830,7 +9851,7 @@ function shiftGenerateTable() {
         tableHTML += `
             <tr data-week-id="${weekId}">
                 <td>
-                    <input type="text" class="shift-editable-date" value="${rowData.date}" oninput="shiftSaveRowState('${weekId}')">
+                    <input type="text" class="shift-editable-date" value="${SharedSync.escapeHtml(rowData.date)}" oninput="shiftSaveRowState('${weekId}')">
                 </td>
                 <td>
                     <span class="shift-badge-early">
@@ -9850,11 +9871,11 @@ function shiftGenerateTable() {
                 </td>
                 <td>
                     <div class="shift-staff-all">
-                        <input type="text" class="shift-staff-all-input" value="${rowData.normal}" oninput="shiftSaveRowState('${weekId}')">
+                        <input type="text" class="shift-staff-all-input" value="${SharedSync.escapeHtml(rowData.normal)}" oninput="shiftSaveRowState('${weekId}')">
                     </div>
                 </td>
                 <td>
-                    <input type="text" class="shift-staff-all-input" placeholder="備考を入力..." value="${rowData.notes}" oninput="shiftSaveRowState('${weekId}')">
+                    <input type="text" class="shift-staff-all-input" placeholder="備考を入力..." value="${SharedSync.escapeHtml(rowData.notes)}" oninput="shiftSaveRowState('${weekId}')">
                 </td>
             </tr>
         `;
