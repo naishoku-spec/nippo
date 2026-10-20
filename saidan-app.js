@@ -83,6 +83,7 @@ if (database && window.SharedSync) {
     recordsSync = SharedSync.createPathSync({
         database,
         path: DB_PATH,
+        viewSelector: '#saidan-items-container',
         emptyValue: [],
         normalize: normalizeSaidanRecords,
         pendingStorageKey: LS_KEY + '_pending_sync',
@@ -145,6 +146,7 @@ function normalizeTime(val) {
 
 // Ensure at least MIN_ROWS items exist for a given date
 function ensureMinRows(date) {
+    if (database && (!recordsSync || !recordsSync.isReady())) return;
     const dayRecords = records.filter(r => r.date === date);
 
     // 既存の未入力レコードでデフォルト時間(07:00/16:30)が残っている場合は空文字にリセット
@@ -171,7 +173,7 @@ function ensureMinRows(date) {
             });
             updated = true;
         }
-        if (updated) saveRecords();
+        if (updated) saveRecords({ automatic: true });
     }
 }
 
@@ -451,7 +453,7 @@ function handleAddRecord(e) {
 }
 
 // Save records
-function saveRecords() {
+function saveRecords(settings = {}) {
     if (window.SharedSync && !SharedSync.canWrite()) return false;
 
     try {
@@ -460,7 +462,7 @@ function saveRecords() {
         console.error('LocalStorage save failed:', e);
     }
 
-    if (recordsSync) return recordsSync.save(records);
+    if (recordsSync) return recordsSync.save(records, settings);
     return false;
 }
 

@@ -1,12 +1,13 @@
 (function (global) {
     'use strict';
 
-    const BUILD_ID = '20261019-report-display-safety-v52';
-    const BUILD_NUMBER = 2026101952;
-    const VERSION_PATH = 'app-version.json';
+    const BUILD_ID = '20261020-stale-write-guard-v55';
+    const BUILD_NUMBER = 2026102055;
+    const VERSION_PATH = new URL('app-version.json', document.currentScript?.src || document.baseURI || global.location.href).toString();
     const VERSION_CHECK_INTERVAL_MS = 30000;
     const LATEST_BUILD_KEY = 'nippo_latest_app_build_number';
     const PENDING_TRUST_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+    const FIRST_GUARDED_DRAFT_BUILD = 2026102054;
 
     function clearRefreshMarker() {
         try {
@@ -97,6 +98,8 @@
     let versionGuardStarted = false;
     const pathSyncFlushers = new Set();
     let pathSyncLifecycleBound = false;
+    const pausedWrites = new Map();
+    let refreshInFlight = false;
 
     const WRITE_METHODS = new Set(['set', 'update', 'remove', 'setWithPriority', 'transaction']);
     const REFERENCE_CHAIN_METHODS = new Set([
@@ -437,6 +440,46 @@
         return cloneValue(local);
     }
 
+    // Reapply only this draft's changes after the user explicitly requests a
+    // refresh. Untouched fields always come from the freshly read server value.
+    function reapplyDraft(base, local, remote) {
+        if (valuesEqual(base, local)) return cloneValue(remote);
+        if (valuesEqual(base, remote) || valuesEqual(local, remote)) return cloneValue(local);
+        if (Array.isArray(local) && Array.isArray(remote)) {
+            const lists = [Array.isArray(base) ? base : [], local, remote];
+            const maps = lists.map(list => {
+                const map = new Map();
+                for (const item of list) {
+                    const key = collectionKey(item);
+                    if (!key || map.has(key)) return null;
+                    map.set(key, item);
+                }
+                return map;
+            });
+            if (maps.every(Boolean)) {
+                const [before, draft, latest] = maps;
+                const result = [];
+                for (const key of new Set([...latest.keys(), ...draft.keys()])) {
+                    if (!draft.has(key) && before.has(key)) continue;
+                    const value = reapplyDraft(before.get(key), draft.get(key), latest.get(key));
+                    if (value !== undefined) result.push(value);
+                }
+                return result;
+            }
+            return cloneValue(local);
+        }
+        if (isPlainObject(local) && isPlainObject(remote)) {
+            const result = cloneValue(remote);
+            for (const key of new Set([...Object.keys(base || {}), ...Object.keys(local)])) {
+                const value = reapplyDraft(base?.[key], local[key], remote[key]);
+                if (value === undefined) delete result[key];
+                else result[key] = value;
+            }
+            return result;
+        }
+        return cloneValue(local);
+    }
+
     function mergeRestoreArrays(current, backup) {
         const toMap = list => {
             const map = new Map();
@@ -553,6 +596,113 @@
                 return guardReference(rawDatabase.ref(path));
             }
         };
+    }
+
+    function showSyncRefreshRequired(key, refresh) {
+        pausedWrites.set(key, refresh);
+        if (!document.body || document.getElementById('sync-refresh-lock')) return;
+        injectVersionStyles();
+        const overlay = document.createElement('div');
+        overlay.id = 'sync-refresh-lock';
+        overlay.className = 'app-update-lock';
+        overlay.setAttribute('role', 'alertdialog');
+        overlay.setAttribute('aria-modal', 'true');
+        overlay.setAttribute('aria-labelledby', 'sync-refresh-title');
+        overlay.innerHTML = [
+            '<div class="app-update-lock__dialog">',
+            '<h2 id="sync-refresh-title">最新データを読み込んでください</h2>',
+            '<p id="sync-refresh-message">他の端末の更新が反映されていないため、保存を保留しています。入力内容を保持して最新データを読み込みます。</p>',
+            '<button type="button" id="sync-refresh-retry">最新データを読み込む</button>',
+            '</div>'
+        ].join('');
+        overlay.querySelector('#sync-refresh-retry').addEventListener('click', refreshPausedWrites);
+        document.body.appendChild(overlay);
+        setTimeout(() => overlay.querySelector('#sync-refresh-retry')?.focus(), 0);
+    }
+
+    async function refreshPausedWrites() {
+        if (refreshInFlight || !canWrite()) return false;
+        refreshInFlight = true;
+        document.activeElement?.blur?.();
+        const button = document.getElementById('sync-refresh-retry');
+        const message = document.getElementById('sync-refresh-message');
+        if (button) button.disabled = true;
+        try {
+            // Refresh every paused path before any of their writes can resume.
+            const requests = Array.from(pausedWrites.entries());
+            const resumes = await Promise.all(requests.map(([, refresh]) => refresh()));
+            for (let index = 0; index < requests.length; index++) {
+                const [key, refresh] = requests[index];
+                if (pausedWrites.get(key) !== refresh) continue;
+                pausedWrites.delete(key);
+                try {
+                    resumes[index]();
+                } catch (error) {
+                    if (!pausedWrites.has(key)) pausedWrites.set(key, refresh);
+                    throw error;
+                }
+            }
+            if (pausedWrites.size === 0) document.getElementById('sync-refresh-lock')?.remove();
+            return pausedWrites.size === 0;
+        } catch (error) {
+            console.warn('Latest data could not be loaded; the draft is still pending:', error);
+            if (message) message.textContent = '最新データを読み込めませんでした。入力内容と保存の保留は維持しています。通信状態を確認して、もう一度お試しください。';
+            return false;
+        } finally {
+            refreshInFlight = false;
+            if (button) button.disabled = false;
+        }
+    }
+
+    async function readLatest(database, path) {
+        if (global.navigator?.onLine === false) throw new Error('offline');
+        const reference = database.ref(path);
+        let timeout;
+        try {
+            return await Promise.race([
+                typeof reference.get === 'function' ? reference.get() : reference.once('value'),
+                new Promise((resolve, reject) => {
+                    timeout = setTimeout(() => reject(new Error('sync-refresh-timeout')), 10000);
+                })
+            ]);
+        } finally {
+            clearTimeout(timeout);
+        }
+    }
+
+    // The comparison also runs when Firebase retries against a newer server
+    // value. A separate read followed by an unconditional write is not enough.
+    function compareAndSave(database, path, baseline, normalize, update, complete) {
+        let stale = false;
+        database.ref(path).transaction(currentValue => {
+            stale = !valuesEqual(normalize(currentValue), baseline);
+            if (stale || !canWrite()) return;
+            return update(normalize(currentValue));
+        }, (error, committed, snapshot) => {
+            complete(error, committed, snapshot, stale && !committed);
+        }, false);
+    }
+
+    function restoreSafely(database, path, backupValue) {
+        const key = {};
+        return new Promise((resolve, reject) => {
+            const save = baseline => {
+                compareAndSave(database, path, baseline, cloneValue,
+                    current => mergeRestoreValue(current, backupValue),
+                    (error, committed, snapshot, stale) => {
+                        if (error) return reject(error);
+                        if (stale) {
+                            showSyncRefreshRequired(key, async () => {
+                                const latest = await readLatest(database, path);
+                                return () => save(cloneValue(latest.val()));
+                            });
+                        } else {
+                            resolve({ committed, snapshot });
+                        }
+                    });
+            };
+            readLatest(database, path).then(snapshot => save(cloneValue(snapshot.val())), reject);
+        });
     }
 
     function injectVersionStyles() {
@@ -673,6 +823,22 @@
         return value === null || value === undefined || value === '';
     }
 
+    function normalizeDayMaps(value) {
+        if (Array.isArray(value)) return value.map(normalizeDayMaps);
+        if (!isPlainObject(value)) return value;
+        const result = {};
+        for (const [key, child] of Object.entries(value)) {
+            // Realtime Database may return numeric day keys as a sparse array.
+            // Keep these as maps so independent dates can be rebased separately.
+            result[key] = key === 'days' && Array.isArray(child)
+                ? Object.fromEntries(Object.entries(child)
+                    .filter(([, day]) => day !== null && day !== undefined)
+                    .map(([day, data]) => [day, normalizeDayMaps(data)]))
+                : normalizeDayMaps(child);
+        }
+        return result;
+    }
+
     function loadPending(key) {
         if (!key) return null;
         try {
@@ -684,8 +850,10 @@
             const savedAtTime = Date.parse(parsed.savedAt || '');
             const age = Date.now() - savedAtTime;
             const pendingBuildNumber = Number(parsed.buildNumber) || 0;
+            const compatibleBuild = pendingBuildNumber === BUILD_NUMBER
+                || (pendingBuildNumber >= FIRST_GUARDED_DRAFT_BUILD && pendingBuildNumber < BUILD_NUMBER);
             const trusted = parsed.trusted === true
-                && pendingBuildNumber === BUILD_NUMBER
+                && compatibleBuild
                 && Number.isFinite(savedAtTime)
                 && age >= -5 * 60 * 1000
                 && age <= PENDING_TRUST_WINDOW_MS;
@@ -694,6 +862,8 @@
                 local: cloneValue(parsed.local),
                 savedAt: parsed.savedAt || '',
                 buildNumber: pendingBuildNumber,
+                requiresRefresh: parsed.requiresRefresh === true || pendingBuildNumber !== BUILD_NUMBER,
+                draftBase: cloneValue(parsed.draftBase),
                 _trusted: trusted,
                 _raw: stored
             };
@@ -712,6 +882,8 @@
                     local: cloneValue(pending.local),
                     savedAt: pending.savedAt || new Date().toISOString(),
                     buildNumber: BUILD_NUMBER,
+                    requiresRefresh: pending.requiresRefresh === true,
+                    draftBase: cloneValue(pending.draftBase),
                     trusted: pending._trusted !== false
                 };
                 localStorage.setItem(key, JSON.stringify(payload));
@@ -727,15 +899,24 @@
 
     function preserveStalePending(key, rawValue) {
         if (!key || !rawValue) return true;
-        const recoveryKey = key + '_stale_backup';
+        const recoveryPrefix = key + '_stale_backup';
         try {
-            if (!localStorage.getItem(recoveryKey)) {
-                localStorage.setItem(recoveryKey, JSON.stringify({
-                    sourceKey: key,
-                    savedAt: new Date().toISOString(),
-                    rawValue
-                }));
+            let recoveryKey = recoveryPrefix;
+            let suffix = 0;
+            let existing;
+            while ((existing = localStorage.getItem(recoveryKey))) {
+                try {
+                    if (JSON.parse(existing).rawValue === rawValue) return true;
+                } catch (error) {
+                    // Preserve the unreadable recovery copy too.
+                }
+                recoveryKey = recoveryPrefix + '_' + (++suffix);
             }
+            localStorage.setItem(recoveryKey, JSON.stringify({
+                sourceKey: key,
+                savedAt: new Date().toISOString(),
+                rawValue
+            }));
             return true;
         } catch (error) {
             console.warn('Stale pending data could not be preserved:', key, error);
@@ -770,20 +951,22 @@
         const emptyValue = cloneValue(options.emptyValue);
         const normalize = typeof options.normalize === 'function'
             ? options.normalize
-            : value => value === null || value === undefined ? cloneValue(emptyValue) : cloneValue(value);
+            : value => normalizeDayMaps(value === null || value === undefined ? cloneValue(emptyValue) : cloneValue(value));
         const merge = typeof options.merge === 'function' ? options.merge : mergeThreeWay;
+        const rebase = typeof options.rebase === 'function' ? options.rebase : reapplyDraft;
         const mergeInitial = options.mergeInitial === true;
-        // Every data path is protected by default. A pending write produced by
-        // an older build is only a recovery copy; replaying it automatically can
-        // overwrite newer Firebase data when a long-lived Safari tab returns.
+        // Guarded drafts from compatible builds require an explicit refresh.
+        // Older, untrusted queues remain recovery copies and are never replayed.
         const protectFromStalePending = options.protectFromStalePending !== false;
-        const mergeUntrustedPending = typeof options.mergeUntrustedPending === 'function'
-            ? options.mergeUntrustedPending
-            : mergeInitialValue;
         const pendingKey = options.pendingStorageKey || '';
         const serverSnapshotKey = options.serverSnapshotStorageKey || '';
         const storedServerSnapshot = loadSnapshot(serverSnapshotKey);
         let pending = loadPending(pendingKey);
+        if (pending) {
+            pending.base = normalize(pending.base);
+            pending.local = normalize(pending.local);
+            if (pending.draftBase !== undefined) pending.draftBase = normalize(pending.draftBase);
+        }
         const loadedUntrustedPending = Boolean(pending && protectFromStalePending && !pending._trusted);
         let retainUntrustedStoredPending = loadedUntrustedPending
             && !preserveStalePending(pendingKey, pending._raw);
@@ -792,12 +975,24 @@
         // response must not be attached to, and then discarded with, that old
         // Safari payload.
         if (loadedUntrustedPending && !retainUntrustedStoredPending) pending = null;
-        let serverSnapshot = pending && pending._trusted
-            ? cloneValue(pending.base)
-            : storedServerSnapshot.found ? cloneValue(storedServerSnapshot.value) : cloneValue(emptyValue);
+        let serverSnapshot = normalize(pending && pending._trusted
+            ? pending.base
+            : storedServerSnapshot.found ? storedServerSnapshot.value : emptyValue);
         let ready = false;
         let inFlight = false;
         let retryTimer = null;
+        let paused = false;
+        let deferredRemote;
+        let hasDeferredRemote = false;
+        let refreshing = false;
+        const pauseKey = {};
+        const isEditing = () => {
+            if (typeof options.isEditing === 'function') return options.isEditing();
+            const active = document.activeElement;
+            return Boolean(options.viewSelector
+                && active?.matches?.('input, textarea, select, [contenteditable="true"]')
+                && active.closest(options.viewSelector));
+        };
 
         const getLocal = () => normalize(options.getLocal());
         // This is the exact state the user saw when the page opened. If they
@@ -821,20 +1016,73 @@
             return persisted;
         };
 
+        function capturePendingDraft() {
+            // Debounced inputs may have changed the model since save() ran.
+            if (pending) pending.local = cloneValue(getLocal());
+        }
+
+        function pauseForRefresh() {
+            capturePendingDraft();
+            paused = true;
+            if (pending) {
+                pending.requiresRefresh = true;
+                persistCurrentPending();
+            }
+            showSyncRefreshRequired(pauseKey, async () => {
+                refreshing = true;
+                let latest;
+                try {
+                    latest = normalize((await readLatest(database, path)).val());
+                } finally {
+                    refreshing = false;
+                }
+                return () => {
+                    try {
+                        capturePendingDraft();
+                        const local = pending ? rebase(pending.draftBase ?? pending.base, pending.local, latest) : latest;
+                        serverSnapshot = cloneValue(latest);
+                        ready = true;
+                        hasDeferredRemote = false;
+                        if (pending) {
+                            pending.base = cloneValue(latest);
+                            pending.local = cloneValue(local);
+                            delete pending.draftBase;
+                            delete pending.requiresRefresh;
+                        }
+                        paused = false;
+                        setLocal(local, { source: 'refresh', pending: Boolean(pending) });
+                        persistSnapshot(serverSnapshotKey, serverSnapshot);
+                        persistCurrentPending();
+                        notify(getLocal(), { source: 'refresh', force: true, pending: Boolean(pending) });
+                        flush();
+                    } catch (error) {
+                        pauseForRefresh();
+                        throw error;
+                    }
+                };
+            });
+        }
+
         function flush() {
-            if (!canWrite() || !database || !ready || inFlight || !pending) return;
+            if (!canWrite() || !database || !ready || inFlight || !pending || paused) return;
+            if (pending.requiresRefresh || (hasDeferredRemote && !valuesEqual(deferredRemote, pending.base))) {
+                pauseForRefresh();
+                return;
+            }
             const state = {
                 base: cloneValue(pending.base),
                 local: cloneValue(pending.local)
             };
             inFlight = true;
 
-            database.ref(path).transaction(currentValue => {
-                const remote = normalize(currentValue);
-                return merge(state.base, state.local, remote);
-            }, (error, committed, snapshot) => {
+            compareAndSave(database, path, state.base, normalize,
+                remote => merge(state.base, state.local, remote), (error, committed, snapshot, stale) => {
                 inFlight = false;
                 if (!canWrite()) return;
+                if (stale) {
+                    pauseForRefresh();
+                    return;
+                }
                 if (error || !committed || !snapshot) {
                     if (!retryTimer) {
                         retryTimer = setTimeout(() => {
@@ -846,6 +1094,7 @@
                 }
 
                 const committedValue = normalize(snapshot.val());
+                capturePendingDraft();
                 serverSnapshot = cloneValue(committedValue);
                 persistSnapshot(serverSnapshotKey, serverSnapshot);
                 const pendingStillMatches = pending && valuesEqual(pending.local, state.local);
@@ -854,17 +1103,25 @@
                     pending = null;
                     setLocal(committedValue, { source: 'sync', committed: true });
                 } else if (pending) {
+                    pending.local = rebase(state.local, pending.local, committedValue);
+                    if (pending.draftBase !== undefined) {
+                        pending.draftBase = mergeInitialValue(pending.draftBase, committedValue);
+                    }
                     pending.base = cloneValue(committedValue);
-                    pending.local = merge(pending.base, pending.local, committedValue);
                     setLocal(pending.local, { source: 'sync', committed: true, pending: true });
                 }
                 persistCurrentPending();
                 notify(getLocal(), { source: 'sync', committed: true });
+                if (hasDeferredRemote) {
+                    const deferred = deferredRemote;
+                    hasDeferredRemote = false;
+                    if (!valuesEqual(deferred, committedValue)) handleRemote(deferred);
+                }
                 if (pending) flush();
             });
         }
 
-        function save(value) {
+        function save(value, settings = {}) {
             if (!canWrite()) return false;
             const localValue = normalize(value);
             if (!pending || (protectFromStalePending && !pending._trusted)) {
@@ -877,17 +1134,35 @@
             } else {
                 pending.local = cloneValue(localValue);
             }
+            if (settings.automatic === true) {
+                // Generated empty rows are a baseline for subsequent typing,
+                // not instructions to clear rows created by another device.
+                pending.draftBase = mergeInitialValue(localValue, pending.draftBase ?? pending.base);
+            }
             pending.savedAt = new Date().toISOString();
             pending.buildNumber = BUILD_NUMBER;
             pending._trusted = true;
             persistCurrentPending();
+            if (paused) return false;
             flush();
-            return true;
+            return !paused;
         }
 
         function handleRemote(rawValue) {
             const remote = normalize(rawValue);
             const local = getLocal();
+            // Do not update the model behind a focused input while leaving its
+            // DOM value unchanged. A later blur would otherwise save that old value.
+            if (refreshing || inFlight || paused || (isEditing() && !valuesEqual(remote, serverSnapshot))) {
+                deferredRemote = cloneValue(remote);
+                hasDeferredRemote = true;
+                if (!ready) {
+                    serverSnapshot = cloneValue(initialLocalBaseline);
+                    ready = true;
+                }
+                if (pending && !inFlight && !paused && !refreshing) pauseForRefresh();
+                return;
+            }
 
             if (!ready) {
                 const previousServer = storedServerSnapshot.found ? cloneValue(storedServerSnapshot.value) : null;
@@ -903,10 +1178,19 @@
                             quarantinedStalePending: true
                         });
                     } else {
-                        const merged = merge(pending.base, pending.local, remote);
-                        pending = { base: cloneValue(remote), local: cloneValue(merged), _trusted: true };
-                        setLocal(merged, { source: 'initial', pending: true });
+                        if (pending.requiresRefresh || !valuesEqual(normalize(pending.base), remote)) {
+                            deferredRemote = cloneValue(remote);
+                            hasDeferredRemote = true;
+                            ready = true;
+                            pauseForRefresh();
+                            return;
+                        }
+                        setLocal(pending.local, { source: 'initial', pending: true });
                     }
+                } else if (options.serverWinsInitial !== false && (!isEmptyValue(remote) || previousServer !== null)) {
+                    // A plain browser cache is not proof of an unsent edit.
+                    // Only an explicit pending draft may be replayed after reload.
+                    setLocal(remote, { source: 'initial' });
                 } else if (previousServer !== null) {
                     // A cached local collection can be incomplete after a failed
                     // sync. Treat the server snapshot as the baseline and keep
@@ -914,18 +1198,27 @@
                     // cached rows as intentional deletions.
                     const merged = mergeInitialValue(local, remote);
                     if (!valuesEqual(merged, remote)) {
-                        pending = { base: cloneValue(remote), local: cloneValue(merged) };
+                        pending = {
+                            base: cloneValue(remote), local: cloneValue(merged),
+                            draftBase: cloneValue(merged), _trusted: true
+                        };
                         setLocal(merged, { source: 'initial', pending: true });
                     } else {
                         setLocal(remote, { source: 'initial' });
                     }
                 } else if (isEmptyValue(remote) && !isEmptyValue(local)) {
-                    pending = { base: cloneValue(emptyValue), local: cloneValue(local) };
+                    pending = {
+                        base: cloneValue(emptyValue), local: cloneValue(local),
+                        draftBase: cloneValue(local), _trusted: true
+                    };
                     setLocal(local, { source: 'initial', pending: true });
                 } else if (mergeInitial && !isEmptyValue(local) && !isEmptyValue(remote)) {
                     const merged = mergeInitialValue(local, remote);
                     if (!valuesEqual(merged, remote)) {
-                        pending = { base: cloneValue(remote), local: cloneValue(merged) };
+                        pending = {
+                            base: cloneValue(remote), local: cloneValue(merged),
+                            draftBase: cloneValue(merged), _trusted: true
+                        };
                         setLocal(merged, { source: 'initial', pending: true });
                     } else {
                         setLocal(remote, { source: 'initial' });
@@ -942,22 +1235,24 @@
             }
 
             const previousServer = cloneValue(serverSnapshot);
-            serverSnapshot = cloneValue(remote);
-            persistSnapshot(serverSnapshotKey, serverSnapshot);
             if (pending) {
-                const merged = merge(pending.base, pending.local, remote);
-                pending.base = cloneValue(remote);
-                pending.local = cloneValue(merged);
-                setLocal(merged, { source: 'remote', pending: true });
-                persistCurrentPending();
-                notify(getLocal(), { source: 'remote', pending: true });
+                if (!valuesEqual(normalize(pending.base), remote)) {
+                    deferredRemote = cloneValue(remote);
+                    hasDeferredRemote = true;
+                    pauseForRefresh();
+                    return;
+                }
                 flush();
                 return;
             }
 
+            hasDeferredRemote = false;
+            deferredRemote = undefined;
+            serverSnapshot = cloneValue(remote);
+            persistSnapshot(serverSnapshotKey, serverSnapshot);
             const merged = merge(previousServer, local, remote);
             if (!valuesEqual(merged, remote)) {
-                pending = { base: cloneValue(previousServer), local: cloneValue(merged) };
+                pending = { base: cloneValue(previousServer), local: cloneValue(merged), _trusted: true };
                 setLocal(merged, { source: 'remote', pending: true });
                 persistCurrentPending();
                 notify(getLocal(), { source: 'remote', pending: true });
@@ -986,7 +1281,8 @@
             flush,
             isReady: () => ready,
             getServerSnapshot: () => cloneValue(serverSnapshot),
-            getPending: () => cloneValue(pending)
+            getPending: () => cloneValue(pending),
+            isPaused: () => paused
         };
     }
 
@@ -998,6 +1294,7 @@
         readLocalJson,
         valuesEqual,
         mergeThreeWay,
+        reapplyDraft,
         mergeInitialValue,
         mergeRestoreValue,
         guardReference,
@@ -1005,6 +1302,7 @@
         canWrite,
         startVersionGuard,
         flushAll: flushRegisteredPathSyncs,
+        restoreSafely,
         createPathSync
     };
 })(window);

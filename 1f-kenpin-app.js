@@ -81,6 +81,7 @@ if (database && window.SharedSync) {
     recordsSync = SharedSync.createPathSync({
         database,
         path: DB_PATH,
+        viewSelector: '#records-list-kenpin',
         emptyValue: [],
         normalize: normalizeKenpinRecords,
         pendingStorageKey: LS_KEY + '_pending_sync',

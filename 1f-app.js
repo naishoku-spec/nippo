@@ -181,6 +181,7 @@ if (database && window.SharedSync) {
     recordsSync = SharedSync.createPathSync({
         database,
         path: DB_PATH,
+        viewSelector: '#records-list-1f',
         emptyValue: [],
         normalize: normalize1fRecords,
         pendingStorageKey: LS_KEY + '_pending_sync',
@@ -208,6 +209,7 @@ if (database && window.SharedSync) {
     notesSync = SharedSync.createPathSync({
         database,
         path: NOTES_DB_PATH,
+        viewSelector: '#day-note-text-1f',
         emptyValue: {},
         normalize: normalize1fNotes,
         pendingStorageKey: NOTES_LS_KEY + '_pending_sync',
@@ -529,6 +531,7 @@ function isJapaneseHoliday(dateStr) {
 
 // Ensure machines R1-R4 exist for a specific date
 function ensureDayRecords(date) {
+    if (database && (!recordsSync || !recordsSync.isReady())) return;
     const originalLength = records.length;
     records = normalize1fRecords(records);
     let updated = recordsNeedCleanup || records.length !== originalLength;
@@ -537,7 +540,7 @@ function ensureDayRecords(date) {
     const dayOfWeek = new Date(date).getDay();
     // Holidays on weekdays are valid production days; only weekends skip defaults.
     if (dayOfWeek === 0 || dayOfWeek === 6) {
-        if (updated) saveRecords();
+        if (updated) saveRecords({ automatic: true });
         return;
     }
 
@@ -559,7 +562,7 @@ function ensureDayRecords(date) {
         }
     });
 
-    if (updated) saveRecords();
+    if (updated) saveRecords({ automatic: true });
 }
 
 // Update record
@@ -591,7 +594,7 @@ function calculateDuration(start, end) {
 }
 
 // Save logic: Granular updates to prevent multi-device conflicts
-function saveRecords() {
+function saveRecords(settings = {}) {
     if (window.SharedSync && !SharedSync.canWrite()) return false;
 
     try {
@@ -600,7 +603,7 @@ function saveRecords() {
         console.error('LocalStorage save failed:', e);
     }
 
-    if (recordsSync) return recordsSync.save(records);
+    if (recordsSync) return recordsSync.save(records, settings);
     return false;
 }
 

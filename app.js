@@ -1651,8 +1651,8 @@ const firebaseConfig = {
     measurementId: "G-SR8Y5NKQTZ"
 };
 
-const APP_BUILD_ID = '20261019-report-display-safety-v52';
-const APP_BUILD_NUMBER = 2026101952;
+const APP_BUILD_ID = '20261020-stale-write-guard-v55';
+const APP_BUILD_NUMBER = 2026102055;
 const APP_VERSION_METADATA_PATH = 'app-version.json';
 const APP_VERSION_CHECK_INTERVAL_MS = 30000;
 const APP_LATEST_BUILD_LS_KEY = 'nippo_latest_app_build_number';
@@ -2067,11 +2067,7 @@ const DAILY_RECORD_KEY_FIELD = '_syncKey';
 const DAILY_RECORD_UPDATED_AT_FIELD = '_syncUpdatedAt';
 const DAILY_RECORDS_PENDING_LS_KEY = LS_KEY + '_pending_sync';
 const DAILY_RECORDS_SERVER_LS_KEY = LS_KEY + '_server_snapshot';
-let recordsSyncReady = !database;
-let recordsSyncInFlight = false;
-let recordsSyncRetryTimer = null;
-let recordsPendingSync = null;
-let recordsServerSnapshot = [];
+let dailyRecordsSync = null;
 
 function hashDailyRecordValue(value) {
     const text = String(value || '');
@@ -2144,78 +2140,6 @@ function cloneDailyRecords(input) {
     }
 }
 
-function persistPendingRecordsSync() {
-    try {
-        if (recordsPendingSync) {
-            recordsPendingSync.savedAt = new Date().toISOString();
-            recordsPendingSync.buildNumber = APP_BUILD_NUMBER;
-            recordsPendingSync.trusted = true;
-            safeLocalStorageSetItem(DAILY_RECORDS_PENDING_LS_KEY, JSON.stringify(recordsPendingSync));
-        } else {
-            safeLocalStorageRemoveItem(DAILY_RECORDS_PENDING_LS_KEY);
-        }
-    } catch (e) {
-        console.error('Failed to persist pending daily-record sync:', e);
-    }
-}
-
-function loadPendingRecordsSync() {
-    try {
-        const stored = safeLocalStorageGetItem(DAILY_RECORDS_PENDING_LS_KEY);
-        if (!stored) return null;
-        const parsed = JSON.parse(stored);
-        if (!Array.isArray(parsed?.base) || !Array.isArray(parsed?.local)) return null;
-        const savedAtTime = Date.parse(parsed.savedAt || '');
-        const age = Date.now() - savedAtTime;
-        const trusted = parsed.trusted === true
-            && Number(parsed.buildNumber) === APP_BUILD_NUMBER
-            && Number.isFinite(savedAtTime)
-            && age >= -5 * 60 * 1000
-            && age <= 7 * 24 * 60 * 60 * 1000;
-        if (!trusted) {
-            const recoveryKey = DAILY_RECORDS_PENDING_LS_KEY + '_stale_backup';
-            let preserved = Boolean(safeLocalStorageGetItem(recoveryKey));
-            if (!preserved) {
-                preserved = safeLocalStorageSetItem(recoveryKey, JSON.stringify({
-                    sourceKey: DAILY_RECORDS_PENDING_LS_KEY,
-                    savedAt: new Date().toISOString(),
-                    rawValue: stored
-                }));
-            }
-            if (preserved) safeLocalStorageRemoveItem(DAILY_RECORDS_PENDING_LS_KEY);
-            return null;
-        }
-        return {
-            base: normalizeDailyRecords(parsed.base),
-            local: normalizeDailyRecords(parsed.local),
-            savedAt: parsed.savedAt,
-            buildNumber: APP_BUILD_NUMBER,
-            trusted: true
-        };
-    } catch (e) {
-        console.error('Failed to load pending daily-record sync:', e);
-        return null;
-    }
-}
-
-function persistDailyServerSnapshot(snapshot) {
-    try {
-        safeLocalStorageSetItem(DAILY_RECORDS_SERVER_LS_KEY, JSON.stringify(snapshot || []));
-    } catch (e) {
-        console.error('Failed to persist daily-record server snapshot:', e);
-    }
-}
-
-function loadDailyServerSnapshot() {
-    try {
-        const stored = safeLocalStorageGetItem(DAILY_RECORDS_SERVER_LS_KEY);
-        return stored ? normalizeDailyRecords(JSON.parse(stored)) : null;
-    } catch (e) {
-        console.error('Failed to load daily-record server snapshot:', e);
-        return null;
-    }
-}
-
 function dailyRecordEquals(left, right) {
     if (!left || !right) return left === right;
     const fields = new Set([...Object.keys(left), ...Object.keys(right)]);
@@ -2223,16 +2147,6 @@ function dailyRecordEquals(left, right) {
     fields.delete(DAILY_RECORD_UPDATED_AT_FIELD);
     for (const field of fields) {
         if (JSON.stringify(left[field]) !== JSON.stringify(right[field])) return false;
-    }
-    return true;
-}
-
-function dailyRecordsEqual(left, right) {
-    const leftMap = new Map(cloneDailyRecords(left).map(record => [record[DAILY_RECORD_KEY_FIELD], record]));
-    const rightMap = new Map(cloneDailyRecords(right).map(record => [record[DAILY_RECORD_KEY_FIELD], record]));
-    if (leftMap.size !== rightMap.size) return false;
-    for (const [key, value] of leftMap) {
-        if (!dailyRecordEquals(value, rightMap.get(key))) return false;
     }
     return true;
 }
@@ -2334,113 +2248,12 @@ function mergeDailyRecords(baseInput, localInput, remoteInput) {
     return Array.from(merged.values());
 }
 
-function mergeInitialDailyRecords(localInput, remoteInput) {
-    const local = new Map(cloneDailyRecords(localInput).map(record => [record[DAILY_RECORD_KEY_FIELD], record]));
-    const remote = new Map(cloneDailyRecords(remoteInput).map(record => [record[DAILY_RECORD_KEY_FIELD], record]));
-    const merged = [];
-
-    remote.forEach((remoteRecord, key) => {
-        const localRecord = local.get(key);
-        if (localRecord && getDailyRecordUpdatedAt(localRecord) > getDailyRecordUpdatedAt(remoteRecord)) {
-            // A just-entered local value is newer than an old remote row even
-            // when both rows already share the same date/machine key.
-            merged.push(mergeDailyRecordFields(remoteRecord, localRecord, remoteRecord, key));
-        } else {
-            // With no local timestamp, preserve the established initial rule:
-            // the remote conflict wins while local-only rows survive below.
-            merged.push(localRecord ? { ...localRecord, ...remoteRecord } : remoteRecord);
-        }
-    });
-    local.forEach((localRecord, key) => {
-        if (!remote.has(key)) merged.push(localRecord);
-    });
-
-    return merged;
-}
-
-function flushPendingRecordsSync() {
-    if (!canWriteAppData() || !database || !recordsSyncReady || recordsSyncInFlight || !recordsPendingSync) return;
-
-    const pendingState = recordsPendingSync;
-    const baseSnapshot = cloneDailyRecords(pendingState.base);
-    const localSnapshot = cloneDailyRecords(pendingState.local);
-    recordsSyncInFlight = true;
-
-    database.ref(DB_PATH).transaction(currentData => {
-        const remoteRecords = normalizeDailyRecords(currentData);
-        return mergeDailyRecords(baseSnapshot, localSnapshot, remoteRecords);
-    }, (error, committed, snapshot) => {
-        recordsSyncInFlight = false;
-
-        if (error || !committed || !snapshot) {
-            if (error) console.error('Daily records sync failed:', error);
-            if (!recordsSyncRetryTimer) {
-                recordsSyncRetryTimer = setTimeout(() => {
-                    recordsSyncRetryTimer = null;
-                    flushPendingRecordsSync();
-                }, 3000);
-            }
-            return;
-        }
-
-        const committedRecords = normalizeDailyRecords(snapshot.val());
-        recordsServerSnapshot = committedRecords;
-        persistDailyServerSnapshot(committedRecords);
-        const pendingStillMatches = recordsPendingSync
-            && dailyRecordsEqual(recordsPendingSync.local, localSnapshot);
-
-        if (pendingStillMatches) {
-            recordsPendingSync = null;
-            records = committedRecords;
-        } else if (recordsPendingSync) {
-            recordsPendingSync.base = committedRecords;
-            records = mergeDailyRecords(
-                recordsPendingSync.base,
-                recordsPendingSync.local,
-                committedRecords
-            );
-        }
-        persistPendingRecordsSync();
-
-        safeLocalStorageSetItem(LS_KEY, JSON.stringify(records));
-        scheduleDailyBackupRefresh();
-        if (recordsPendingSync) flushPendingRecordsSync();
-    });
-}
-
-function queueRecordsSync() {
-    if (!canWriteAppData() || !database) return;
-    const localSnapshot = cloneDailyRecords(records);
-    if (!recordsPendingSync) {
-        recordsPendingSync = {
-            base: cloneDailyRecords(recordsServerSnapshot),
-            local: localSnapshot
-        };
-    } else {
-        recordsPendingSync.local = localSnapshot;
-    }
-    persistPendingRecordsSync();
-    flushPendingRecordsSync();
-}
-
 const storedRecordsState = window.SharedSync && typeof SharedSync.readLocalJson === 'function'
     ? SharedSync.readLocalJson(LS_KEY, [])
     : { value: [], valid: false, found: false };
 let records = normalizeDailyRecords(storedRecordsState.value || []);
-const storedDailyServerSnapshot = loadDailyServerSnapshot();
-recordsPendingSync = loadPendingRecordsSync();
-if (recordsPendingSync) {
-    records = cloneDailyRecords(recordsPendingSync.local);
-    recordsServerSnapshot = cloneDailyRecords(recordsPendingSync.base);
-} else if (!storedRecordsState.valid && storedDailyServerSnapshot) {
-    // A damaged device cache must not be treated as an intentional deletion.
-    // Use the last acknowledged server snapshot until the realtime value arrives.
-    records = cloneDailyRecords(storedDailyServerSnapshot);
-    recordsServerSnapshot = cloneDailyRecords(storedDailyServerSnapshot);
-} else {
-    recordsServerSnapshot = storedDailyServerSnapshot || cloneDailyRecords(records);
-    // A plain local cache is not proof of an unsent edit. Wait for Firebase
-    // unless a versioned pending record above explicitly proves one exists.
+if (!storedRecordsState.valid && window.SharedSync) {
+    records = normalizeDailyRecords(SharedSync.readLocalJson(DAILY_RECORDS_SERVER_LS_KEY, []).value);
 }
 const storedDailyNotesState = window.SharedSync && typeof SharedSync.readLocalJson === 'function'
     ? SharedSync.readLocalJson(NOTES_LS_KEY, {})
@@ -2532,8 +2345,6 @@ function persistCurrentDate(value) {
     return true;
 }
 let currentDate = getInitialCurrentDate(); // YYYY-MM-DD format
-let isFirstLoad = true;
-let isFirstNotesLoad = true;
 let noteSaveTimeout = null;
 
 // Roll Stock State
@@ -2569,96 +2380,29 @@ function renderActiveDailyView() {
 // Real-time synchronization from Firebase
 if (database) {
     // 1. Sync Daily Records
-    database.ref(DB_PATH).on('value', (snapshot) => {
-        const remoteRecords = normalizeDailyRecords(snapshot.val());
-
-        if (isFirstLoad) {
-            const localRecords = cloneDailyRecords(records);
-            recordsServerSnapshot = remoteRecords;
-            persistDailyServerSnapshot(remoteRecords);
-
-            if (remoteRecords.length > 0) {
-                if (recordsPendingSync) {
-                    const noKnownBaseline = !storedDailyServerSnapshot
-                        && recordsPendingSync.base.length === 0
-                        && remoteRecords.length > 0;
-                    const mergedPendingRecords = noKnownBaseline
-                        ? mergeInitialDailyRecords(recordsPendingSync.local, remoteRecords)
-                        : mergeDailyRecords(recordsPendingSync.base, recordsPendingSync.local, remoteRecords);
-                    records = mergedPendingRecords;
-                    if (noKnownBaseline) {
-                        recordsPendingSync = {
-                            base: cloneDailyRecords(remoteRecords),
-                            local: cloneDailyRecords(mergedPendingRecords)
-                        };
-                        persistPendingRecordsSync();
-                    }
-                } else {
-                    // Without a trusted same-build pending write, localStorage is
-                    // only a display cache. The server must win on first load.
-                    records = remoteRecords;
-                }
-            } else if (localRecords.length > 0) {
-                records = localRecords;
-                if (!recordsPendingSync) {
-                    recordsPendingSync = { base: [], local: localRecords };
-                    persistPendingRecordsSync();
-                }
-            } else {
-                records = [];
-            }
-
-            recordsSyncReady = true;
-            isFirstLoad = false;
-            flushPendingRecordsSync();
+    if (window.SharedSync) dailyRecordsSync = SharedSync.createPathSync({
+        database,
+        path: DB_PATH,
+        emptyValue: [],
+        normalize: normalizeDailyRecords,
+        merge: mergeDailyRecords,
+        serverWinsInitial: true,
+        viewSelector: '#records-list',
+        pendingStorageKey: DAILY_RECORDS_PENDING_LS_KEY,
+        serverSnapshotStorageKey: DAILY_RECORDS_SERVER_LS_KEY,
+        getLocal: () => records,
+        setLocal: value => {
+            records = normalizeDailyRecords(value);
             safeLocalStorageSetItem(LS_KEY, JSON.stringify(records));
             scheduleDailyBackupRefresh();
+        },
+        onRemote: (value, meta) => {
             ensureDayRecords(currentDate);
-            // Render only after the initial server snapshot has been merged.
-            // The saved view may have been selected before this callback ran.
-            setTimeout(renderActiveDailyView, 0);
-        } else {
-            if (remoteRecords.length === 0 && records.length > 0 && !recordsPendingSync) {
-                console.warn('Ignored an empty remote daily-records snapshot to protect local data');
-                return;
+            if (meta.source === 'initial') {
+                setTimeout(renderActiveDailyView, 0);
+            } else if (!document.activeElement?.closest('#records-list')) {
+                renderActiveDailyView();
             }
-
-            // Reconcile every realtime event against the last acknowledged server
-            // state. A value event can arrive after a local save but before its
-            // pending state is visible here, so replacing records with the remote
-            // array directly can discard a just-entered record.
-            const previousServerRecords = cloneDailyRecords(recordsServerSnapshot);
-            const localRecordsBeforeRemote = cloneDailyRecords(records);
-            recordsServerSnapshot = remoteRecords;
-            persistDailyServerSnapshot(remoteRecords);
-            const nextRecords = recordsPendingSync
-                ? mergeDailyRecords(recordsPendingSync.base, recordsPendingSync.local, remoteRecords)
-                : mergeDailyRecords(previousServerRecords, localRecordsBeforeRemote, remoteRecords);
-            const isDifferent = !dailyRecordsEqual(records, nextRecords);
-
-            records = nextRecords;
-            if (!recordsPendingSync && !dailyRecordsEqual(nextRecords, remoteRecords)) {
-                recordsPendingSync = {
-                    base: cloneDailyRecords(remoteRecords),
-                    local: cloneDailyRecords(nextRecords)
-                };
-                persistPendingRecordsSync();
-            }
-            if (isDifferent) {
-                safeLocalStorageSetItem(LS_KEY, JSON.stringify(records));
-                scheduleDailyBackupRefresh();
-
-                const activeEl = document.activeElement;
-                const isTyping = activeEl && activeEl.closest('#records-list');
-
-                if (dayViewContainer.style.display === 'block' && !isTyping) {
-                    renderRecords();
-                }
-                if (monthViewContainer.style.display === 'block') {
-                    renderMonthlyRecords();
-                }
-            }
-            if (recordsPendingSync && !recordsSyncInFlight) flushPendingRecordsSync();
         }
     });
 
@@ -2666,6 +2410,7 @@ if (database) {
     if (window.SharedSync) dailyNotesSync = SharedSync.createPathSync({
         database,
         path: NOTES_DB_PATH,
+        viewSelector: '#day-note-text',
         emptyValue: {},
         pendingStorageKey: NOTES_LS_KEY + '_pending_sync',
         mergeInitial: true,
@@ -3411,6 +3156,7 @@ function isFixedHoliday(y, m, d) {
 // Ensure machines A-J exist for a specific date
 function ensureDayRecords(date) {
     if (!canWriteAppData()) return;
+    if (database && (!dailyRecordsSync || !dailyRecordsSync.isReady())) return;
 
     // Weekday holidays can have production records; only weekends skip defaults.
     const dayOfWeek = new Date(date).getDay();
@@ -3517,7 +3263,7 @@ function saveRecords(triggerHistory = true) {
             console.warn('BLOCKED: Attempted to save empty records array to Firebase');
             return;
         }
-        queueRecordsSync();
+        if (dailyRecordsSync) return dailyRecordsSync.save(records, { automatic: !triggerHistory });
     }
 }
 
@@ -3875,6 +3621,7 @@ function initRollStock() {
         rollDataSync = SharedSync.createPathSync({
             database,
             path: ROLL_DB_PATH,
+            viewSelector: '#stock-view-container',
             emptyValue: {},
             pendingStorageKey: ROLL_STORAGE_KEY + '_pending_sync',
             serverSnapshotStorageKey: ROLL_STORAGE_KEY + '_server_snapshot',
@@ -4433,6 +4180,7 @@ function initSliver() {
         sliverDataSync = SharedSync.createPathSync({
             database,
             path: SLIVER_DB_PATH,
+            viewSelector: '#sliver-view-container',
             emptyValue: {},
             pendingStorageKey: SLIVER_STORAGE_KEY + '_pending_sync',
             serverSnapshotStorageKey: SLIVER_STORAGE_KEY + '_server_snapshot',
@@ -5100,6 +4848,7 @@ function initHanapon() {
         hanaponDataSync = SharedSync.createPathSync({
             database,
             path: HANAPON_DB_PATH,
+            viewSelector: '#hanapon-view-container',
             emptyValue: {},
             pendingStorageKey: HANAPON_STORAGE_KEY + '_pending_sync',
             serverSnapshotStorageKey: HANAPON_STORAGE_KEY + '_server_snapshot',
@@ -8163,6 +7912,7 @@ function initSnowsprint() {
         snowsprintDataSync = SharedSync.createPathSync({
             database,
             path: SNOWSPRINT_DB_PATH,
+            viewSelector: '#snowsprint-view-container, #snCommentPopup',
             emptyValue: {},
             pendingStorageKey: SNOWSPRINT_STORAGE_KEY + '_pending_sync',
             serverSnapshotStorageKey: SNOWSPRINT_STORAGE_KEY + '_server_snapshot',
@@ -8190,9 +7940,11 @@ function initSnowsprint() {
     if (snowsprintConfigChanged) {
         safeLocalStorageSetItem(SNOWSPRINT_STORAGE_KEY, JSON.stringify(snowsprintAllData));
         scheduleDailyBackupRefresh();
-        if (snowsprintDataSync) {
+        if (snowsprintDataSync?.isReady()) {
             snowsprintConfigNeedsSync = false;
             snowsprintDataSync.save(snowsprintAllData);
+        } else {
+            snowsprintConfigNeedsSync = true;
         }
     }
 }
@@ -9204,6 +8956,7 @@ function initHanaponBox() {
         hanaponBoxDataSync = SharedSync.createPathSync({
             database,
             path: HANAPON_BOX_DB_PATH,
+            viewSelector: '#hanapon-box-view-container',
             emptyValue: {},
             normalize: normalizeHanaponBoxData,
             mergeInitial: true,
@@ -9552,6 +9305,7 @@ try {
     shiftDataSync = SharedSync.createPathSync({
         database: SharedSync.guardDatabase(shiftDb),
         path: 'shift_data/' + SHIFT_SECRET_PATH,
+        viewSelector: '#shift-view-container',
         emptyValue: {},
         pendingStorageKey: 'shift_data_' + SHIFT_SECRET_PATH + '_pending_sync',
         serverSnapshotStorageKey: 'shift_data_' + SHIFT_SECRET_PATH + '_server_snapshot',
@@ -9937,6 +9691,7 @@ function initProjectManagement() {
     projectDataSync = SharedSync.createPathSync({
         database,
         path: PROJECT_DB_PATH,
+        viewSelector: '#project-view-container, #projectModalOverlay, #taskCommentModalOverlay',
         emptyValue: [],
         normalize: normalizeProjectBoards,
         pendingStorageKey: BOARDS_STORAGE_KEY + '_pending_sync',
@@ -10984,15 +10739,7 @@ window.restoreFromHistory = function(slot) {
             const backupValue = item.key === 'hanaponBox'
                 ? normalizeHanaponBoxData(parsedBackupValue)
                 : parsedBackupValue;
-            promises.push(new Promise((resolve, reject) => {
-                database.ref(item.db).transaction(currentValue =>
-                    SharedSync.mergeRestoreValue(currentValue, backupValue),
-                    (error, committed, snapshot) => {
-                        if (error) reject(error);
-                        else resolve({ committed, snapshot });
-                    }
-                );
-            }));
+            promises.push(SharedSync.restoreSafely(database, item.db, backupValue));
         } catch (error) {
             console.error('Restore parse error for ' + item.key, error);
         }
@@ -11152,15 +10899,7 @@ window.restoreFromBackup = function(dateStr) {
             const backupValue = item.key === 'hanaponBox'
                 ? normalizeHanaponBoxData(parsedBackupValue)
                 : parsedBackupValue;
-            promises.push(new Promise((resolve, reject) => {
-                database.ref(item.db).transaction(currentValue =>
-                    SharedSync.mergeRestoreValue(currentValue, backupValue),
-                    (error, committed, snapshot) => {
-                        if (error) reject(error);
-                        else resolve({ committed, snapshot });
-                    }
-                );
-            }));
+            promises.push(SharedSync.restoreSafely(database, item.db, backupValue));
         } catch (error) {
             console.error('Restore parse error for ' + item.key, error);
         }
