@@ -4,6 +4,7 @@ function safeLocalStorageSetItem(key, value) {
         window.localStorage.setItem(key, value);
         return true;
     } catch (error) {
+        window.SharedSync?.noteStorageFailure?.(error);
         if (!warnedStorageKeys.has(key)) {
             warnedStorageKeys.add(key);
             console.warn(`Local storage write skipped for ${key}:`, error);

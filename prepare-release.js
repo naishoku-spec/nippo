@@ -7,12 +7,12 @@ const { createHash } = require('node:crypto');
 const PAGE_FILES = ['index.html', '1f.html', '1f-kenpin.html', 'saidan.html', '\u30b7\u30d5\u30c8\u8868 - \u30b3\u30d4\u30fc/index.html'];
 const SOURCE_FILES = [
     ...PAGE_FILES,
-    'app.js', 'shared-sync.js', '1f-app.js', '1f-kenpin-app.js', 'saidan-app.js', 'local-entry.js',
+    'app.js', 'shared-sync.js', 'firebase-storage.js', '1f-app.js', '1f-kenpin-app.js', 'saidan-app.js', 'local-entry.js',
     'style.css', '1f-style.css', '\u30b7\u30d5\u30c8\u8868 - \u30b3\u30d4\u30fc/styles.css'
 ];
 
 function renderBuild(fileName, source, buildId, buildNumber) {
-    if (fileName === 'shared-sync.js') {
+    if (fileName === 'shared-sync.js' || fileName === 'firebase-storage.js') {
         source = source.replace(/(const BUILD_ID = ')[^']+(';)/, (_, start, end) => start + buildId + end)
             .replace(/(const BUILD_NUMBER = )\d+(;)/, (_, start, end) => start + buildNumber + end);
     } else if (fileName === 'app.js') {

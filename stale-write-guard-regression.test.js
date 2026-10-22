@@ -20,6 +20,7 @@ function storage() {
 function fixture(saved = storage(), options = {}) {
     const elements = new Map();
     const documentListeners = new Map();
+    const windowListeners = new Map();
     const document = {
         activeElement: null, visibilityState: 'visible',
         addEventListener(type, listener) {
@@ -53,14 +54,21 @@ function fixture(saved = storage(), options = {}) {
     document.head = element();
     document.createElement = element;
     document.getElementById = id => elements.get(id) || null;
-    document.querySelector = selector => selector === 'meta[name="app-build-id"]' && options.pageBuildId
-        ? { content: options.pageBuildId } : null;
+    document.querySelector = selector => {
+        if (selector === 'meta[name="app-build-id"]' && options.pageBuildId) return { content: options.pageBuildId };
+        if (selector === 'script[src*="firebase-storage.js"]' && options.expectConnectionStorage) return {};
+        return null;
+    };
     const navigations = [];
     const window = {
         location: { href: options.href || 'http://localhost/index.html', protocol: 'http:',
             replace(url) { navigations.push(url); } },
         history: { state: null, replaceState() {} },
-        localStorage: saved, navigator: { onLine: true }, addEventListener() {}
+        localStorage: saved, navigator: { onLine: true },
+        addEventListener(type, listener) {
+            if (!windowListeners.has(type)) windowListeners.set(type, []);
+            windowListeners.get(type).push(listener);
+        }
     };
     vm.runInNewContext(source, {
         window, document, localStorage: saved, URL, console,
@@ -69,6 +77,7 @@ function fixture(saved = storage(), options = {}) {
     });
     return {
         sync: window.SharedSync, document, saved, elements, navigations,
+        emitWindow(type, event) { for (const listener of windowListeners.get(type) || []) listener(event); },
         paused: () => elements.has('sync-refresh-lock'),
         refresh: () => elements.get('sync-refresh-retry').click()
     };
@@ -517,7 +526,7 @@ test('upgrading preserves a different older pending draft even when a recovery c
     assert.deepEqual(db.value(), { A: 456 });
 });
 
-for (const previousBuild of [2026102054, 2026102055, 2026102202, 2026102203]) test(`a guarded ${previousBuild} draft survives an upgrade and requires refresh before replaying its edits`, async () => {
+for (const previousBuild of [2026102054, 2026102055, 2026102202, 2026102203, 2026102206]) test(`a guarded ${previousBuild} draft survives an upgrade and requires refresh before replaying its edits`, async () => {
     const saved = storage();
     saved.setItem('report_pending', JSON.stringify({
         base: { A: 0, B: 0 }, local: { A: 0, B: 20 }, savedAt: new Date().toISOString(),
@@ -714,4 +723,67 @@ test('two devices retain separate fields through repeated delayed and reordered 
         }
         assert.deepEqual(remote, { A: n, B: n * 2 }, 'both edits must survive round ' + n);
     }
+});
+
+test('full local storage warns before leaving until the pending save is acknowledged', () => {
+    const saved = storage();
+    const f = fixture(saved);
+    const db = database({ A: 0 });
+    const c = client(f, db, db.value());
+    db.emit();
+    saved.setItem = () => { const error = new Error('test-quota'); error.name = 'QuotaExceededError'; throw error; };
+    db.hold = true;
+    c.save({ A: 21 });
+    assert.equal(f.sync.getConnectionStatus().unpersistedDrafts, 1);
+    const before = { prevented: false, preventDefault() { this.prevented = true; } };
+    f.emitWindow('beforeunload', before);
+    assert.equal(before.prevented, true);
+    assert.equal(c.sync.getPending().local.A, 21);
+    db.acknowledge();
+    assert.equal(f.sync.getConnectionStatus().unpersistedDrafts, 0);
+    const after = { prevented: false, preventDefault() { this.prevented = true; } };
+    f.emitWindow('beforeunload', after);
+    assert.equal(after.prevented, false);
+    assert.deepEqual(db.value(), { A: 21 });
+});
+
+test('full storage cannot overwrite or remove an untrusted recovery payload when a new edit is saved', () => {
+    const saved = storage();
+    const old = JSON.stringify({ base: { A: 1 }, local: { A: 12 }, trusted: false });
+    saved.setItem('report_pending', old);
+    const write = saved.setItem;
+    saved.setItem = (key, value) => {
+        if (key.includes('_stale_backup')) throw new Error('test-quota');
+        write(key, value);
+    };
+    const f = fixture(saved);
+    const db = database({ A: 99 });
+    const c = client(f, db, { A: 12 });
+    db.emit();
+    assert.deepEqual(c.get(), { A: 99 });
+    c.save({ A: 100 });
+    assert.deepEqual(db.value(), { A: 100 });
+    assert.equal(saved.getItem('report_pending'), old);
+});
+
+test('an offline edit with full storage keeps the latest remote fields through guarded refresh', async () => {
+    const saved = storage();
+    const f = fixture(saved);
+    const db = database({ A: 99, B: 0 });
+    const c = client(f, db, { A: 12, B: 0 });
+    saved.setItem = () => { const error = new Error('test-quota'); error.name = 'QuotaExceededError'; throw error; };
+    c.save({ A: 12, B: 1 });
+    assert.equal(db.writes, 0);
+    db.emit();
+    assert.equal(f.paused(), true);
+    assert.equal(db.writes, 0);
+    assert.equal(await f.refresh(), true);
+    assert.deepEqual(db.value(), { A: 99, B: 1 });
+    assert.equal(f.sync.getConnectionStatus().unpersistedDrafts, 0);
+});
+
+test('a missing required Firebase storage script blocks writes rather than using a partially deployed page', () => {
+    const f = fixture(storage(), { expectConnectionStorage: true });
+    f.sync.startVersionGuard();
+    assert.equal(f.sync.canWrite(), false);
 });

@@ -23,6 +23,7 @@ function safeLocalStorageSetItem(key, value) {
         window.localStorage.setItem(key, value);
         return true;
     } catch (error) {
+        window.SharedSync?.noteStorageFailure?.(error);
         warnStorageOnce('write', key, error);
         return false;
     }
@@ -1651,8 +1652,8 @@ const firebaseConfig = {
     measurementId: "G-SR8Y5NKQTZ"
 };
 
-const APP_BUILD_ID = '20261022-release-2026102206';
-const APP_BUILD_NUMBER = 2026102206;
+const APP_BUILD_ID = '20261022-release-2026102207';
+const APP_BUILD_NUMBER = 2026102207;
 const APP_VERSION_METADATA_PATH = 'app-version.json';
 const APP_VERSION_CHECK_INTERVAL_MS = 30000;
 const APP_LATEST_BUILD_LS_KEY = 'nippo_latest_app_build_number';
@@ -1966,9 +1967,10 @@ function performDailyBackup(options = {}) {
         const existingBackup = safeLocalStorageGetItem(backupKey);
         if (!shouldReplaceDailyBackup(existingBackup, backupData, options.refreshExisting === true)) return;
 
-        safeLocalStorageSetItem(backupKey, JSON.stringify(backupData));
+        if (!safeLocalStorageSetItem(backupKey, JSON.stringify(backupData))) return false;
         pruneOldDailyBackups();
         console.log("Daily backup of localStorage completed successfully.");
+        return true;
     } catch (e) {
         console.error("Failed to create daily local backup:", e);
     }
@@ -1995,6 +1997,7 @@ const HISTORY_BACKUP_PREFIX = 'nippo_history_backup_';
 const MAX_HISTORY_SLOTS = 3; // 最新・1つ前・2つ前
 
 function saveHistoryBackup() {
+    if (window.FirebaseConnectionStorage?.getStatus().storageWriteFailed) return false;
     try {
         const now = new Date();
         const timestamp = now.toLocaleDateString('sv-SE') + ' ' + now.toLocaleTimeString('sv-SE');
@@ -2014,13 +2017,12 @@ function saveHistoryBackup() {
             saidan: safeLocalStorageGetItem(isProduction ? 'saidan_records' : 'saidan_records_dev')
         };
 
-        // スライド処理: 3→削除、2→3、1→2、新規→1
-        safeLocalStorageRemoveItem(HISTORY_BACKUP_PREFIX + '3');
+        // 書き込みに失敗したら後続の履歴を変更しない。
         const slot2 = safeLocalStorageGetItem(HISTORY_BACKUP_PREFIX + '2');
-        if (slot2) safeLocalStorageSetItem(HISTORY_BACKUP_PREFIX + '3', slot2);
+        if (slot2 && !safeLocalStorageSetItem(HISTORY_BACKUP_PREFIX + '3', slot2)) return false;
         const slot1 = safeLocalStorageGetItem(HISTORY_BACKUP_PREFIX + '1');
-        if (slot1) safeLocalStorageSetItem(HISTORY_BACKUP_PREFIX + '2', slot1);
-        safeLocalStorageSetItem(HISTORY_BACKUP_PREFIX + '1', JSON.stringify(backupData));
+        if (slot1 && !safeLocalStorageSetItem(HISTORY_BACKUP_PREFIX + '2', slot1)) return false;
+        if (!safeLocalStorageSetItem(HISTORY_BACKUP_PREFIX + '1', JSON.stringify(backupData))) return false;
 
         console.log("History backup saved at " + timestamp);
     } catch (e) {

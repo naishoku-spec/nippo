@@ -1,8 +1,8 @@
 (function (global) {
     'use strict';
 
-    const BUILD_ID = '20261022-release-2026102206';
-    const BUILD_NUMBER = 2026102206;
+    const BUILD_ID = '20261022-release-2026102207';
+    const BUILD_NUMBER = 2026102207;
     const VERSION_PATH = new URL('app-version.json', document.currentScript?.src || document.baseURI || global.location.href).toString();
     const VERSION_CHECK_INTERVAL_MS = 30000;
     const LATEST_BUILD_KEY = 'nippo_latest_app_build_number';
@@ -13,8 +13,12 @@
     const preparedFirebaseHosts = new Set();
     const connectionStates = new Set();
     const databaseConnectionStates = new WeakMap();
+    const unpersistedDrafts = new Set();
+    let draftWarningTimer = null;
+    let draftWarningVisible = false;
 
     function prepareFirebaseConnection(config) {
+        if (global.FirebaseConnectionStorage) return global.FirebaseConnectionStorage.prepare(config);
         try {
             const host = new URL(config.databaseURL).hostname.toLowerCase();
             if (!/(?:^|\.)(?:firebaseio\.com|firebasedatabase\.app)$/.test(host)) return false;
@@ -56,11 +60,17 @@
 
     function renderConnectionNotice() {
         const failed = Array.from(connectionStates).some(state => state.warned && connectionHasProblem(state));
-        if (!failed) {
+        const unsaved = draftWarningVisible && unpersistedDrafts.size > 0;
+        if (!failed && !unsaved) {
             document.getElementById?.('sync-connection-notice')?.remove();
             return;
         }
-        if (!document.body || document.getElementById('sync-connection-notice')) return;
+        if (!document.body) return;
+        let notice = document.getElementById('sync-connection-notice');
+        if (notice) {
+            updateConnectionNoticeText(notice, unsaved);
+            return;
+        }
         if (!document.getElementById('sync-connection-styles')) {
             const style = document.createElement('style');
             style.id = 'sync-connection-styles';
@@ -73,7 +83,7 @@
             ].join('');
             document.head.appendChild(style);
         }
-        const notice = document.createElement('aside');
+        notice = document.createElement('aside');
         notice.id = 'sync-connection-notice';
         notice.setAttribute('role', 'alert');
         notice.innerHTML = '<div><strong>最新データを受信できていません</strong><p id="sync-connection-message">表示が古い可能性があります。通信状態をご確認ください。</p></div><button type="button">接続をやり直す</button>';
@@ -82,7 +92,35 @@
                 notice.querySelector('p').textContent = '未送信の入力を端末に保持できないため、再読み込みを止めました。この画面は閉じないでください。';
             }
         });
+        updateConnectionNoticeText(notice, unsaved);
         document.body.appendChild(notice);
+    }
+
+    function updateConnectionNoticeText(notice, unsaved) {
+        notice.querySelector('strong').textContent = unsaved
+            ? '入力内容を端末に保存できていません' : '最新データを受信できていません';
+        notice.querySelector('p').textContent = unsaved
+            ? '保存容量が不足しています。サーバーへの保存が完了するまで、この画面を閉じないでください。'
+            : '表示が古い可能性があります。通信状態をご確認ください。';
+        notice.querySelector('button').hidden = unsaved;
+    }
+
+    function trackUnpersistedDraft(key, unsafe) {
+        if (unsafe) unpersistedDrafts.add(key);
+        else unpersistedDrafts.delete(key);
+        if (unpersistedDrafts.size === 0) {
+            clearTimeout(draftWarningTimer);
+            draftWarningTimer = null;
+            draftWarningVisible = false;
+        } else if (!draftWarningTimer && !draftWarningVisible) {
+            draftWarningTimer = setTimeout(() => {
+                draftWarningTimer = null;
+                draftWarningVisible = true;
+                renderConnectionNotice();
+            }, CONNECTION_WARNING_DELAY_MS);
+            draftWarningTimer?.unref?.();
+        }
+        renderConnectionNotice();
     }
 
     function updateConnectionState(state) {
@@ -135,6 +173,8 @@
     function getConnectionStatus() {
         return {
             buildId: BUILD_ID,
+            connectionStorage: global.FirebaseConnectionStorage?.getStatus(),
+            unpersistedDrafts: unpersistedDrafts.size,
             databases: Array.from(connectionStates, state => ({
                 host: state.host,
                 connected: state.connected,
@@ -143,6 +183,10 @@
                 errors: Array.from(state.errors.values())
             }))
         };
+    }
+
+    function noteStorageFailure(error) {
+        global.FirebaseConnectionStorage?.noteStorageFailure(error);
     }
 
     function clearRefreshMarker() {
@@ -292,6 +336,13 @@
         pathSyncLifecycleBound = true;
         const flushBeforeSuspend = () => flushRegisteredPathSyncs();
         window.addEventListener('pagehide', flushBeforeSuspend);
+        window.addEventListener('beforeunload', event => {
+            flushBeforeSuspend();
+            if (unpersistedDrafts.size > 0) {
+                event.preventDefault();
+                event.returnValue = '';
+            }
+        });
         window.addEventListener('freeze', flushBeforeSuspend);
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'hidden') flushBeforeSuspend();
@@ -973,8 +1024,10 @@
 
     function startVersionGuard(appBuildId) {
         const pageBuildId = document.querySelector?.('meta[name="app-build-id"]')?.content;
+        const expectsConnectionStorage = Boolean(document.querySelector?.('script[src*="firebase-storage.js"]'));
         if ((pageBuildId && pageBuildId !== BUILD_ID)
-            || (appBuildId && appBuildId !== BUILD_ID)) markVersionStale();
+            || (appBuildId && appBuildId !== BUILD_ID)
+            || (expectsConnectionStorage && global.FirebaseConnectionStorage?.BUILD_ID !== BUILD_ID)) markVersionStale();
         if (versionGuardStarted) return;
         versionGuardStarted = true;
         try {
@@ -1081,6 +1134,7 @@
             }
             return true;
         } catch (error) {
+            noteStorageFailure(error);
             console.warn('Pending sync persistence skipped:', error);
             return false;
         }
@@ -1108,6 +1162,7 @@
             }));
             return true;
         } catch (error) {
+            noteStorageFailure(error);
             console.warn('Stale pending data could not be preserved:', key, error);
             return false;
         }
@@ -1130,6 +1185,7 @@
         try {
             localStorage.setItem(key, JSON.stringify(value));
         } catch (error) {
+            noteStorageFailure(error);
             console.warn('Server snapshot persistence skipped:', error);
         }
     }
@@ -1199,8 +1255,12 @@
             appliedLocalBaseline = cloneValue(getLocal());
         };
         const persistCurrentPending = () => {
-            if (!pending && retainUntrustedStoredPending) return false;
+            if (retainUntrustedStoredPending) {
+                trackUnpersistedDraft(pauseKey, Boolean(pending?._trusted));
+                return false;
+            }
             const persisted = persistPending(pendingKey, pending);
+            trackUnpersistedDraft(pauseKey, Boolean(pending) && !persisted);
             if (persisted) retainUntrustedStoredPending = false;
             return persisted;
         };
@@ -1345,7 +1405,6 @@
                     local: cloneValue(localValue),
                     _trusted: true
                 };
-                retainUntrustedStoredPending = false;
             } else {
                 pending.local = cloneValue(localValue);
             }
@@ -1541,6 +1600,7 @@
         guardDatabase,
         prepareFirebaseConnection,
         getConnectionStatus,
+        noteStorageFailure,
         canWrite,
         canRenderView,
         startVersionGuard,
