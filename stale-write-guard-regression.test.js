@@ -517,7 +517,7 @@ test('upgrading preserves a different older pending draft even when a recovery c
     assert.deepEqual(db.value(), { A: 456 });
 });
 
-for (const previousBuild of [2026102054, 2026102055, 2026102202]) test(`a guarded ${previousBuild} draft survives an upgrade and requires refresh before replaying its edits`, async () => {
+for (const previousBuild of [2026102054, 2026102055, 2026102202, 2026102203]) test(`a guarded ${previousBuild} draft survives an upgrade and requires refresh before replaying its edits`, async () => {
     const saved = storage();
     saved.setItem('report_pending', JSON.stringify({
         base: { A: 0, B: 0 }, local: { A: 0, B: 20 }, savedAt: new Date().toISOString(),

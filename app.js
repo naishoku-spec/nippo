@@ -1651,8 +1651,8 @@ const firebaseConfig = {
     measurementId: "G-SR8Y5NKQTZ"
 };
 
-const APP_BUILD_ID = '20261022-release-2026102203';
-const APP_BUILD_NUMBER = 2026102203;
+const APP_BUILD_ID = '20261022-release-2026102206';
+const APP_BUILD_NUMBER = 2026102206;
 const APP_VERSION_METADATA_PATH = 'app-version.json';
 const APP_VERSION_CHECK_INTERVAL_MS = 30000;
 const APP_LATEST_BUILD_LS_KEY = 'nippo_latest_app_build_number';
@@ -1737,6 +1737,7 @@ function guardFirebaseReference(reference) {
 }
 
 function createGuardedFirebaseDatabase(rawDatabase) {
+    if (window.SharedSync) return SharedSync.guardDatabase(rawDatabase);
     return {
         ref(path) {
             return guardFirebaseReference(rawDatabase.ref(path));
@@ -1858,6 +1859,7 @@ function startAppVersionGuard() {
 // Initialize Firebase
 let database = null;
 if (typeof firebase !== "undefined" && firebaseConfig.apiKey !== "YOUR_API_KEY") {
+    window.SharedSync?.prepareFirebaseConnection?.(firebaseConfig);
     firebase.initializeApp(firebaseConfig);
     database = createGuardedFirebaseDatabase(firebase.database());
 }
@@ -9305,6 +9307,7 @@ let shiftDataSync = null;
 
 // Initialize Shift Firebase in a separate app instance to avoid conflicts
 try {
+    SharedSync.prepareFirebaseConnection?.(shiftFirebaseConfig);
     const shiftApp = firebase.initializeApp(shiftFirebaseConfig, 'shiftApp');
     const shiftDb = shiftApp.database();
     shiftDataSync = SharedSync.createPathSync({

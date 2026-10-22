@@ -26,6 +26,7 @@ const firebaseConfig = {
 
 // Initialize Firebase
 let database = null;
+window.SharedSync?.prepareFirebaseConnection?.(firebaseConfig);
 if (firebase.apps.length === 0) {
     firebase.initializeApp(firebaseConfig);
 }

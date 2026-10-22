@@ -27,6 +27,7 @@ const firebaseConfig = {
 // Initialize Firebase
 let database = null;
 if (firebaseConfig.apiKey !== "YOUR_API_KEY") {
+    window.SharedSync?.prepareFirebaseConnection?.(firebaseConfig);
     firebase.initializeApp(firebaseConfig);
     database = firebase.database();
     if (window.SharedSync) {

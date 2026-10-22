@@ -1,13 +1,149 @@
 (function (global) {
     'use strict';
 
-    const BUILD_ID = '20261022-release-2026102203';
-    const BUILD_NUMBER = 2026102203;
+    const BUILD_ID = '20261022-release-2026102206';
+    const BUILD_NUMBER = 2026102206;
     const VERSION_PATH = new URL('app-version.json', document.currentScript?.src || document.baseURI || global.location.href).toString();
     const VERSION_CHECK_INTERVAL_MS = 30000;
     const LATEST_BUILD_KEY = 'nippo_latest_app_build_number';
     const PENDING_TRUST_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
     const FIRST_GUARDED_DRAFT_BUILD = 2026102054;
+    const CONNECTION_WARNING_DELAY_MS = 10000;
+    const CONNECTION_RECOVERY_KEY = 'nippo_firebase_connection_recovery';
+    const preparedFirebaseHosts = new Set();
+    const connectionStates = new Set();
+    const databaseConnectionStates = new WeakMap();
+
+    function prepareFirebaseConnection(config) {
+        try {
+            const host = new URL(config.databaseURL).hostname.toLowerCase();
+            if (!/(?:^|\.)(?:firebaseio\.com|firebasedatabase\.app)$/.test(host)) return false;
+            if (preparedFirebaseHosts.has(host)) return true;
+            const keys = ['firebase:host:' + host];
+            // Firebase 9/10 remembers a failed WebSocket and starts subsequent
+            // pages with long polling. Retry the canonical endpoint on a new page.
+            if (typeof global.WebSocket === 'function'
+                && localStorage.getItem('firebase:previous_websocket_failure') === 'true') {
+                keys.push('firebase:previous_websocket_failure');
+            }
+            const settings = {};
+            keys.forEach(key => {
+                const value = localStorage.getItem(key);
+                if (value !== null) settings[key] = value;
+            });
+            if (Object.keys(settings).length > 0) {
+                const previous = JSON.parse(localStorage.getItem(CONNECTION_RECOVERY_KEY) || '{}');
+                const recovery = JSON.stringify({
+                    savedAt: new Date().toISOString(),
+                    settings: { ...(previous.settings || {}), ...settings }
+                });
+                localStorage.setItem(CONNECTION_RECOVERY_KEY, recovery);
+                if (localStorage.getItem(CONNECTION_RECOVERY_KEY) !== recovery) return false;
+                // Do not reset anything unless its original value was retained.
+                Object.keys(settings).forEach(key => localStorage.removeItem(key));
+            }
+            preparedFirebaseHosts.add(host);
+            return true;
+        } catch (error) {
+            console.warn('Firebase connection settings could not be refreshed:', error);
+            return false;
+        }
+    }
+
+    function connectionHasProblem(state) {
+        return state.connected !== true || state.awaitingPaths.size > 0 || state.errors.size > 0;
+    }
+
+    function renderConnectionNotice() {
+        const failed = Array.from(connectionStates).some(state => state.warned && connectionHasProblem(state));
+        if (!failed) {
+            document.getElementById?.('sync-connection-notice')?.remove();
+            return;
+        }
+        if (!document.body || document.getElementById('sync-connection-notice')) return;
+        if (!document.getElementById('sync-connection-styles')) {
+            const style = document.createElement('style');
+            style.id = 'sync-connection-styles';
+            style.textContent = [
+                '#sync-connection-notice{position:fixed;bottom:16px;right:16px;box-sizing:border-box;width:calc(100% - 32px);max-width:620px;z-index:12000;display:flex;align-items:center;gap:16px;padding:16px;background:#fffbeb;color:#78350f;border:1px solid #f59e0b;border-radius:8px;box-shadow:0 4px 16px #0002;font:14px/1.5 sans-serif}',
+                '#sync-connection-notice strong{display:block;font-size:15px}',
+                '#sync-connection-notice p{margin:4px 0 0}',
+                '#sync-connection-notice button{flex-shrink:0;border:1px solid #a16207;border-radius:6px;background:#fff;color:#78350f;padding:10px 12px;font:inherit;cursor:pointer}',
+                '@media(max-width:600px){#sync-connection-notice{align-items:flex-start;flex-direction:column;gap:10px}#sync-connection-notice button{font-size:16px}}'
+            ].join('');
+            document.head.appendChild(style);
+        }
+        const notice = document.createElement('aside');
+        notice.id = 'sync-connection-notice';
+        notice.setAttribute('role', 'alert');
+        notice.innerHTML = '<div><strong>最新データを受信できていません</strong><p id="sync-connection-message">表示が古い可能性があります。通信状態をご確認ください。</p></div><button type="button">接続をやり直す</button>';
+        notice.querySelector('button').addEventListener('click', () => {
+            if (!reloadCurrentPageFresh()) {
+                notice.querySelector('p').textContent = '未送信の入力を端末に保持できないため、再読み込みを止めました。この画面は閉じないでください。';
+            }
+        });
+        document.body.appendChild(notice);
+    }
+
+    function updateConnectionState(state) {
+        if (connectionHasProblem(state)) {
+            if (!state.timer && !state.warned) {
+                state.timer = setTimeout(() => {
+                    state.timer = null;
+                    state.warned = true;
+                    renderConnectionNotice();
+                }, CONNECTION_WARNING_DELAY_MS);
+            }
+        } else {
+            clearTimeout(state.timer);
+            state.timer = null;
+            state.warned = false;
+        }
+        renderConnectionNotice();
+    }
+
+    function monitorDatabaseConnection(rawDatabase) {
+        if (databaseConnectionStates.has(rawDatabase)) return databaseConnectionStates.get(rawDatabase);
+        const databaseUrl = rawDatabase.app?.options?.databaseURL;
+        if (!databaseUrl) return null;
+        const state = {
+            host: new URL(databaseUrl).hostname,
+            connected: false,
+            lastConnectedAt: null,
+            awaitingPaths: new Set(),
+            errors: new Map(),
+            timer: null,
+            warned: false
+        };
+        databaseConnectionStates.set(rawDatabase, state);
+        connectionStates.add(state);
+        rawDatabase.ref('.info/connected').on('value', snapshot => {
+            state.connected = snapshot.val() === true;
+            if (state.connected) {
+                state.lastConnectedAt = new Date().toISOString();
+                state.errors.delete('.info/connected');
+            }
+            updateConnectionState(state);
+        }, error => {
+            state.errors.set('.info/connected', String(error?.code || 'connection-failed'));
+            updateConnectionState(state);
+        });
+        updateConnectionState(state);
+        return state;
+    }
+
+    function getConnectionStatus() {
+        return {
+            buildId: BUILD_ID,
+            databases: Array.from(connectionStates, state => ({
+                host: state.host,
+                connected: state.connected,
+                lastConnectedAt: state.lastConnectedAt,
+                waitingForData: state.awaitingPaths.size,
+                errors: Array.from(state.errors.values())
+            }))
+        };
+    }
 
     function clearRefreshMarker() {
         try {
@@ -634,11 +770,14 @@
 
     function guardDatabase(rawDatabase) {
         if (!rawDatabase) return rawDatabase;
-        return {
+        const state = monitorDatabaseConnection(rawDatabase);
+        const guarded = {
             ref(path) {
                 return guardReference(rawDatabase.ref(path));
             }
         };
+        if (state) databaseConnectionStates.set(guarded, state);
+        return guarded;
     }
 
     function showSyncRefreshRequired(key, refresh) {
@@ -1356,7 +1495,25 @@
         pageRefreshCheckpoints.add(preserveDraftForPageRefresh);
 
         if (database) {
-            database.ref(path).on('value', snapshot => handleRemote(snapshot.val()));
+            const connection = databaseConnectionStates.get(database);
+            if (connection) {
+                connection.awaitingPaths.add(path);
+                updateConnectionState(connection);
+            }
+            database.ref(path).on('value', snapshot => {
+                handleRemote(snapshot.val());
+                if (connection) {
+                    connection.awaitingPaths.delete(path);
+                    connection.errors.delete(path);
+                    updateConnectionState(connection);
+                }
+            }, error => {
+                console.warn('Shared data could not be read:', error);
+                if (connection) {
+                    connection.errors.set(path, String(error?.code || 'read-failed'));
+                    updateConnectionState(connection);
+                }
+            });
         }
 
         return {
@@ -1382,6 +1539,8 @@
         mergeRestoreValue,
         guardReference,
         guardDatabase,
+        prepareFirebaseConnection,
+        getConnectionStatus,
         canWrite,
         canRenderView,
         startVersionGuard,
