@@ -192,11 +192,9 @@ if (database && window.SharedSync) {
             records = normalize1fRecords(value);
             safeLocalStorageSetItem(LS_KEY, JSON.stringify(records));
         },
-        onRemote: () => {
+        onRemote: (value, meta) => {
             isFirebaseSynced = true;
-            const activeEl = document.activeElement;
-            const isEditing = activeEl && activeEl.closest('#records-list-1f');
-            if (!isEditing) {
+            if (SharedSync.canRenderView('#records-list-1f', meta)) {
                 ensureDayRecords(currentDate);
                 renderRecords();
                 if (monthViewContainer && monthViewContainer.style.display === 'block') {
@@ -220,9 +218,8 @@ if (database && window.SharedSync) {
             dailyNotes = normalize1fNotes(value);
             safeLocalStorageSetItem(NOTES_LS_KEY, JSON.stringify(dailyNotes));
         },
-        onRemote: () => {
-            const activeEl = document.activeElement;
-            if (!activeEl || activeEl.id !== 'day-note-text-1f') renderDailyNotes();
+        onRemote: (value, meta) => {
+            if (SharedSync.canRenderView('#day-note-text-1f', meta)) renderDailyNotes();
         }
     });
 }

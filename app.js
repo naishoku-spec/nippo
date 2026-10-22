@@ -1651,8 +1651,8 @@ const firebaseConfig = {
     measurementId: "G-SR8Y5NKQTZ"
 };
 
-const APP_BUILD_ID = '20261022-release-2026102202';
-const APP_BUILD_NUMBER = 2026102202;
+const APP_BUILD_ID = '20261022-release-2026102203';
+const APP_BUILD_NUMBER = 2026102203;
 const APP_VERSION_METADATA_PATH = 'app-version.json';
 const APP_VERSION_CHECK_INTERVAL_MS = 30000;
 const APP_LATEST_BUILD_LS_KEY = 'nippo_latest_app_build_number';
@@ -2432,9 +2432,8 @@ if (database) {
             safeLocalStorageSetItem(NOTES_LS_KEY, JSON.stringify(dailyNotes));
             scheduleDailyBackupRefresh();
         },
-        onRemote: () => {
-            const activeEl = document.activeElement;
-            if (!activeEl || activeEl.id !== 'day-note-text') renderDailyNotes();
+        onRemote: (value, meta) => {
+            if (SharedSync.canRenderView('#day-note-text', meta)) renderDailyNotes();
         }
     });
 }
@@ -3645,9 +3644,8 @@ function initRollStock() {
                 safeLocalStorageSetItem(ROLL_STORAGE_KEY, JSON.stringify(rollAllData));
                 scheduleDailyBackupRefresh();
             },
-            onRemote: () => {
-                const activeEl = document.activeElement;
-                if (activeEl && activeEl.closest('#stock-view-container')) return;
+            onRemote: (value, meta) => {
+                if (!SharedSync.canRenderView('#stock-view-container', meta)) return;
                 if (stockViewContainer.style.display === 'block') renderRollStock();
             }
         });
@@ -4201,10 +4199,9 @@ function initSliver() {
                 safeLocalStorageSetItem(SLIVER_STORAGE_KEY, JSON.stringify(sliverAllData));
                 scheduleDailyBackupRefresh();
             },
-            onRemote: () => {
-                const activeEl = document.activeElement;
+            onRemote: (value, meta) => {
                 ensureSliverMonth(sliverCurrentYear, sliverCurrentMonth, true);
-                if (!activeEl?.closest('#sliver-view-container')
+                if (SharedSync.canRenderView('#sliver-view-container', meta)
                     && sliverViewContainer.style.display === 'block') renderSliver();
             }
         });
@@ -4869,10 +4866,9 @@ function initHanapon() {
                 safeLocalStorageSetItem(HANAPON_STORAGE_KEY, JSON.stringify(hanaponAllData));
                 scheduleDailyBackupRefresh();
             },
-            onRemote: () => {
-                const activeEl = document.activeElement;
+            onRemote: (value, meta) => {
                 ensureHanaponMonth(hanaponCurrentYear, hanaponCurrentMonth, true);
-                if (!activeEl?.closest('#hanapon-view-container')
+                if (SharedSync.canRenderView('#hanapon-view-container', meta)
                     && hanaponViewContainer.style.display === 'block') renderHanapon();
             }
         });
@@ -7934,15 +7930,14 @@ function initSnowsprint() {
                 safeLocalStorageSetItem(SNOWSPRINT_STORAGE_KEY, JSON.stringify(snowsprintAllData));
                 scheduleDailyBackupRefresh();
             },
-            onRemote: () => {
+            onRemote: (value, meta) => {
                 const configChanged = ensureSnowsprintConfiguredItems() || snowsprintConfigNeedsSync;
                 if (configChanged && snowsprintDataSync) {
                     snowsprintConfigNeedsSync = false;
                     snowsprintDataSync.save(snowsprintAllData);
                 }
-                const activeEl = document.activeElement;
                 ensureSnowsprintMonth(snowsprintCurrentYear, snowsprintCurrentMonth, true);
-                if (!activeEl?.closest('#snowsprint-view-container')
+                if (SharedSync.canRenderView('#snowsprint-view-container', meta)
                     && snowsprintViewContainer.style.display === 'block') renderSnowsprint();
             }
         });
@@ -8980,10 +8975,9 @@ function initHanaponBox() {
                 safeLocalStorageSetItem(HANAPON_BOX_STORAGE_KEY, JSON.stringify(hanaponBoxAllData));
                 scheduleDailyBackupRefresh();
             },
-            onRemote: () => {
-                const activeEl = document.activeElement;
+            onRemote: (value, meta) => {
                 ensureHanaponBoxMonth(hanaponBoxCurrentYear, hanaponBoxCurrentMonth, false);
-                if (!activeEl?.closest('#hanapon-box-view-container')
+                if (SharedSync.canRenderView('#hanapon-box-view-container', meta)
                     && hanaponBoxViewContainer.style.display === 'block') {
                     renderHanaponBox();
                 }
@@ -9334,9 +9328,8 @@ try {
             shiftOverrides = value.overrides && typeof value.overrides === 'object' ? value.overrides : {};
             shiftUpdatedAt = Number(value._syncUpdatedAt) || 0;
         },
-        onRemote: () => {
-            const activeEl = document.activeElement;
-            if (activeEl?.closest('#shift-view-container')) return;
+        onRemote: (value, meta) => {
+            if (!SharedSync.canRenderView('#shift-view-container', meta)) return;
             if (document.getElementById('shift-view-container')?.style.display === 'block') shiftRenderMembers();
         }
     });
@@ -9714,10 +9707,9 @@ function initProjectManagement() {
             safeLocalStorageSetItem(BOARDS_STORAGE_KEY, JSON.stringify(boardsData));
             scheduleDailyBackupRefresh();
         },
-        onRemote: () => {
+        onRemote: (value, meta) => {
             if (boardsData.length > 0 && !currentBoardId) currentBoardId = boardsData[0].id;
-            const activeEl = document.activeElement;
-            if (!activeEl?.closest('#project-view-container')) renderBoard();
+            if (SharedSync.canRenderView('#project-view-container, #projectModalOverlay, #taskCommentModalOverlay', meta)) renderBoard();
             if (typeof currentCommentTaskInfo !== 'undefined' && currentCommentTaskInfo) {
                 const board = getCurrentBoard();
                 const column = board && board.columns.find(col => col.id === currentCommentTaskInfo.colId);

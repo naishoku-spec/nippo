@@ -98,6 +98,9 @@ function fixture() {
         getSnowsprintCommentCellLabel: () => '10/1 arrival',
         submitSnowsprintComment() {},
         SharedSync: {
+            canRenderView(selector, meta = {}) {
+                return meta.force === true || !document.activeElement?.closest(selector);
+            },
             createPathSync(options) {
                 context.remoteRefresh = options.onRemote;
                 return { save() {} };

@@ -92,9 +92,8 @@ if (database && window.SharedSync) {
             records = normalizeKenpinRecords(value);
             safeLocalStorageSetItem(LS_KEY, JSON.stringify(records));
         },
-        onRemote: () => {
-            const activeEl = document.activeElement;
-            if (!activeEl || !activeEl.closest('#records-list-kenpin')) renderRecords();
+        onRemote: (value, meta) => {
+            if (SharedSync.canRenderView('#records-list-kenpin', meta)) renderRecords();
         }
     });
 }

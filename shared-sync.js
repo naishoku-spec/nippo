@@ -1,8 +1,8 @@
 (function (global) {
     'use strict';
 
-    const BUILD_ID = '20261022-release-2026102202';
-    const BUILD_NUMBER = 2026102202;
+    const BUILD_ID = '20261022-release-2026102203';
+    const BUILD_NUMBER = 2026102203;
     const VERSION_PATH = new URL('app-version.json', document.currentScript?.src || document.baseURI || global.location.href).toString();
     const VERSION_CHECK_INTERVAL_MS = 30000;
     const LATEST_BUILD_KEY = 'nippo_latest_app_build_number';
@@ -162,6 +162,18 @@
         });
         window.addEventListener('online', flushBeforeSuspend);
         window.addEventListener('pageshow', flushBeforeSuspend);
+        document.addEventListener('focusout', () => setTimeout(flushBeforeSuspend, 0));
+    }
+
+    function isInputFocused(viewSelector) {
+        const active = document.activeElement;
+        return Boolean(viewSelector
+            && active?.matches?.('input, textarea, select, [contenteditable="true"]')
+            && active.closest(viewSelector));
+    }
+
+    function canRenderView(viewSelector, meta = {}) {
+        return meta.force === true || !isInputFocused(viewSelector);
     }
 
     function escapeHtml(value) {
@@ -1026,10 +1038,7 @@
         const pauseKey = {};
         const isEditing = () => {
             if (typeof options.isEditing === 'function') return options.isEditing();
-            const active = document.activeElement;
-            return Boolean(options.viewSelector
-                && active?.matches?.('input, textarea, select, [contenteditable="true"]')
-                && active.closest(options.viewSelector));
+            return isInputFocused(options.viewSelector);
         };
 
         const getLocal = () => normalize(options.getLocal());
@@ -1124,7 +1133,14 @@
         }
 
         function flush() {
-            if (preparingPageRefresh || !canWrite() || !database || !ready || inFlight || !pending || paused) return;
+            if (preparingPageRefresh || !canWrite() || !database || inFlight || paused || refreshing) return;
+            if (hasDeferredRemote && !pending && !isEditing()) {
+                const latest = deferredRemote;
+                hasDeferredRemote = false;
+                deferredRemote = undefined;
+                handleRemote(latest);
+            }
+            if (!ready || inFlight || !pending || paused) return;
             if (pending.requiresRefresh || (hasDeferredRemote && !valuesEqual(deferredRemote, pending.base))) {
                 pauseForRefresh();
                 return;
@@ -1211,9 +1227,15 @@
         function handleRemote(rawValue) {
             const remote = normalize(rawValue);
             const local = getLocal();
+            const active = document.activeElement;
+            const untouchedRestoredFocus = !ready && !pending && typeof options.isEditing !== 'function'
+                && isEditing() && valuesEqual(local, initialLocalBaseline)
+                && active?.matches?.('input:not([type="checkbox"]):not([type="radio"]), textarea')
+                && typeof active.defaultValue === 'string' && active.value === active.defaultValue;
             // Do not update the model behind a focused input while leaving its
             // DOM value unchanged. A later blur would otherwise save that old value.
-            if (refreshing || inFlight || paused || (isEditing() && !valuesEqual(remote, serverSnapshot))) {
+            if (refreshing || inFlight || paused
+                || (isEditing() && !untouchedRestoredFocus && !valuesEqual(remote, serverSnapshot))) {
                 deferredRemote = cloneValue(remote);
                 hasDeferredRemote = true;
                 if (!ready) {
@@ -1289,7 +1311,7 @@
                 ready = true;
                 persistSnapshot(serverSnapshotKey, serverSnapshot);
                 persistCurrentPending();
-                notify(getLocal(), { source: 'initial', pending: Boolean(pending) });
+                notify(getLocal(), { source: 'initial', pending: Boolean(pending), force: untouchedRestoredFocus });
                 flush();
                 return;
             }
@@ -1361,6 +1383,7 @@
         guardReference,
         guardDatabase,
         canWrite,
+        canRenderView,
         startVersionGuard,
         checkVersion,
         reloadCurrentPageFresh,

@@ -94,10 +94,9 @@ if (database && window.SharedSync) {
             records = normalizeSaidanRecords(value);
             safeLocalStorageSetItem(LS_KEY, JSON.stringify(records));
         },
-        onRemote: () => {
+        onRemote: (value, meta) => {
             isFirebaseSynced = true;
-            const activeEl = document.activeElement;
-            if (activeEl && activeEl.closest('#saidan-items-container')) return;
+            if (!SharedSync.canRenderView('#saidan-items-container', meta)) return;
             ensureMinRows(currentDate);
             renderRecords();
             if (currentView === 'month') renderMonthlyRecords();

@@ -19,7 +19,15 @@ function storage() {
 
 function fixture(saved = storage(), options = {}) {
     const elements = new Map();
-    const document = { activeElement: null, visibilityState: 'visible', addEventListener() {} };
+    const documentListeners = new Map();
+    const document = {
+        activeElement: null, visibilityState: 'visible',
+        addEventListener(type, listener) {
+            if (!documentListeners.has(type)) documentListeners.set(type, []);
+            documentListeners.get(type).push(listener);
+        },
+        emit(type) { for (const listener of documentListeners.get(type) || []) listener(); }
+    };
     function element() {
         const children = [];
         return {
@@ -265,6 +273,55 @@ test('updates received while editing do not change the model behind the focused 
     assert.deepEqual(db.value(), { C: 12, D: 34, G: 56 });
 });
 
+test('a latest snapshot received during restored focus is displayed after leaving the field without a save', async () => {
+    const saved = storage();
+    saved.setItem('report_snapshot', JSON.stringify({ A: 12 }));
+    const f = fixture(saved);
+    const db = database({ A: 99 });
+    let editing = true;
+    const c = client(f, db, { A: 12 }, { isEditing: () => editing });
+    db.emit();
+    assert.deepEqual(c.get(), { A: 12 });
+    assert.equal(c.sync.getPending(), null);
+    editing = false;
+    f.document.emit('focusout');
+    await new Promise(resolve => setTimeout(resolve, 5));
+    assert.deepEqual(c.get(), { A: 99 });
+    assert.equal(db.writes, 0);
+    assert.equal(c.sync.getPending(), null);
+});
+
+test('an untouched restored numeric field does not block the initial server value', () => {
+    const f = fixture();
+    const db = database({ A: 99 });
+    let metadata;
+    const c = client(f, db, { A: 12 }, { viewSelector: '#stock', onRemote(value, meta) { metadata = meta; } });
+    f.document.activeElement = { value: '12', defaultValue: '12', matches: () => true, closest: () => true };
+    db.emit();
+    assert.deepEqual(c.get(), { A: 99 });
+    assert.equal(metadata.force, true);
+    assert.equal(f.sync.canRenderView('#stock', metadata), true);
+    assert.equal(db.writes, 0);
+    assert.equal(c.sync.getPending(), null);
+});
+
+test('an initial read does not replace text typed before its first server response', () => {
+    const f = fixture();
+    const db = database({ A: 99 });
+    const c = client(f, db, { A: 12 }, { viewSelector: '#stock' });
+    f.document.activeElement = { value: '123', defaultValue: '12', matches: () => true, closest: () => true };
+    db.emit();
+    assert.deepEqual(c.get(), { A: 12 });
+    assert.equal(f.document.activeElement.value, '123');
+    assert.equal(db.writes, 0);
+});
+
+test('a focused tab button allows a synchronized view to render', () => {
+    const f = fixture();
+    f.document.activeElement = { matches: () => false, closest: () => true };
+    assert.equal(f.sync.canRenderView('#stock'), true);
+});
+
 test('server changes during a Firebase transaction retry also abort the write', async () => {
     const f = fixture();
     const db = database({ A: 0, B: 0 });
@@ -460,7 +517,7 @@ test('upgrading preserves a different older pending draft even when a recovery c
     assert.deepEqual(db.value(), { A: 456 });
 });
 
-for (const previousBuild of [2026102054, 2026102055]) test(`a guarded ${previousBuild} draft survives an upgrade and requires refresh before replaying its edits`, async () => {
+for (const previousBuild of [2026102054, 2026102055, 2026102202]) test(`a guarded ${previousBuild} draft survives an upgrade and requires refresh before replaying its edits`, async () => {
     const saved = storage();
     saved.setItem('report_pending', JSON.stringify({
         base: { A: 0, B: 0 }, local: { A: 0, B: 20 }, savedAt: new Date().toISOString(),
