@@ -17,7 +17,7 @@ function storage() {
     };
 }
 
-function fixture(saved = storage()) {
+function fixture(saved = storage(), options = {}) {
     const elements = new Map();
     const document = { activeElement: null, visibilityState: 'visible', addEventListener() {} };
     function element() {
@@ -45,17 +45,22 @@ function fixture(saved = storage()) {
     document.head = element();
     document.createElement = element;
     document.getElementById = id => elements.get(id) || null;
+    document.querySelector = selector => selector === 'meta[name="app-build-id"]' && options.pageBuildId
+        ? { content: options.pageBuildId } : null;
+    const navigations = [];
     const window = {
-        location: { href: 'http://localhost/index.html', protocol: 'http:' },
+        location: { href: options.href || 'http://localhost/index.html', protocol: 'http:',
+            replace(url) { navigations.push(url); } },
         history: { state: null, replaceState() {} },
         localStorage: saved, navigator: { onLine: true }, addEventListener() {}
     };
     vm.runInNewContext(source, {
         window, document, localStorage: saved, URL, console,
-        setTimeout, clearTimeout, setInterval, clearInterval
+        fetch: options.fetch, setTimeout, clearTimeout,
+        setInterval() { return 1; }, clearInterval() {}
     });
     return {
-        sync: window.SharedSync, document, saved, elements,
+        sync: window.SharedSync, document, saved, elements, navigations,
         paused: () => elements.has('sync-refresh-lock'),
         refresh: () => elements.get('sync-refresh-retry').click()
     };
@@ -134,6 +139,91 @@ test('one device can save A then B repeatedly without a stale-data notice', () =
     assert.deepEqual(db.value(), { A: 20, B: 21 });
     assert.equal(c.sync.getPending(), null);
     assert.equal(f.paused(), false);
+});
+
+test('an app update preserves a debounced input and existing backups without writing server data', async () => {
+    const saved = storage();
+    saved.setItem('nippo_auto_backup_2026-10-20', '{"records":"existing-backup"}');
+    saved.setItem('rollInventoryData', '{"existing":"cache"}');
+    const f = fixture(saved, { href: 'http://localhost/index.html?view=stock#inventory',
+        fetch: async () => ({ ok: true, json: async () => ({ buildNumber: f.sync.BUILD_NUMBER + 1 }) }) });
+    const db = database({ C: 10, G: 0 });
+    const c = client(f, db, db.value());
+    db.emit();
+    c.edit({ C: 10, G: 123 });
+    await f.sync.checkVersion();
+    assert.equal(f.sync.canWrite(), false);
+    assert.equal(db.writes, 0);
+    assert.equal(JSON.parse(saved.getItem('report_pending')).local.G, 123);
+    assert.equal(JSON.parse(saved.getItem('report_pending')).requiresRefresh, true);
+    assert.equal(saved.getItem('nippo_auto_backup_2026-10-20'), '{"records":"existing-backup"}');
+    assert.equal(saved.getItem('rollInventoryData'), '{"existing":"cache"}');
+    f.elements.get('app-update-lock-reload').click();
+    const destination = new URL(f.navigations[0]);
+    assert.equal(destination.searchParams.get('view'), 'stock');
+    assert.equal(destination.hash, '#inventory');
+    assert.ok(destination.searchParams.has('_app_refresh'));
+    db.replace({ C: 99, G: 0 });
+    const reloaded = fixture(saved);
+    const next = client(reloaded, db, db.value());
+    db.emit();
+    assert.equal(next.sync.isPaused(), true);
+    assert.equal(db.writes, 0);
+    await reloaded.refresh();
+    assert.deepEqual(db.value(), { C: 99, G: 123 });
+});
+
+test('change handlers finalize locally before the version lock without sending an old write', async () => {
+    const f = fixture(storage(), { fetch: async () => ({ ok: true,
+        json: async () => ({ buildNumber: f.sync.BUILD_NUMBER + 1 }) }) });
+    const db = database({ A: 0 });
+    const c = client(f, db, db.value());
+    db.emit();
+    f.document.activeElement = { blur() { c.save({ A: 456 }); f.document.activeElement = null; } };
+    await f.sync.checkVersion();
+    assert.equal(db.transactions, 0);
+    assert.equal(JSON.parse(f.saved.getItem('report_pending')).local.A, 456);
+});
+
+test('a failed local draft checkpoint prevents page reload and retains the input in memory', async () => {
+    const saved = storage();
+    const setItem = saved.setItem;
+    saved.setItem = (key, value) => {
+        if (key === 'report_pending') throw new Error('test-quota');
+        setItem(key, value);
+    };
+    const f = fixture(saved, { fetch: async () => ({ ok: true,
+        json: async () => ({ buildNumber: f.sync.BUILD_NUMBER + 1 }) }) });
+    const db = database({ A: 0 });
+    const c = client(f, db, db.value());
+    db.emit();
+    c.edit({ A: 789 });
+    await f.sync.checkVersion();
+    assert.equal(f.sync.reloadCurrentPageFresh(), false);
+    assert.equal(f.navigations.length, 0);
+    assert.deepEqual(c.get(), { A: 789 });
+    assert.equal(db.writes, 0);
+    assert.match(f.elements.get('app-update-lock-message').textContent, /再読み込みを止めています/);
+});
+
+test('mixed cached HTML and JavaScript versions lock writes even with no metadata response', () => {
+    const f = fixture(storage(), { pageBuildId: 'different-html-build' });
+    f.sync.startVersionGuard();
+    assert.equal(f.sync.canWrite(), false);
+    assert.ok(f.elements.has('app-update-lock'));
+});
+
+test('a matching release does not create drafts or block normal saves', async () => {
+    const f = fixture(storage(), { fetch: async () => ({ ok: true,
+        json: async () => ({ buildNumber: f.sync.BUILD_NUMBER, buildId: f.sync.BUILD_ID }) }) });
+    const db = database({ A: 5 });
+    const c = client(f, db, db.value());
+    db.emit();
+    await f.sync.checkVersion();
+    assert.equal(f.sync.canWrite(), true);
+    assert.equal(f.elements.has('app-update-lock'), false);
+    assert.equal(c.sync.getPending(), null);
+    assert.equal(db.writes, 0);
 });
 
 test('a delayed C-F update blocks G before writing and retains G through refresh', async () => {
@@ -370,11 +460,11 @@ test('upgrading preserves a different older pending draft even when a recovery c
     assert.deepEqual(db.value(), { A: 456 });
 });
 
-test('a guarded v54 draft survives an upgrade and requires refresh before replaying its edits', async () => {
+for (const previousBuild of [2026102054, 2026102055]) test(`a guarded ${previousBuild} draft survives an upgrade and requires refresh before replaying its edits`, async () => {
     const saved = storage();
     saved.setItem('report_pending', JSON.stringify({
         base: { A: 0, B: 0 }, local: { A: 0, B: 20 }, savedAt: new Date().toISOString(),
-        buildNumber: 2026102054, trusted: true
+        buildNumber: previousBuild, trusted: true
     }));
     const f = fixture(saved);
     const db = database({ A: 10, B: 0 });

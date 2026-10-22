@@ -1,4 +1,8 @@
 {
+  "scripts": {
+    "release:prepare": "node prepare-release.js",
+    "release:check": "node prepare-release.js --check"
+  },
   "dependencies": {
     "xlsx": "^0.18.5"
   }

@@ -1651,8 +1651,8 @@ const firebaseConfig = {
     measurementId: "G-SR8Y5NKQTZ"
 };
 
-const APP_BUILD_ID = '20261020-stale-write-guard-v55';
-const APP_BUILD_NUMBER = 2026102055;
+const APP_BUILD_ID = '20261022-release-2026102202';
+const APP_BUILD_NUMBER = 2026102202;
 const APP_VERSION_METADATA_PATH = 'app-version.json';
 const APP_VERSION_CHECK_INTERVAL_MS = 30000;
 const APP_LATEST_BUILD_LS_KEY = 'nippo_latest_app_build_number';
@@ -1763,6 +1763,10 @@ function showAppUpdateRequired() {
     ].join('');
 
     overlay.querySelector('#app-update-lock-reload').addEventListener('click', () => {
+        if (window.SharedSync && typeof SharedSync.reloadCurrentPageFresh === 'function') {
+            SharedSync.reloadCurrentPageFresh();
+            return;
+        }
         const url = new URL(window.location.href);
         url.searchParams.set('_app_refresh', `${APP_BUILD_NUMBER}-${Date.now()}`);
         window.location.replace(url.toString());
@@ -1816,6 +1820,13 @@ async function checkAppVersion() {
 }
 
 function startAppVersionGuard() {
+    if (window.SharedSync && typeof SharedSync.startVersionGuard === 'function') {
+        SharedSync.startVersionGuard(APP_BUILD_ID);
+        if (SharedSync.BUILD_ID !== APP_BUILD_ID && SharedSync.canWrite()) {
+            markAppVersionStale();
+        }
+        return;
+    }
     try {
         const knownBuildNumber = Number(safeLocalStorageGetItem(APP_LATEST_BUILD_LS_KEY));
         if (Number.isFinite(knownBuildNumber) && knownBuildNumber > APP_BUILD_NUMBER) {
@@ -1850,7 +1861,7 @@ if (typeof firebase !== "undefined" && firebaseConfig.apiKey !== "YOUR_API_KEY")
     firebase.initializeApp(firebaseConfig);
     database = createGuardedFirebaseDatabase(firebase.database());
 }
-if (window.SharedSync && typeof SharedSync.startVersionGuard === 'function') SharedSync.startVersionGuard();
+if (window.SharedSync && typeof SharedSync.startVersionGuard === 'function') SharedSync.startVersionGuard(APP_BUILD_ID);
 
 // Environment Detection (Production vs Development)
 const isProduction = true; // 常に本番データ（Web）と同期するためにtrueに変更
@@ -8201,7 +8212,7 @@ function renderSnowsprintGeneric(headId, bodyId, footId, configGroups, category)
     
     const daysInMonth = new Date(snowsprintCurrentYear, snowsprintCurrentMonth, 0).getDate();
     let bodyRows = '';
-    const todayStr = currentDate;
+    const todayStr = getTodayDateValue();
     
     for (let d = 1; d <= daysInMonth; d++) {
         const isHoliday = isRollHoliday(snowsprintCurrentYear, snowsprintCurrentMonth, d);
@@ -9176,7 +9187,7 @@ function renderHanaponBox() {
 
     const daysInMonth = new Date(hanaponBoxCurrentYear, hanaponBoxCurrentMonth, 0).getDate();
     const weekdayLabels = ['日', '月', '火', '水', '木', '金', '土'];
-    const todayStr = currentDate;
+    const todayStr = getTodayDateValue();
     let rows = '';
 
     for (let day = 1; day <= daysInMonth; day++) {

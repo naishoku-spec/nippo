@@ -1,8 +1,8 @@
 (function (global) {
     'use strict';
 
-    const BUILD_ID = '20261020-stale-write-guard-v55';
-    const BUILD_NUMBER = 2026102055;
+    const BUILD_ID = '20261022-release-2026102202';
+    const BUILD_NUMBER = 2026102202;
     const VERSION_PATH = new URL('app-version.json', document.currentScript?.src || document.baseURI || global.location.href).toString();
     const VERSION_CHECK_INTERVAL_MS = 30000;
     const LATEST_BUILD_KEY = 'nippo_latest_app_build_number';
@@ -21,9 +21,15 @@
     }
 
     function reloadCurrentPageFresh() {
+        if (!preparePageRefresh()) {
+            const message = document.getElementById('app-update-lock-message');
+            if (message) message.textContent = '未送信の入力を端末に保持できないため、再読み込みを止めています。この画面を閉じずに、端末の保存容量を確認してください。';
+            return false;
+        }
         const url = new URL(window.location.href);
         url.searchParams.set('_app_refresh', `${BUILD_NUMBER}-${Date.now()}`);
         window.location.replace(url.toString());
+        return true;
     }
 
     clearRefreshMarker();
@@ -96,7 +102,10 @@
     let versionCheckInFlight = false;
     let versionCheckTimer = null;
     let versionGuardStarted = false;
+    let preparingPageRefresh = false;
+    let pageRefreshDraftsPreserved = true;
     const pathSyncFlushers = new Set();
+    const pageRefreshCheckpoints = new Set();
     let pathSyncLifecycleBound = false;
     const pausedWrites = new Map();
     let refreshInFlight = false;
@@ -106,6 +115,28 @@
         'child', 'orderByChild', 'orderByKey', 'orderByValue',
         'limitToFirst', 'limitToLast', 'startAt', 'endAt', 'equalTo'
     ]);
+
+    function preparePageRefresh() {
+        const wasPreparing = preparingPageRefresh;
+        preparingPageRefresh = true;
+        let preserved = true;
+        try {
+            // Finalize change/blur handlers locally while network flushes are paused.
+            if (!versionIsStale) document.activeElement?.blur?.();
+            pageRefreshCheckpoints.forEach(checkpoint => {
+                try {
+                    if (!checkpoint()) preserved = false;
+                } catch (error) {
+                    preserved = false;
+                    console.warn('Pending input could not be preserved before updating:', error);
+                }
+            });
+        } finally {
+            preparingPageRefresh = wasPreparing;
+        }
+        pageRefreshDraftsPreserved = preserved;
+        return preserved;
+    }
 
     function flushRegisteredPathSyncs() {
         pathSyncFlushers.forEach(flush => {
@@ -733,7 +764,9 @@
             '<div class="app-update-lock__dialog">',
             '<div class="app-update-lock__icon" aria-hidden="true">&#x21bb;</div>',
             '<h2>\u30da\u30fc\u30b8\u3092\u66f4\u65b0\u3057\u3066\u304f\u3060\u3055\u3044</h2>',
-            '<p>\u65b0\u3057\u3044\u30da\u30fc\u30b8\u304c\u516c\u958b\u3055\u308c\u307e\u3057\u305f\u3002\u30c7\u30fc\u30bf\u4fdd\u8b77\u306e\u305f\u3081\u3001\u3053\u306e\u30da\u30fc\u30b8\u304b\u3089\u306e\u4fdd\u5b58\u3092\u505c\u6b62\u3057\u3066\u3044\u307e\u3059?</p>',
+            '<p id="app-update-lock-message">' + (pageRefreshDraftsPreserved
+                ? '新しいページが公開されました。入力内容を端末に保持してから、最新のページを読み込みます。'
+                : '未送信の入力を端末に保持できていません。この画面を閉じずに、端末の保存容量を確認してください。') + '</p>',
             '<button type="button" id="app-update-lock-reload">\u518d\u8aad\u307f\u8fbc\u307f</button>',
             '</div>'
         ].join('');
@@ -746,12 +779,14 @@
 
     function markVersionStale() {
         if (versionIsStale) return;
+        preparePageRefresh();
         versionIsStale = true;
         if (versionCheckTimer) {
             clearInterval(versionCheckTimer);
             versionCheckTimer = null;
         }
         showVersionLock();
+        if (!document.body) document.addEventListener('DOMContentLoaded', showVersionLock, { once: true });
     }
 
     function versionUrl() {
@@ -785,7 +820,10 @@
         }
     }
 
-    function startVersionGuard() {
+    function startVersionGuard(appBuildId) {
+        const pageBuildId = document.querySelector?.('meta[name="app-build-id"]')?.content;
+        if ((pageBuildId && pageBuildId !== BUILD_ID)
+            || (appBuildId && appBuildId !== BUILD_ID)) markVersionStale();
         if (versionGuardStarted) return;
         versionGuardStarted = true;
         try {
@@ -999,15 +1037,18 @@
         // edit before Firebase's first value event, it is the only correct
         // three-way merge baseline (especially for clearing an old value).
         const initialLocalBaseline = cloneValue(getLocal());
+        let appliedLocalBaseline = cloneValue(initialLocalBaseline);
         const setLocal = (value, meta) => {
             if (typeof options.setLocal === 'function') {
                 options.setLocal(normalize(value), meta || {});
+                appliedLocalBaseline = cloneValue(getLocal());
             }
         };
         const notify = (value, meta) => {
             if (typeof options.onRemote === 'function') {
                 options.onRemote(normalize(value), meta || {});
             }
+            appliedLocalBaseline = cloneValue(getLocal());
         };
         const persistCurrentPending = () => {
             if (!pending && retainUntrustedStoredPending) return false;
@@ -1019,6 +1060,25 @@
         function capturePendingDraft() {
             // Debounced inputs may have changed the model since save() ran.
             if (pending) pending.local = cloneValue(getLocal());
+        }
+
+        function preserveDraftForPageRefresh() {
+            if (retainUntrustedStoredPending) return false;
+            const local = cloneValue(getLocal());
+            if (!pending && !valuesEqual(local, appliedLocalBaseline)) {
+                pending = {
+                    base: cloneValue(ready ? serverSnapshot : initialLocalBaseline),
+                    local,
+                    draftBase: cloneValue(appliedLocalBaseline),
+                    _trusted: true
+                };
+            }
+            if (!pending) return true;
+            pending.local = local;
+            pending.requiresRefresh = true;
+            pending.savedAt = new Date().toISOString();
+            pending.buildNumber = BUILD_NUMBER;
+            return persistCurrentPending();
         }
 
         function pauseForRefresh() {
@@ -1064,7 +1124,7 @@
         }
 
         function flush() {
-            if (!canWrite() || !database || !ready || inFlight || !pending || paused) return;
+            if (preparingPageRefresh || !canWrite() || !database || !ready || inFlight || !pending || paused) return;
             if (pending.requiresRefresh || (hasDeferredRemote && !valuesEqual(deferredRemote, pending.base))) {
                 pauseForRefresh();
                 return;
@@ -1271,6 +1331,7 @@
         }
 
         registerPathSyncFlusher(flush);
+        pageRefreshCheckpoints.add(preserveDraftForPageRefresh);
 
         if (database) {
             database.ref(path).on('value', snapshot => handleRemote(snapshot.val()));
@@ -1301,6 +1362,8 @@
         guardDatabase,
         canWrite,
         startVersionGuard,
+        checkVersion,
+        reloadCurrentPageFresh,
         flushAll: flushRegisteredPathSyncs,
         restoreSafely,
         createPathSync
