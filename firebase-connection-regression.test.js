@@ -216,6 +216,27 @@ test('permission errors are visible rather than silently leaving a cached view',
     assert.equal(raw.writes, 0);
 });
 
+test('the delayed unsaved-input notice names the risk and the safe cancel action', () => {
+    const h = harness();
+    let local = { count: 12 };
+    const pathSync = h.sync.createPathSync({
+        database: null, path: 'inventory', emptyValue: {}, pendingStorageKey: 'pending',
+        getLocal: () => local, setLocal: value => { local = value; }
+    });
+    h.storage.setItem = () => { throw new Error('test-quota'); };
+    local.count = 21;
+    pathSync.save(local);
+    h.advance(9999);
+    assert.equal(h.nodes.has('sync-connection-notice'), false);
+    h.advance(1);
+    const notice = h.nodes.get('sync-connection-notice');
+    assert.equal(notice.querySelector('strong').textContent, 'まだ保存が完了していません');
+    assert.match(notice.querySelector('p').textContent, /入力した内容が消えるおそれ/);
+    assert.match(notice.querySelector('p').textContent, /「キャンセル」を押してください/);
+    assert.match(notice.querySelector('p').textContent, /画面を開いたまま/);
+    assert.equal(notice.querySelector('button').hidden, true);
+});
+
 test('reconnecting retains pending input and dated backups before navigation', () => {
     const backup = '{"records":"untouched"}';
     const h = harness({ 'nippo_auto_backup_2026-10-21': backup });
@@ -246,10 +267,11 @@ test('reconnection refuses navigation when pending input cannot be retained', ()
     local.count = 21;
     pathSync.save(local);
     h.storage.setItem = () => { throw new Error('test-quota'); };
+    local.count = 22;
     h.advance(10000);
     h.nodes.get('sync-connection-notice').querySelector('button').events.click();
     assert.equal(h.navigations.length, 0);
-    assert.equal(local.count, 21);
+    assert.equal(local.count, 22);
     assert.equal(raw.writes, 0);
 });
 

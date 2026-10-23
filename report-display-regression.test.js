@@ -79,6 +79,63 @@ const record = {
     worker: text, notes: text + '\n</textarea>', startTime: '08:45', endTime: '17:00'
 };
 
+test('rendering legacy project column colors does not edit or save the board', () => {
+    const board = { id: 'board', name: 'Project', columns: [{ id: 'column', title: '', tasks: [] }] };
+    const before = JSON.stringify(board);
+    let saves = 0;
+    const f = fixture('app.js', 'function renderBoard(', 'function formatDateShort(', {
+        getCurrentBoard: () => board, currentAssigneeFilter: 'all', addColumn() {},
+        saveBoardsToFirebase() { saves++; }
+    });
+    f.context.renderBoard();
+    assert.equal(JSON.stringify(board), before);
+    assert.equal(saves, 0);
+    assert.match(f.elements.get('kanban-board-container').children[0].className, /col-color-0/);
+});
+
+test('blurring an unchanged project column title does not update timestamps or save', () => {
+    const column = { id: 'column', title: 'Same', _syncUpdatedAt: 100 };
+    let saves = 0;
+    let updates = 0;
+    const f = fixture('app.js', 'window.onColumnTitleChange =', '// ---- Task CRUD ----', {
+        getCurrentBoard: () => ({ columns: [column] }),
+        markProjectItemUpdated() { updates++; },
+        saveBoardsToFirebase() { saves++; }
+    });
+    f.context.window.onColumnTitleChange('column', 'Same');
+    assert.equal(saves, 0);
+    assert.equal(updates, 0);
+    f.context.window.onColumnTitleChange('column', 'Changed');
+    assert.equal(column.title, 'Changed');
+    assert.equal(saves, 1);
+    assert.equal(updates, 1);
+});
+
+for (const [name, end, data, sync] of [
+    ['saveSliverData', 'function renderSliver(', 'sliverAllData', 'sliverDataSync'],
+    ['saveHanaponData', 'function renderHanapon(', 'hanaponAllData', 'hanaponDataSync'],
+    ['saveSnowsprintData', 'function handleSnowsprintInput(', 'snowsprintAllData', 'snowsprintDataSync'],
+    ['saveHanaponBoxData', 'function handleHanaponBoxInput(', 'hanaponBoxAllData', 'hanaponBoxDataSync']
+]) test(`${name} distinguishes automatic setup from actual input`, () => {
+    const settings = [];
+    let histories = 0;
+    const f = fixture('app.js', `function ${name}(`, end, {
+        [data]: { month: { count: 0 } }, [sync]: { save(value, options) { settings.push(options); } },
+        database: {}, canWriteAppData: () => true,
+        SLIVER_STORAGE_KEY: 'sliver', HANAPON_STORAGE_KEY: 'hanapon',
+        SNOWSPRINT_STORAGE_KEY: 'snow', HANAPON_BOX_STORAGE_KEY: 'box',
+        safeLocalStorageSetItem() {}, scheduleDailyBackupRefresh() {},
+        normalizeHanaponBoxData: value => value, setTimeout() {},
+        triggerHistorySave() { histories++; }
+    });
+    f.context[name](false);
+    assert.equal(settings[0].automatic, true);
+    assert.equal(histories, 0);
+    f.context[name]();
+    assert.equal(settings[1].automatic, false);
+    assert.equal(histories, 1);
+});
+
 test('HTML encoding preserves empty values, zero and text that resembles an entity', () => {
     const f = fixture('app.js', 'function shiftHandleDrop(', 'function shiftAddMember(');
     assert.equal(f.context.SharedSync.escapeHtml(null), '');

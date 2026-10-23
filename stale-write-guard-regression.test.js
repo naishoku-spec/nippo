@@ -31,6 +31,7 @@ function fixture(saved = storage(), options = {}) {
     };
     function element() {
         const children = [];
+        const selectors = new Map();
         return {
             id: '', children, textContent: '', disabled: false,
             set innerHTML(html) {
@@ -40,9 +41,17 @@ function fixture(saved = storage(), options = {}) {
                     children.push(child);
                     elements.set(id, child);
                 }
+                for (const tag of ['strong', 'p', 'button']) {
+                    const match = html.match(new RegExp('<' + tag + '\\b([^>]*)>'));
+                    if (!match) continue;
+                    const id = match[1].match(/\bid="([^"]+)"/)?.[1];
+                    const child = (id && elements.get(id)) || element();
+                    if (!children.includes(child)) children.push(child);
+                    selectors.set(tag, child);
+                }
             },
             setAttribute() {},
-            querySelector: selector => elements.get(selector.slice(1)),
+            querySelector: selector => selectors.get(selector) || elements.get(selector.slice(1)),
             addEventListener(type, listener) { this[type] = listener; },
             appendChild(child) { children.push(child); if (child.id) elements.set(child.id, child); },
             focus() { document.activeElement = this; },
@@ -526,7 +535,7 @@ test('upgrading preserves a different older pending draft even when a recovery c
     assert.deepEqual(db.value(), { A: 456 });
 });
 
-for (const previousBuild of [2026102054, 2026102055, 2026102202, 2026102203, 2026102206]) test(`a guarded ${previousBuild} draft survives an upgrade and requires refresh before replaying its edits`, async () => {
+for (const previousBuild of [2026102054, 2026102055, 2026102202, 2026102203, 2026102206, 2026102207, 2026102301]) test(`a guarded ${previousBuild} draft survives an upgrade and requires refresh before replaying its edits`, async () => {
     const saved = storage();
     saved.setItem('report_pending', JSON.stringify({
         base: { A: 0, B: 0 }, local: { A: 0, B: 20 }, savedAt: new Date().toISOString(),
@@ -735,16 +744,203 @@ test('full local storage warns before leaving until the pending save is acknowle
     db.hold = true;
     c.save({ A: 21 });
     assert.equal(f.sync.getConnectionStatus().unpersistedDrafts, 1);
+    assert.equal(f.elements.has('sync-connection-notice'), false);
     const before = { prevented: false, preventDefault() { this.prevented = true; } };
     f.emitWindow('beforeunload', before);
     assert.equal(before.prevented, true);
+    assert.equal(before.returnValue, '', 'keep the browser-generated confirmation');
+    const notice = f.elements.get('sync-connection-notice');
+    assert.equal(notice.querySelector('strong').textContent, 'まだ保存が完了していません');
+    assert.match(notice.querySelector('p').textContent, /入力した内容が消えるおそれ/);
+    assert.match(notice.querySelector('p').textContent, /「キャンセル」を押してください/);
+    assert.equal(notice.querySelector('button').hidden, true);
     assert.equal(c.sync.getPending().local.A, 21);
     db.acknowledge();
     assert.equal(f.sync.getConnectionStatus().unpersistedDrafts, 0);
+    assert.equal(f.elements.has('sync-connection-notice'), false);
     const after = { prevented: false, preventDefault() { this.prevented = true; } };
     f.emitWindow('beforeunload', after);
     assert.equal(after.prevented, false);
     assert.deepEqual(db.value(), { A: 21 });
+});
+
+function fillStorage(saved) {
+    saved.setItem = () => {
+        const error = new Error('test-quota');
+        error.name = 'QuotaExceededError';
+        throw error;
+    };
+}
+
+function leavingPage(f) {
+    const event = { prevented: false, preventDefault() { this.prevented = true; } };
+    f.emitWindow('beforeunload', event);
+    return event.prevented;
+}
+
+test('unchanged saves with full storage do not create drafts, writes or leave warnings', () => {
+    const f = fixture();
+    const db = database({ A: 0, B: '' });
+    const c = client(f, db, db.value());
+    db.emit();
+    fillStorage(f.saved);
+    db.hold = true;
+    c.save(c.get());
+    assert.equal(db.transactions, 0);
+    assert.equal(c.sync.getPending(), null);
+    assert.equal(leavingPage(f), false);
+});
+
+test('an old draft with no differences does not warn or pause after opening a full browser', () => {
+    const f = fixture();
+    const value = { A: 12, B: '' };
+    f.saved.setItem('report_pending', JSON.stringify({
+        base: value, local: value, trusted: true, buildNumber: 2026102206,
+        savedAt: new Date().toISOString()
+    }));
+    fillStorage(f.saved);
+    const db = database({ A: 99, B: '' });
+    const c = client(f, db, value);
+    db.emit();
+    assert.equal(f.paused(), false);
+    assert.deepEqual(c.get(), db.value());
+    assert.equal(db.writes, 0);
+    assert.equal(leavingPage(f), false);
+});
+
+test('an already durable guarded draft does not become unsafe just because metadata cannot be rewritten', () => {
+    const f = fixture();
+    const raw = JSON.stringify({
+        base: { A: 0 }, local: { A: 21 }, trusted: true,
+        buildNumber: 2026102206, savedAt: new Date().toISOString()
+    });
+    f.saved.setItem('report_pending', raw);
+    fillStorage(f.saved);
+    const db = database({ A: 99 });
+    const c = client(f, db, { A: 21 });
+    db.emit();
+    assert.equal(f.paused(), true, 'stale writes must still require a refresh');
+    assert.equal(db.writes, 0);
+    assert.equal(c.sync.getPending().local.A, 21);
+    assert.equal(f.saved.getItem('report_pending'), raw);
+    assert.equal(leavingPage(f), false, 'the existing durable copy already protects this input');
+    c.save({ A: 22 });
+    assert.equal(leavingPage(f), true, 'a new edit not in that copy must still be protected');
+    assert.equal(f.saved.getItem('report_pending'), raw);
+});
+
+test('a draft in another tab is not a durable copy of this tabs different input', () => {
+    const f = fixture();
+    const db = database({ A: 0 });
+    const c = client(f, db, db.value());
+    db.emit();
+    f.saved.setItem('report_pending', JSON.stringify({
+        base: { A: 0 }, local: { A: 11 }, trusted: true,
+        buildNumber: f.sync.BUILD_NUMBER, savedAt: new Date().toISOString()
+    }));
+    fillStorage(f.saved);
+    db.hold = true;
+    c.save({ A: 22 });
+    assert.equal(leavingPage(f), true);
+    db.acknowledge();
+    assert.equal(leavingPage(f), false);
+});
+
+test('automatic empty report rows do not produce a leave warning in a full browser', () => {
+    const f = fixture();
+    const db = database([]);
+    const c = client(f, db, [], { emptyValue: [] });
+    db.emit();
+    fillStorage(f.saved);
+    db.hold = true;
+    const defaults = [{ id: 'R1', count: 0 }];
+    c.save(defaults, { automatic: true });
+    assert.equal(leavingPage(f), false);
+    c.save([{ id: 'R1', count: 23 }]);
+    assert.equal(leavingPage(f), true);
+    db.acknowledge();
+    db.acknowledge();
+    assert.equal(leavingPage(f), false);
+    assert.equal(db.value()[0].count, 23);
+});
+
+test('automatic saves cannot silence a pending user edit', () => {
+    const f = fixture();
+    const db = database([{ id: 'R1', count: 0 }]);
+    const c = client(f, db, db.value(), { emptyValue: [] });
+    db.emit();
+    fillStorage(f.saved);
+    db.hold = true;
+    c.save([{ id: 'R1', count: 24 }]);
+    c.save([...c.get(), { id: 'R2', count: 0 }], { automatic: true });
+    assert.equal(leavingPage(f), true);
+    db.acknowledge();
+    db.acknowledge();
+    assert.equal(leavingPage(f), false);
+    assert.equal(db.value()[0].count, 24);
+});
+
+test('a full browser can refresh automatic rows but cannot refresh a new unsaved input', () => {
+    const f = fixture();
+    const db = database([]);
+    const c = client(f, db, [], { emptyValue: [] });
+    db.emit();
+    fillStorage(f.saved);
+    db.hold = true;
+    c.save([{ id: 'R1', count: 0 }], { automatic: true });
+    assert.equal(f.sync.reloadCurrentPageFresh(), true);
+    assert.equal(f.navigations.length, 1);
+    c.edit([{ id: 'R1', count: 26 }]);
+    assert.equal(f.sync.reloadCurrentPageFresh(), false);
+    assert.equal(f.navigations.length, 1);
+    assert.equal(c.sync.getPending().local[0].count, 26);
+});
+
+test('a different stored baseline cannot silence a genuinely unsafe draft', () => {
+    const f = fixture();
+    const db = database({ A: 0, B: 0 });
+    const c = client(f, db, db.value());
+    db.emit();
+    f.saved.setItem('report_pending', JSON.stringify({
+        base: { A: 99, B: 0 }, local: { A: 0, B: 27 }, trusted: true,
+        buildNumber: f.sync.BUILD_NUMBER, savedAt: new Date().toISOString()
+    }));
+    fillStorage(f.saved);
+    db.hold = true;
+    c.save({ A: 0, B: 27 });
+    assert.equal(leavingPage(f), true);
+});
+
+test('an input made before an automatic save acknowledgement must still be protected', () => {
+    const f = fixture();
+    const db = database([]);
+    const c = client(f, db, [], { emptyValue: [] });
+    db.emit();
+    fillStorage(f.saved);
+    db.hold = true;
+    c.save([{ id: 'R1', count: 0 }], { automatic: true });
+    c.edit([{ id: 'R1', count: 25 }]);
+    assert.equal(leavingPage(f), true, 'debounced input must be protected even before an acknowledgement');
+    db.acknowledge();
+    assert.equal(leavingPage(f), true);
+    db.acknowledge();
+    assert.equal(db.value()[0].count, 25);
+    assert.equal(leavingPage(f), false);
+});
+
+test('a retained unrelated recovery payload does not block a no-edit page refresh', () => {
+    const f = fixture();
+    const raw = JSON.stringify({ base: { A: 0 }, local: { A: 12 }, trusted: false });
+    f.saved.setItem('report_pending', raw);
+    fillStorage(f.saved);
+    const db = database({ A: 99 });
+    const c = client(f, db, { A: 12 });
+    db.emit();
+    assert.equal(f.sync.reloadCurrentPageFresh(), true);
+    assert.equal(f.navigations.length, 1);
+    assert.equal(f.saved.getItem('report_pending'), raw);
+    assert.equal(c.get().A, 99);
+    assert.equal(db.writes, 0);
 });
 
 test('full storage cannot overwrite or remove an untrusted recovery payload when a new edit is saved', () => {

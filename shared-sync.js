@@ -1,8 +1,8 @@
 (function (global) {
     'use strict';
 
-    const BUILD_ID = '20261022-release-2026102207';
-    const BUILD_NUMBER = 2026102207;
+    const BUILD_ID = '20261023-release-2026102302';
+    const BUILD_NUMBER = 2026102302;
     const VERSION_PATH = new URL('app-version.json', document.currentScript?.src || document.baseURI || global.location.href).toString();
     const VERSION_CHECK_INTERVAL_MS = 30000;
     const LATEST_BUILD_KEY = 'nippo_latest_app_build_number';
@@ -77,7 +77,7 @@
             style.textContent = [
                 '#sync-connection-notice{position:fixed;bottom:16px;right:16px;box-sizing:border-box;width:calc(100% - 32px);max-width:620px;z-index:12000;display:flex;align-items:center;gap:16px;padding:16px;background:#fffbeb;color:#78350f;border:1px solid #f59e0b;border-radius:8px;box-shadow:0 4px 16px #0002;font:14px/1.5 sans-serif}',
                 '#sync-connection-notice strong{display:block;font-size:15px}',
-                '#sync-connection-notice p{margin:4px 0 0}',
+                '#sync-connection-notice p{margin:4px 0 0;white-space:pre-line}',
                 '#sync-connection-notice button{flex-shrink:0;border:1px solid #a16207;border-radius:6px;background:#fff;color:#78350f;padding:10px 12px;font:inherit;cursor:pointer}',
                 '@media(max-width:600px){#sync-connection-notice{align-items:flex-start;flex-direction:column;gap:10px}#sync-connection-notice button{font-size:16px}}'
             ].join('');
@@ -98,11 +98,18 @@
 
     function updateConnectionNoticeText(notice, unsaved) {
         notice.querySelector('strong').textContent = unsaved
-            ? '入力内容を端末に保存できていません' : '最新データを受信できていません';
+            ? 'まだ保存が完了していません' : '最新データを受信できていません';
         notice.querySelector('p').textContent = unsaved
-            ? '保存容量が不足しています。サーバーへの保存が完了するまで、この画面を閉じないでください。'
+            ? 'この画面を閉じると、入力した内容が消えるおそれがあります。\n「このサイトを離れますか？」と表示されたら、「キャンセル」を押してください。\n保存が終わってこの案内が消えるまで、画面を開いたままお待ちください。'
             : '表示が古い可能性があります。通信状態をご確認ください。';
         notice.querySelector('button').hidden = unsaved;
+    }
+
+    function showDraftWarning() {
+        clearTimeout(draftWarningTimer);
+        draftWarningTimer = null;
+        draftWarningVisible = unpersistedDrafts.size > 0;
+        renderConnectionNotice();
     }
 
     function trackUnpersistedDraft(key, unsafe) {
@@ -113,11 +120,7 @@
             draftWarningTimer = null;
             draftWarningVisible = false;
         } else if (!draftWarningTimer && !draftWarningVisible) {
-            draftWarningTimer = setTimeout(() => {
-                draftWarningTimer = null;
-                draftWarningVisible = true;
-                renderConnectionNotice();
-            }, CONNECTION_WARNING_DELAY_MS);
+            draftWarningTimer = setTimeout(showDraftWarning, CONNECTION_WARNING_DELAY_MS);
             draftWarningTimer?.unref?.();
         }
         renderConnectionNotice();
@@ -341,6 +344,7 @@
             if (unpersistedDrafts.size > 0) {
                 event.preventDefault();
                 event.returnValue = '';
+                showDraftWarning();
             }
         });
         window.addEventListener('freeze', flushBeforeSuspend);
@@ -1106,6 +1110,7 @@
                 buildNumber: pendingBuildNumber,
                 requiresRefresh: parsed.requiresRefresh === true || pendingBuildNumber !== BUILD_NUMBER,
                 draftBase: cloneValue(parsed.draftBase),
+                _automatic: trusted && parsed.automatic === true,
                 _trusted: trusted,
                 _raw: stored
             };
@@ -1126,6 +1131,7 @@
                     buildNumber: BUILD_NUMBER,
                     requiresRefresh: pending.requiresRefresh === true,
                     draftBase: cloneValue(pending.draftBase),
+                    automatic: pending._automatic === true,
                     trusted: pending._trusted !== false
                 };
                 localStorage.setItem(key, JSON.stringify(payload));
@@ -1211,6 +1217,7 @@
             pending.base = normalize(pending.base);
             pending.local = normalize(pending.local);
             if (pending.draftBase !== undefined) pending.draftBase = normalize(pending.draftBase);
+            if (pending._trusted && valuesEqual(pending.base, pending.local)) pending = null;
         }
         const loadedUntrustedPending = Boolean(pending && protectFromStalePending && !pending._trusted);
         let retainUntrustedStoredPending = loadedUntrustedPending
@@ -1255,23 +1262,40 @@
             appliedLocalBaseline = cloneValue(getLocal());
         };
         const persistCurrentPending = () => {
+            const needsProtection = Boolean(pending) && pending._automatic !== true;
             if (retainUntrustedStoredPending) {
-                trackUnpersistedDraft(pauseKey, Boolean(pending?._trusted));
-                return false;
+                trackUnpersistedDraft(pauseKey, needsProtection && Boolean(pending?._trusted));
+                return !needsProtection;
             }
-            const persisted = persistPending(pendingKey, pending);
-            trackUnpersistedDraft(pauseKey, Boolean(pending) && !persisted);
+            let persisted = persistPending(pendingKey, pending);
+            if (!persisted && pending) {
+                // A failed metadata rewrite does not erase an existing draft.
+                // Read the actual key so another tab's different draft cannot
+                // be mistaken for a durable copy of this tab's input.
+                const stored = loadPending(pendingKey);
+                persisted = Boolean(stored?._trusted)
+                    && valuesEqual(normalize(stored.base), pending.base)
+                    && valuesEqual(normalize(stored.local), pending.local)
+                    && valuesEqual(stored.draftBase === undefined ? undefined : normalize(stored.draftBase), pending.draftBase);
+            }
+            trackUnpersistedDraft(pauseKey, needsProtection && !persisted);
             if (persisted) retainUntrustedStoredPending = false;
             return persisted;
         };
 
         function capturePendingDraft() {
             // Debounced inputs may have changed the model since save() ran.
-            if (pending) pending.local = cloneValue(getLocal());
+            if (pending) {
+                const local = getLocal();
+                const changed = !valuesEqual(local, pending.local);
+                if (changed) pending._automatic = false;
+                pending.local = cloneValue(local);
+                return changed;
+            }
+            return false;
         }
 
         function preserveDraftForPageRefresh() {
-            if (retainUntrustedStoredPending) return false;
             const local = cloneValue(getLocal());
             if (!pending && !valuesEqual(local, appliedLocalBaseline)) {
                 pending = {
@@ -1282,7 +1306,9 @@
                 };
             }
             if (!pending) return true;
-            pending.local = local;
+            capturePendingDraft();
+            if (pending._automatic === true) return true;
+            if (retainUntrustedStoredPending) return false;
             pending.requiresRefresh = true;
             pending.savedAt = new Date().toISOString();
             pending.buildNumber = BUILD_NUMBER;
@@ -1332,6 +1358,7 @@
         }
 
         function flush() {
+            if (capturePendingDraft()) persistCurrentPending();
             if (preparingPageRefresh || !canWrite() || !database || inFlight || paused || refreshing) return;
             if (hasDeferredRemote && !pending && !isEditing()) {
                 const latest = deferredRemote;
@@ -1399,14 +1426,18 @@
         function save(value, settings = {}) {
             if (!canWrite()) return false;
             const localValue = normalize(value);
+            const changed = !valuesEqual(localValue, pending ? pending.local : appliedLocalBaseline);
+            if (!pending && !changed) return true;
             if (!pending || (protectFromStalePending && !pending._trusted)) {
                 pending = {
                     base: cloneValue(ready ? serverSnapshot : initialLocalBaseline),
                     local: cloneValue(localValue),
+                    _automatic: settings.automatic === true,
                     _trusted: true
                 };
             } else {
                 pending.local = cloneValue(localValue);
+                if (changed && settings.automatic !== true) pending._automatic = false;
             }
             if (settings.automatic === true) {
                 // Generated empty rows are a baseline for subsequent typing,

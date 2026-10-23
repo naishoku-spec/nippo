@@ -1652,8 +1652,8 @@ const firebaseConfig = {
     measurementId: "G-SR8Y5NKQTZ"
 };
 
-const APP_BUILD_ID = '20261022-release-2026102207';
-const APP_BUILD_NUMBER = 2026102207;
+const APP_BUILD_ID = '20261023-release-2026102302';
+const APP_BUILD_NUMBER = 2026102302;
 const APP_VERSION_METADATA_PATH = 'app-version.json';
 const APP_VERSION_CHECK_INTERVAL_MS = 30000;
 const APP_LATEST_BUILD_LS_KEY = 'nippo_latest_app_build_number';
@@ -4329,7 +4329,7 @@ function saveSliverData(triggerHistory = true) {
             console.warn('BLOCKED: Attempted to save empty sliverAllData to Firebase');
             return;
         }
-        if (sliverDataSync) sliverDataSync.save(sliverAllData);
+        if (sliverDataSync) sliverDataSync.save(sliverAllData, { automatic: !triggerHistory });
     }
 }
 
@@ -4992,7 +4992,7 @@ function saveHanaponData(triggerHistory = true) {
             console.warn('BLOCKED: Attempted to save empty hanaponAllData to Firebase');
             return;
         }
-        if (hanaponDataSync) hanaponDataSync.save(hanaponAllData);
+        if (hanaponDataSync) hanaponDataSync.save(hanaponAllData, { automatic: !triggerHistory });
     }
 }
 
@@ -7938,7 +7938,7 @@ function initSnowsprint() {
                 const configChanged = ensureSnowsprintConfiguredItems() || snowsprintConfigNeedsSync;
                 if (configChanged && snowsprintDataSync) {
                     snowsprintConfigNeedsSync = false;
-                    snowsprintDataSync.save(snowsprintAllData);
+                    snowsprintDataSync.save(snowsprintAllData, { automatic: true });
                 }
                 ensureSnowsprintMonth(snowsprintCurrentYear, snowsprintCurrentMonth, true);
                 if (SharedSync.canRenderView('#snowsprint-view-container', meta)
@@ -7952,7 +7952,7 @@ function initSnowsprint() {
         scheduleDailyBackupRefresh();
         if (snowsprintDataSync?.isReady()) {
             snowsprintConfigNeedsSync = false;
-            snowsprintDataSync.save(snowsprintAllData);
+            snowsprintDataSync.save(snowsprintAllData, { automatic: true });
         } else {
             snowsprintConfigNeedsSync = true;
         }
@@ -8054,18 +8054,18 @@ function setupSnowsprintMonthSelector() {
     });
 }
 
-function saveSnowsprintData() {
+function saveSnowsprintData(triggerHistory = true) {
     if (!canWriteAppData()) return false;
     safeLocalStorageSetItem(SNOWSPRINT_STORAGE_KEY, JSON.stringify(snowsprintAllData));
                 scheduleDailyBackupRefresh();
-    triggerHistorySave();
+    if (triggerHistory) triggerHistorySave();
     if (database) {
         // 空データ保護
         if (Object.keys(snowsprintAllData).length === 0) {
             console.warn('BLOCKED: Attempted to save empty snowsprintAllData to Firebase');
             return;
         }
-        if (snowsprintDataSync) snowsprintDataSync.save(snowsprintAllData);
+        if (snowsprintDataSync) snowsprintDataSync.save(snowsprintAllData, { automatic: !triggerHistory });
         const el = document.getElementById('saveStatusSnowsprint');
         if (el) {
             el.textContent = '\u4fdd\u5b58\u3057\u307e\u3057\u305f ' + new Date().toLocaleTimeString();
@@ -9076,7 +9076,7 @@ function saveHanaponBoxData(triggerHistory = true) {
     if (triggerHistory) triggerHistorySave();
 
     if (database && hanaponBoxDataSync && Object.keys(hanaponBoxAllData).length > 0) {
-        hanaponBoxDataSync.save(hanaponBoxAllData);
+        hanaponBoxDataSync.save(hanaponBoxAllData, { automatic: !triggerHistory });
         const status = document.getElementById('saveStatusHanaponBox');
         if (status) {
             status.textContent = '保存しました ' + new Date().toLocaleTimeString();
@@ -9984,7 +9984,7 @@ window.onColumnTitleChange = function(colId, newTitle) {
     const board = getCurrentBoard();
     if (!board) return;
     const col = board.columns.find(c => c.id === colId);
-    if (col) {
+    if (col && col.title !== newTitle) {
         col.title = newTitle;
         markProjectItemUpdated(col);
         saveBoardsToFirebase();
@@ -10261,13 +10261,9 @@ function renderBoard() {
     };
 
     // Render columns
-    let needsSave = false;
     board.columns.forEach((col, colIndex) => {
-        if (col.colorIndex === undefined) {
-            col.colorIndex = colIndex % 6;
-            needsSave = true;
-        }
-        const colorClass = 'col-color-' + (col.colorIndex % 6);
+        const colorIndex = col.colorIndex === undefined ? colIndex % 6 : col.colorIndex;
+        const colorClass = 'col-color-' + (colorIndex % 6);
         const colEl = document.createElement('div');
         colEl.className = `kanban-column ${colorClass}`;
         colEl.setAttribute('ondragover', 'kanbanDragOver(event)');
@@ -10365,9 +10361,6 @@ function renderBoard() {
     addColBtn.onclick = addColumn;
     container.appendChild(addColBtn);
 
-    if (needsSave) {
-        saveBoardsToFirebase();
-    }
 }
 
 function formatDateShort(dateString) {
