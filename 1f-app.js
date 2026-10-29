@@ -239,6 +239,8 @@ const viewDayBtn = document.getElementById('view-day');
 const viewMonthBtn = document.getElementById('view-month');
 const dayViewContainer = document.getElementById('day-view-container');
 const monthViewContainer = document.getElementById('month-view-container');
+const startTimePresets = document.getElementById('press-start-time-presets');
+const startTimePresetButtons = document.querySelectorAll('[data-press-start-time]');
 
 // Helpers for PC and Mobile input handling
 function isMobileDevice() {
@@ -299,6 +301,9 @@ function init() {
 
     viewDayBtn.addEventListener('click', () => switchView('day'));
     viewMonthBtn.addEventListener('click', () => switchView('month'));
+    startTimePresetButtons.forEach(button => {
+        button.addEventListener('click', () => setDayStartTime(button.dataset.pressStartTime));
+    });
     document.getElementById('entry-form-1f').addEventListener('submit', handleAddRecord);
 
     ensureDayRecords(currentDate);
@@ -349,6 +354,7 @@ function setupMobileMenu() {
 
 // View switching
 function switchView(view) {
+    startTimePresets.hidden = view !== 'day';
     if (view === 'day') {
         dayViewContainer.style.display = 'block';
         monthViewContainer.style.display = 'none';
@@ -367,10 +373,27 @@ function getMachineBadgeClass(machine) {
     return MACHINES.includes(machine) ? ` machine-badge-${machine.toLowerCase()}` : '';
 }
 
+function getPressCountTotals() {
+    const currentYear = currentDate.substring(0, 4);
+    const totals = { annual: 0, allTime: 0, byMachine: Object.create(null) };
+    MACHINES.forEach(machine => { totals.byMachine[machine] = 0; });
+    records.forEach(record => {
+        if (!MACHINES.includes(record.machine) || typeof record.date !== 'string' || !record.date) return;
+        const count = Number(record.count);
+        if (!Number.isFinite(count) || count <= 0) return;
+        totals.byMachine[record.machine] += count;
+        totals.allTime += count;
+        if (record.date.startsWith(currentYear + '-')) totals.annual += count;
+    });
+    return totals;
+}
+
 // Monthly Records
 function renderMonthlyRecords() {
     const currentMonth = currentDate.substring(0, 7);
+    const currentYear = currentDate.substring(0, 4);
     const monthRecords = records.filter(r => r.date && r.date.startsWith(currentMonth));
+    const pressTotals = getPressCountTotals();
 
     // Machine-specific monthly data
     const machines = [...new Set([...MACHINES, ...monthRecords.map(r => r.machine)])];
@@ -402,6 +425,12 @@ function renderMonthlyRecords() {
             <div class="stats-data">
                 <div class="total-val">${machineData[m].total.toLocaleString()}</div>
                 <div class="avg-val">${machineData[m].days}日 / 平均 ${machineData[m].days > 0 ? Math.round(machineData[m].total / machineData[m].days).toLocaleString() : 0}</div>
+                ${MACHINES.includes(m) ? `
+                    <div class="machine-all-time-total">
+                        <span>全期間合計</span>
+                        <strong id="machine-all-time-count-${m.toLowerCase()}">${pressTotals.byMachine[m].toLocaleString()}</strong>
+                    </div>
+                ` : ''}
             </div>
         </div>
     `).join('');
@@ -422,6 +451,16 @@ function renderMonthlyRecords() {
             <div class="stats-item">
                 <div class="stats-label">月平均/日</div>
                 <div class="stats-value">${dayCount > 0 ? Math.round(totalMonthCount / dayCount).toLocaleString() : 0}</div>
+            </div>
+        </div>
+        <div class="press-long-term-totals">
+            <div class="press-long-term-total">
+                <div class="stats-label" id="annual-total-label-1f">年間総プレス数（${SharedSync.escapeHtml(currentYear)}年・R1～R4）</div>
+                <div class="stats-value" id="annual-total-count-1f">${pressTotals.annual.toLocaleString()}</div>
+            </div>
+            <div class="press-long-term-total">
+                <div class="stats-label">全期間総プレス数（R1～R4）</div>
+                <div class="stats-value" id="all-time-total-count-1f">${pressTotals.allTime.toLocaleString()}</div>
             </div>
         </div>
     `;
@@ -564,6 +603,27 @@ function ensureDayRecords(date) {
     if (updated) saveRecords({ automatic: true });
 }
 
+function setDayStartTime(time) {
+    if (time !== '07:00' && time !== '08:30') return false;
+    if (dayViewContainer.style.display === 'none') return false;
+    if (window.SharedSync && !SharedSync.canWrite()) return false;
+    if (database && (!recordsSync || !recordsSync.isReady())) return false;
+
+    const updatedAt = Date.now();
+    let changed = false;
+    records.forEach(record => {
+        if (record.date !== currentDate || typeof record.machine !== 'string' || !record.machine.trim() || record.startTime === time) return;
+        record.startTime = time;
+        mark1fRecordUpdated(record, updatedAt);
+        changed = true;
+    });
+    if (!changed) return false;
+
+    saveRecords();
+    renderRecords();
+    return true;
+}
+
 // Update record
 function updateRecord(id, field, value) {
     const record = records.find(r => r.id == id);
@@ -618,6 +678,10 @@ function getCumulativeTotal(machine, upToDate) {
 function renderRecords() {
     const dayRecords = records.filter(r => r.date === currentDate)
         .sort((a, b) => a.machine.localeCompare(b.machine));
+
+    const canSetStartTime = (!database || (recordsSync && recordsSync.isReady()))
+        && dayRecords.some(record => typeof record.machine === 'string' && record.machine.trim());
+    startTimePresetButtons.forEach(button => { button.disabled = !canSetStartTime; });
 
     recordsList.innerHTML = '';
 
@@ -760,6 +824,7 @@ function calculateAndDisplayStats() {
     // Individual Machine Stats Grid (Month Total & Day Avg)
     const statsGrid = document.getElementById('machine-stats-grid-1f');
     if (statsGrid) {
+        const pressTotals = getPressCountTotals();
         statsGrid.innerHTML = MACHINES.map(m => {
             const mRecords = records.filter(r => r.machine === m && r.date.startsWith(currentMonth));
             const mTotal = mRecords.reduce((s, r) => s + (r.count || 0), 0);
@@ -777,6 +842,10 @@ function calculateAndDisplayStats() {
                         <div style="margin-top: 0.3rem; border-top: 1px solid var(--border); padding-top: 0.3rem;">
                             <div style="font-size: 0.6rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">平均/日</div>
                             <div style="font-weight: 700; font-size: 0.9rem; color: var(--text-main); line-height: 1;">${mAvg.toLocaleString()}</div>
+                        </div>
+                        <div class="machine-all-time-total daily-machine-all-time-total">
+                            <span>全期間合計</span>
+                            <strong id="daily-machine-all-time-count-${m.toLowerCase()}">${pressTotals.byMachine[m].toLocaleString()}</strong>
                         </div>
                     </div>
                 </div>

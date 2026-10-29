@@ -534,6 +534,192 @@ input[type="number"] {
     box-shadow: var(--shadow-sm);
 }
 
+.daily-start-time-header .header-selectors {
+    gap: 1rem;
+    min-width: 0;
+    flex-shrink: 1;
+}
+
+.daily-start-time-presets {
+    display: flex;
+    flex-shrink: 0;
+    gap: 0.5rem;
+}
+
+.daily-start-time-presets[hidden] {
+    display: none;
+}
+
+.daily-start-time-btn {
+    min-width: 64px;
+    min-height: 40px;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-main);
+    font-size: 0.875rem;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.daily-start-time-btn[data-daily-start-time="07:00"] {
+    border-color: #047857;
+    color: #047857;
+}
+
+.daily-start-time-btn[data-daily-start-time="08:30"] {
+    border-color: #dc2626;
+    color: #dc2626;
+}
+
+.daily-start-time-btn:hover:not(:disabled) {
+    filter: brightness(0.9);
+}
+
+.daily-start-time-btn:focus-visible {
+    outline: 2px solid var(--text-main);
+    outline-offset: 3px;
+}
+
+.daily-start-time-btn:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+
+.daily-start-time-header .view-toggle {
+    flex-shrink: 0;
+}
+
+.daily-start-time-header .toggle-btn {
+    white-space: nowrap;
+}
+
+.daily-start-time-header #dayDateSelector {
+    flex: 0 1 250px;
+    min-width: 140px;
+}
+
+.daily-start-time-targets {
+    margin-bottom: 1rem;
+}
+
+.daily-start-time-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.daily-start-time-options {
+    display: grid;
+    grid-template-columns: repeat(10, minmax(0, 1fr));
+    gap: 0.5rem;
+}
+
+.daily-start-time-choice {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 40px;
+    min-width: 0;
+    font-size: 0.875rem;
+    cursor: pointer;
+}
+
+.daily-start-time-choice span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.daily-start-time-choice input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    flex: 0 0 18px;
+    margin: 0;
+    padding: 0;
+    accent-color: var(--primary);
+    cursor: pointer;
+}
+
+.daily-start-time-choice input:checked + span {
+    font-weight: 700;
+    color: var(--primary);
+}
+
+.daily-start-time-choice input:disabled + span {
+    opacity: 0.45;
+}
+
+@media (max-width: 1000px) {
+    .daily-start-time-header .header-selectors {
+        gap: 0.5rem;
+    }
+
+    .daily-start-time-header .toggle-btn {
+        padding: 0.5rem 0.75rem;
+    }
+
+    .daily-start-time-options {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 768px) {
+    .daily-start-time-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .daily-start-time-header .header-selectors {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.75rem;
+        width: 100%;
+    }
+
+    .daily-start-time-header #productionViewToggle {
+        order: 0;
+        align-self: flex-end;
+    }
+
+    .daily-start-time-presets {
+        order: 1;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .daily-start-time-btn {
+        min-width: 0;
+        min-height: 44px;
+    }
+
+    .daily-start-time-choice {
+        min-height: 44px;
+    }
+
+    .daily-start-time-header #daily-start-time-targets {
+        order: 2;
+        margin-bottom: 0;
+    }
+
+    .daily-start-time-header #dayDateSelector {
+        order: 3;
+        flex: none;
+        min-width: 0;
+        width: 100%;
+    }
+
+    .daily-start-time-header #dayDateSelector input {
+        min-width: 0;
+    }
+}
+
 #month-view-container {
     display: none;
 }
@@ -1135,11 +1321,13 @@ span.flatpickr-weekday:nth-child(7n) {
     background: rgba(0, 0, 0, 0.45);
     z-index: 99;
     opacity: 0;
+    pointer-events: none;
     transition: opacity 0.3s ease;
 }
 
 .sidebar-overlay.active {
     opacity: 1;
+    pointer-events: auto;
 }
 
 /* Sidebar close button */

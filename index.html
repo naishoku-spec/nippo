@@ -3,19 +3,19 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="app-build-number" content="2026102302">
+    <meta name="app-build-number" content="2026102909">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="app-build-id" content="20261023-release-2026102302">
+    <meta name="app-build-id" content="20261029-release-2026102909">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>2階製造 - 記録ツール</title>
-    <script src="local-entry.js?v=20261023-release-2026102302"></script>
+    <script src="local-entry.js?v=20261029-release-2026102909"></script>
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=20261023-release-2026102302">
+    <link rel="stylesheet" href="style.css?v=20261029-release-2026102909">
     <script>
         (function () {
             var initialView = new URLSearchParams(window.location.search).get('view');
@@ -34,10 +34,10 @@
     <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/ja.js"></script>
 
     <!-- Firebase SDK -->
-    <script src="firebase-storage.js?v=20261023-release-2026102302"></script>
+    <script src="firebase-storage.js?v=20261029-release-2026102909"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
-    <script src="shared-sync.js?v=20261023-release-2026102302"></script>
+    <script src="shared-sync.js?v=20261029-release-2026102909"></script>
 </head>
 
 <body>
@@ -142,6 +142,10 @@
                     </div>
                 </div>
                 <div class="header-selectors">
+                    <div id="daily-start-time-presets" class="daily-start-time-presets" role="group" aria-label="選択した機械の開始時間を一括変更" hidden>
+                        <button type="button" class="daily-start-time-btn" data-daily-start-time="07:00" title="選択した機械の開始時間を07:00に変更" disabled>7時</button>
+                        <button type="button" class="daily-start-time-btn" data-daily-start-time="08:30" title="選択した機械の開始時間を08:30に変更" disabled>8時半</button>
+                    </div>
                     <!-- Day/Month Toggle (Always left-most for Production View) -->
                     <div class="view-toggle" id="productionViewToggle" style="display: none;">
                         <button id="view-day-btn" class="toggle-btn active">日別</button>
@@ -210,6 +214,13 @@
             </header>
 
             <div id="day-view-container">
+                <div id="daily-start-time-targets" class="daily-start-time-targets" role="group" aria-label="開始時間の変更対象">
+                    <div class="daily-start-time-heading">
+                        <span>対象機械</span>
+                        <label class="daily-start-time-choice"><input type="checkbox" id="daily-start-time-all" disabled><span>すべて</span></label>
+                    </div>
+                    <div id="daily-start-time-options" class="daily-start-time-options"></div>
+                </div>
                 <div class="dashboard-grid" style="display: block;">
                     <!-- Main Display List (Direct Editing) -->
                     <main>
@@ -904,7 +915,7 @@
         </div>
     </div>
 
-    <script src="app.js?v=20261023-release-2026102302"></script>
+    <script src="app.js?v=20261029-release-2026102909"></script>
 </body>
 
 </html>

@@ -1652,8 +1652,8 @@ const firebaseConfig = {
     measurementId: "G-SR8Y5NKQTZ"
 };
 
-const APP_BUILD_ID = '20261023-release-2026102302';
-const APP_BUILD_NUMBER = 2026102302;
+const APP_BUILD_ID = '20261029-release-2026102909';
+const APP_BUILD_NUMBER = 2026102909;
 const APP_VERSION_METADATA_PATH = 'app-version.json';
 const APP_VERSION_CHECK_INTERVAL_MS = 30000;
 const APP_LATEST_BUILD_LS_KEY = 'nippo_latest_app_build_number';
@@ -2564,6 +2564,12 @@ const viewMonthBtn = document.getElementById('view-month-btn');
 const sidebar2FBtn = document.getElementById('sidebar-view-day');
 const dayViewContainer = document.getElementById('day-view-container');
 const monthViewContainer = document.getElementById('month-view-container');
+const dailyStartTimePresets = document.getElementById('daily-start-time-presets');
+const dailyStartTimeButtons = document.querySelectorAll('[data-daily-start-time]');
+const dailyStartTimeOptions = document.getElementById('daily-start-time-options');
+let dailyStartTimeMachineInputs = [];
+const dailyStartTimeAllInput = document.getElementById('daily-start-time-all');
+let dailyStartTimeSelectionDate = currentDate;
 const stockViewContainer = document.getElementById('stock-view-container');
 const viewStockBtn = document.getElementById('view-stock');
 const sliverViewContainer = document.getElementById('sliver-view-container');
@@ -2677,6 +2683,24 @@ function init() {
     // Event Listeners
     viewDayBtn?.addEventListener('click', () => switchView('day'));
     viewMonthBtn?.addEventListener('click', () => switchView('month'));
+    dailyStartTimeButtons.forEach(button => {
+        button.addEventListener('click', () => setSelectedDayStartTime(button.dataset.dailyStartTime));
+    });
+    dailyStartTimeOptions?.addEventListener('change', event => {
+        if (event.target?.matches?.('[data-daily-start-machine]')) updateDailyStartTimeControls();
+    });
+    dailyStartTimeAllInput?.addEventListener('change', () => {
+        dailyStartTimeMachineInputs.forEach(input => {
+            input.checked = !input.disabled && dailyStartTimeAllInput.checked;
+        });
+        updateDailyStartTimeControls();
+    });
+    const dailyLayoutMedia = window.matchMedia?.('(max-width: 768px)');
+    if (dailyLayoutMedia?.addEventListener) {
+        dailyLayoutMedia.addEventListener('change', updateDailyStartTimeLayout);
+    } else {
+        dailyLayoutMedia?.addListener?.(updateDailyStartTimeLayout);
+    }
     
     // Header Toggle Listeners (New)
     document.getElementById('view-day-btn')?.addEventListener('click', () => switchView('day'));
@@ -2763,6 +2787,8 @@ function setupMobileMenu() {
 
 function switchView(view) {
     if (view !== 'snowsprint') closeSnowsprintComment();
+    if (dailyStartTimePresets) dailyStartTimePresets.hidden = view !== 'day';
+    document.querySelector('header')?.classList.toggle('daily-start-time-header', view === 'day');
     // Save current view to localStorage so it persists across reloads
     saveCurrentView(view);
     document.documentElement.removeAttribute('data-initial-view');
@@ -2813,6 +2839,7 @@ function switchView(view) {
     if (viewBackupBtn) viewBackupBtn.classList.toggle('active', view === 'backup');
 
     dayViewContainer.style.display = (view === 'day') ? 'block' : 'none';
+    updateDailyStartTimeLayout();
     monthViewContainer.style.display = (view === 'month') ? 'block' : 'none';
     stockViewContainer.style.display = (view === 'stock') ? 'block' : 'none';
     sliverViewContainer.style.display = (view === 'sliver') ? 'block' : 'none';
@@ -3206,6 +3233,100 @@ function ensureDayRecords(date) {
     if (updated) saveRecords(false); // 自動追加時は履歴を作動させない
 }
 
+function updateDailyStartTimeLayout() {
+    const targets = document.getElementById('daily-start-time-targets');
+    const dateSelector = document.getElementById('dayDateSelector');
+    if (!targets || !dateSelector) return;
+
+    const isDayView = dayViewContainer.style.display === 'block';
+    targets.hidden = !isDayView;
+    const mobile = window.matchMedia?.('(max-width: 768px)')?.matches === true;
+    const parent = mobile && isDayView ? dateSelector.parentElement : dayViewContainer;
+    if (parent && targets.parentElement !== parent) {
+        parent.insertBefore(targets, mobile && isDayView ? dateSelector : parent.firstChild);
+    }
+}
+
+function updateDailyStartTimeControls() {
+    if (dailyStartTimeSelectionDate !== currentDate) {
+        dailyStartTimeMachineInputs.forEach(input => { input.checked = false; });
+        dailyStartTimeSelectionDate = currentDate;
+    }
+
+    const ready = !database || (dailyRecordsSync && dailyRecordsSync.isReady());
+    const availableMachines = new Set(records
+        .filter(record => record.date === currentDate && typeof record.machine === 'string' && record.machine.trim())
+        .map(record => record.machine));
+    const additionalMachines = [...availableMachines].filter(machine => !MACHINES.includes(machine))
+        .sort((left, right) => left.localeCompare(right, undefined, { numeric: true }));
+    const machineNames = [...MACHINES, ...additionalMachines];
+
+    if (dailyStartTimeOptions && (machineNames.length !== dailyStartTimeMachineInputs.length
+        || machineNames.some((machine, index) => dailyStartTimeMachineInputs[index].value !== machine))) {
+        const selectedMachines = new Set(dailyStartTimeMachineInputs.filter(input => input.checked).map(input => input.value));
+        const nextInputs = [];
+        const labels = machineNames.map(machine => {
+            const label = document.createElement('label');
+            label.className = 'daily-start-time-choice';
+            const input = document.createElement('input');
+            input.type = 'checkbox';
+            input.dataset.dailyStartMachine = '';
+            input.value = machine;
+            input.checked = selectedMachines.has(machine);
+            const name = document.createElement('span');
+            name.textContent = machine;
+            label.appendChild(input);
+            label.appendChild(name);
+            nextInputs.push(input);
+            return label;
+        });
+        dailyStartTimeOptions.replaceChildren(...labels);
+        dailyStartTimeMachineInputs = nextInputs;
+    }
+
+    dailyStartTimeMachineInputs.forEach(input => {
+        input.disabled = !ready || !availableMachines.has(input.value);
+        if (input.disabled) input.checked = false;
+    });
+    const availableInputs = [...dailyStartTimeMachineInputs].filter(input => !input.disabled);
+    const selectedCount = availableInputs.filter(input => input.checked).length;
+    if (dailyStartTimeAllInput) {
+        dailyStartTimeAllInput.disabled = availableInputs.length === 0;
+        dailyStartTimeAllInput.checked = selectedCount > 0 && selectedCount === availableInputs.length;
+        dailyStartTimeAllInput.indeterminate = selectedCount > 0 && selectedCount < availableInputs.length;
+    }
+    dailyStartTimeButtons.forEach(button => { button.disabled = selectedCount === 0; });
+}
+
+function setSelectedDayStartTime(time) {
+    if (time !== '07:00' && time !== '08:30') return false;
+    if (dayViewContainer.style.display !== 'block' || !canWriteAppData()) return false;
+    if (database && (!dailyRecordsSync || !dailyRecordsSync.isReady())) return false;
+    if (dailyStartTimeSelectionDate !== currentDate) {
+        updateDailyStartTimeControls();
+        return false;
+    }
+
+    const selectedMachines = new Set([...dailyStartTimeMachineInputs]
+        .filter(input => input.checked && !input.disabled && typeof input.value === 'string' && input.value.trim())
+        .map(input => input.value));
+    if (selectedMachines.size === 0) return false;
+
+    const updatedAt = Date.now();
+    let changed = false;
+    records.forEach(record => {
+        if (record.date !== currentDate || !selectedMachines.has(record.machine) || record.startTime === time) return;
+        record.startTime = time;
+        markSyncUpdated(record, updatedAt);
+        changed = true;
+    });
+    if (!changed) return false;
+
+    saveRecords();
+    renderRecords();
+    return true;
+}
+
 // Update a specific field in a record
 function updateRecord(id, field, value, options = {}) {
     if (!canWriteAppData()) return;
@@ -3381,6 +3502,7 @@ function renderRecords() {
     const dayRecords = records.filter(r => r.date === currentDate)
         .sort((a, b) => a.machine.localeCompare(b.machine));
 
+    updateDailyStartTimeControls();
     recordsList.innerHTML = '';
 
     dayRecords.forEach(record => {

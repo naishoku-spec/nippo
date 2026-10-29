@@ -1,23 +1,147 @@
 /* 1F Press Machine - Additional Styles */
 
+.press-header-controls {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 1rem;
+    min-width: 0;
+}
+
+.press-start-time-presets {
+    display: flex;
+    gap: 0.5rem;
+    flex-shrink: 0;
+}
+
+.press-start-time-presets[hidden] {
+    display: none;
+}
+
+.press-start-time-btn {
+    min-width: 64px;
+    min-height: 40px;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-main);
+    font-size: 0.875rem;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.press-start-time-btn[data-press-start-time="07:00"] {
+    border-color: #047857;
+    color: #047857;
+}
+
+.press-start-time-btn[data-press-start-time="08:30"] {
+    border-color: #dc2626;
+    color: #dc2626;
+}
+
+.press-start-time-btn:hover:not(:disabled) {
+    filter: brightness(0.9);
+}
+
+.press-start-time-btn:focus-visible {
+    outline: 2px solid var(--text-main);
+    outline-offset: 3px;
+}
+
+.press-start-time-btn:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+
+.press-header-controls .view-toggle {
+    flex-shrink: 0;
+}
+
+.press-header-controls .toggle-btn {
+    white-space: nowrap;
+}
+
+.press-header-controls .date-selector {
+    flex: 0 1 250px;
+    min-width: 140px;
+}
+
+@media (max-width: 1000px) {
+    .press-header-controls {
+        gap: 0.5rem;
+    }
+
+    .press-header-controls .toggle-btn {
+        padding: 0.5rem 0.75rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .press-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .press-header-controls {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.75rem;
+        width: 100%;
+    }
+
+    .press-header-controls .view-toggle {
+        order: 0;
+        align-self: flex-end;
+    }
+
+    .press-start-time-presets {
+        order: 1;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .press-start-time-btn {
+        min-width: 0;
+        min-height: 44px;
+    }
+
+    .press-header-controls .date-selector {
+        order: 2;
+        flex: none;
+        min-width: 0;
+        width: 100%;
+    }
+
+    .press-header-controls .date-selector input {
+        min-width: 0;
+    }
+}
+
 /* Machine badge colors for R1-R4 */
+.machine-badge-r1,
+.machine-badge-r2,
+.machine-badge-r3,
+.machine-badge-r4 {
+    background: transparent !important;
+    border: 1px solid currentColor;
+}
+
 .machine-badge-r1 {
-    background: rgba(239, 68, 68, 0.1) !important;
     color: #ef4444 !important;
 }
 
 .machine-badge-r2 {
-    background: rgba(59, 130, 246, 0.1) !important;
     color: #3b82f6 !important;
 }
 
 .machine-badge-r3 {
-    background: rgba(16, 185, 129, 0.1) !important;
     color: #10b981 !important;
 }
 
 .machine-badge-r4 {
-    background: rgba(245, 158, 11, 0.1) !important;
     color: #f59e0b !important;
 }
 
@@ -318,6 +442,8 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
+    min-width: 0;
+    gap: 0.75rem;
     padding: 0.75rem;
     background: rgba(var(--primary-rgb), 0.03);
     border: 1px solid var(--border);
@@ -330,6 +456,7 @@
 }
 
 .monthly-machine-item .stats-data {
+    min-width: 0;
     text-align: right;
 }
 
@@ -342,6 +469,24 @@
 .monthly-machine-item .avg-val {
     font-size: 0.7rem;
     color: var(--text-muted);
+}
+
+.machine-all-time-total {
+    margin-top: 0.5rem;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.machine-all-time-total strong {
+    display: block;
+    color: var(--text-main);
+    font-size: 1rem;
+    overflow-wrap: anywhere;
+}
+
+.daily-machine-all-time-total {
+    padding-top: 0.3rem;
+    border-top: 1px solid var(--border);
 }
 
 .stats-summary-flex {
@@ -365,6 +510,20 @@
 .stats-item.primary .stats-value {
     font-size: 2rem;
     color: var(--primary);
+}
+
+.press-long-term-totals {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+}
+
+.press-long-term-total + .press-long-term-total {
+    margin-top: 1rem;
+}
+
+.press-long-term-total .stats-value {
+    overflow-wrap: anywhere;
 }
 
 /* Inspection Machine Table Spreadsheet Style */
