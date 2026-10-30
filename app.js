@@ -1652,8 +1652,8 @@ const firebaseConfig = {
     measurementId: "G-SR8Y5NKQTZ"
 };
 
-const APP_BUILD_ID = '20261029-release-2026102909';
-const APP_BUILD_NUMBER = 2026102909;
+const APP_BUILD_ID = '20261030-release-2026103005';
+const APP_BUILD_NUMBER = 2026103005;
 const APP_VERSION_METADATA_PATH = 'app-version.json';
 const APP_VERSION_CHECK_INTERVAL_MS = 30000;
 const APP_LATEST_BUILD_LS_KEY = 'nippo_latest_app_build_number';
@@ -2176,6 +2176,16 @@ function mergeDailyRecordFields(base, local, remote, syncKey) {
     fields.delete(DAILY_RECORD_KEY_FIELD);
     fields.delete(DAILY_RECORD_UPDATED_AT_FIELD);
 
+    // An inherited time must not override a concurrent explicit time edit.
+    const inheritedChange = record => record?._startTimeMode === 'previous'
+        && record._inheritedStartTime === record.startTime && record.startTime !== base?.startTime;
+    const explicitChange = record => record && (record._startTimeMode === 'manual'
+        || (base && record._startTimeMode !== 'previous' && record.startTime !== base.startTime)
+        || (record.count !== base?.count && Number(record.count) > 0)
+        || (record.orderCount !== base?.orderCount && Number(record.orderCount) > 0));
+    const protectedStart = inheritedChange(local) && explicitChange(remote) ? remote
+        : inheritedChange(remote) && explicitChange(local) ? local : null;
+
     fields.forEach(field => {
         const baseHas = !!base && Object.prototype.hasOwnProperty.call(base, field);
         const localHas = !!local && Object.prototype.hasOwnProperty.call(local, field);
@@ -2189,7 +2199,9 @@ function mergeDailyRecordFields(base, local, remote, syncKey) {
         const bothChangedDifferently = localChanged && remoteChanged
             && JSON.stringify(local?.[field]) !== JSON.stringify(remote?.[field]);
         let source;
-        if (field === 'id') {
+        if (protectedStart && ['startTime', '_startTimeMode', '_inheritedStartTime'].includes(field)) {
+            source = protectedStart;
+        } else if (field === 'id') {
             source = localHas ? local : (remoteHas ? remote : base);
         } else if (bothChangedDifferently
             && localUpdatedAt !== remoteUpdatedAt
@@ -2203,6 +2215,11 @@ function mergeDailyRecordFields(base, local, remote, syncKey) {
             merged[field] = source[field];
         }
     });
+
+    if (protectedStart) {
+        merged._startTimeMode = 'manual';
+        merged._inheritedStartTime = '';
+    }
 
     const updatedAt = Math.max(
         getDailyRecordUpdatedAt(base),
@@ -2261,6 +2278,27 @@ function mergeDailyRecords(baseInput, localInput, remoteInput) {
     });
 
     return Array.from(merged.values());
+}
+
+function rebaseDailyRecords(baseInput, localInput, remoteInput) {
+    const rebased = normalizeDailyRecords(SharedSync.reapplyDraft(baseInput, localInput, remoteInput));
+    const byKey = input => new Map(cloneDailyRecords(input).map(record => [record[DAILY_RECORD_KEY_FIELD], record]));
+    const base = byKey(baseInput);
+    const local = byKey(localInput);
+    const remote = byKey(remoteInput);
+    rebased.forEach(record => {
+        const key = record[DAILY_RECORD_KEY_FIELD];
+        const left = local.get(key);
+        const right = remote.get(key);
+        if (left?._startTimeMode !== 'previous' && right?._startTimeMode !== 'previous') return;
+        // Keep normal draft replay for other fields, but resolve time and its mode together.
+        const merged = mergeDailyRecordFields(base.get(key), left, right, key);
+        for (const field of ['startTime', '_startTimeMode', '_inheritedStartTime']) {
+            if (Object.prototype.hasOwnProperty.call(merged, field)) record[field] = merged[field];
+            else delete record[field];
+        }
+    });
+    return rebased;
 }
 
 const storedRecordsState = window.SharedSync && typeof SharedSync.readLocalJson === 'function'
@@ -2401,6 +2439,7 @@ if (database) {
         emptyValue: [],
         normalize: normalizeDailyRecords,
         merge: mergeDailyRecords,
+        rebase: rebaseDailyRecords,
         serverWinsInitial: true,
         viewSelector: '#records-list',
         pendingStorageKey: DAILY_RECORDS_PENDING_LS_KEY,
@@ -3067,6 +3106,8 @@ function handleAddRecord(e) {
         machine: document.getElementById('machine').value,
         product: document.getElementById('product').value,
         startTime: startTimeInput.value,
+        _startTimeMode: 'manual',
+        _inheritedStartTime: '',
         endTime: endTimeInput.value,
         count: parseInt(document.getElementById('count').value || 0),
         orderCount: 0,
@@ -3194,6 +3235,61 @@ function isFixedHoliday(y, m, d) {
     return false;
 }
 
+function getPreviousStartTime(machine, date) {
+    let previousRecord = null;
+    let fallbackRecord = null;
+    let startTime = '08:45';
+    records.forEach(record => {
+        if (record.machine !== machine || typeof record.date !== 'string' || !record.date || record.date >= date
+            || typeof record.startTime !== 'string') return;
+        const time = normalizeTime(record.startTime);
+        if (!/^(?:[01]?\d|2[0-3]):[0-5]\d$/.test(time)) return;
+        if (!fallbackRecord || record.date > fallbackRecord.date
+            || (record.date === fallbackRecord.date && getDailyRecordUpdatedAt(record) > getDailyRecordUpdatedAt(fallbackRecord))) {
+            fallbackRecord = record;
+        }
+        const noCounts = !(Number(record.count) || Number(record.orderCount));
+        const automatic = record._startTimeMode === 'previous'
+            && record.startTime === record._inheritedStartTime;
+        const legacyDefault = !record._startTimeMode && time === '08:45'
+            && record.endTime === '16:30' && !String(record.notes || '').trim();
+        if (noCounts && (automatic || legacyDefault)) return;
+        if (!previousRecord || record.date > previousRecord.date
+            || (record.date === previousRecord.date && getDailyRecordUpdatedAt(record) > getDailyRecordUpdatedAt(previousRecord))) {
+            previousRecord = record;
+            startTime = time.padStart(5, '0');
+        }
+    });
+    return !previousRecord && fallbackRecord
+        ? normalizeTime(fallbackRecord.startTime).padStart(5, '0') : startTime;
+}
+
+function markDailyStartTimeManual(record) {
+    record._startTimeMode = 'manual';
+    record._inheritedStartTime = '';
+}
+
+function refreshInheritedDailyStartTimes({ date, afterDate, machines, updatedAt = Date.now() }) {
+    const today = new Date().toLocaleDateString('sv-SE');
+    const targets = records.filter(record => typeof record.date === 'string' && record.date >= today
+        && (!date || record.date === date) && (!afterDate || record.date > afterDate)
+        && (!machines || machines.has(record.machine)))
+        .sort((left, right) => left.date.localeCompare(right.date));
+    let changed = false;
+    targets.forEach(record => {
+        if (record._startTimeMode === 'manual') return;
+        if (record._startTimeMode === 'previous' && record.startTime !== record._inheritedStartTime) return;
+        const time = getPreviousStartTime(record.machine, record.date);
+        if (record.startTime === time) return;
+        record.startTime = time;
+        record._startTimeMode = 'previous';
+        record._inheritedStartTime = time;
+        record[DAILY_RECORD_UPDATED_AT_FIELD] = updatedAt;
+        changed = true;
+    });
+    return changed;
+}
+
 // Ensure machines A-J exist for a specific date
 function ensureDayRecords(date) {
     if (!canWriteAppData()) return;
@@ -3214,13 +3310,16 @@ function ensureDayRecords(date) {
             // Find the last record for this machine that had a product name set
             const lastRecordWithProduct = previousRecords.find(r => r.machine === m && r.product !== '');
             const lastProduct = lastRecordWithProduct ? lastRecordWithProduct.product : '';
+            const startTime = getPreviousStartTime(m, date);
 
             records.push({
                 id: Date.now() + Math.random(),
                 date: date,
                 machine: m,
                 product: lastProduct,
-                startTime: '08:45',
+                startTime,
+                _startTimeMode: 'previous',
+                _inheritedStartTime: startTime,
                 endTime: '16:30',
                 count: 0,
                 orderCount: 0,
@@ -3230,6 +3329,7 @@ function ensureDayRecords(date) {
         }
     });
 
+    if (refreshInheritedDailyStartTimes({ date })) updated = true;
     if (updated) saveRecords(false); // 自動追加時は履歴を作動させない
 }
 
@@ -3315,11 +3415,14 @@ function setSelectedDayStartTime(time) {
     const updatedAt = Date.now();
     let changed = false;
     records.forEach(record => {
-        if (record.date !== currentDate || !selectedMachines.has(record.machine) || record.startTime === time) return;
+        if (record.date !== currentDate || !selectedMachines.has(record.machine)) return;
+        if (record.startTime === time && record._startTimeMode === 'manual') return;
         record.startTime = time;
+        markDailyStartTimeManual(record);
         markSyncUpdated(record, updatedAt);
         changed = true;
     });
+    if (refreshInheritedDailyStartTimes({ afterDate: currentDate, machines: selectedMachines, updatedAt })) changed = true;
     if (!changed) return false;
 
     saveRecords();
@@ -3334,6 +3437,10 @@ function updateRecord(id, field, value, options = {}) {
     const record = records.find(r => r.id == id);
     if (!record) return;
 
+    if (field === 'startTime' && (value !== record.startTime || options.userInput === true)) {
+        markDailyStartTimeManual(record);
+    }
+
     if (field === 'count' || field === 'orderCount') {
         record[field] = parseInt(value) || 0;
     } else {
@@ -3343,6 +3450,10 @@ function updateRecord(id, field, value, options = {}) {
     // If product name is changed, propagate this choice to future dates that haven't been "started" yet
     const updatedAt = Date.now();
     record[DAILY_RECORD_UPDATED_AT_FIELD] = updatedAt;
+
+    if (field === 'startTime' && /^(?:[01]?\d|2[0-3]):[0-5]\d$/.test(normalizeTime(value))) {
+        refreshInheritedDailyStartTimes({ afterDate: record.date, machines: new Set([record.machine]), updatedAt });
+    }
 
     if (field === 'product' && options.propagateProduct !== false) {
         const realToday = new Date().toLocaleDateString('sv-SE');
@@ -3364,7 +3475,7 @@ function updateRecord(id, field, value, options = {}) {
 }
 
 function updateRecordLive(id, field, value) {
-    updateRecord(id, field, value, { propagateProduct: false });
+    updateRecord(id, field, value, { propagateProduct: false, userInput: true });
 }
 
 // Calculate Duration

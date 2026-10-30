@@ -451,8 +451,40 @@
 }
 
 .monthly-machine-item .machine-badge {
+    flex: 0 0 auto;
     font-size: 1rem;
     padding: 0.4rem 0.8rem;
+}
+
+.monthly-machine-details {
+    flex: 1 1 0;
+    min-width: 0;
+    color: var(--text-main);
+    font-size: 0.875rem;
+    line-height: 1.45;
+    text-align: center;
+    overflow-wrap: anywhere;
+}
+
+.monthly-machine-type {
+    font-weight: 600;
+}
+
+.monthly-machine-start {
+    color: var(--text-muted);
+}
+
+@media (max-width: 600px) {
+    .monthly-machine-item {
+        row-gap: 0.25rem;
+    }
+
+    .monthly-machine-details {
+        flex: 0 0 auto;
+        width: 100%;
+        font-size: 0.75rem;
+        text-align: left;
+    }
 }
 
 .monthly-machine-item .stats-data {

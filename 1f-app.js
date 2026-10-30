@@ -419,9 +419,23 @@ function renderMonthlyRecords() {
 
     // Machine list
     const machineListEl = document.getElementById('monthly-machine-list');
-    machineListEl.innerHTML = machines.map(m => `
+    const machineDetails = new Map([
+        ['R1', { type: 'シボ', start: '2016.10.3' }],
+        ['R2', { type: 'シボ', start: '2018.11.19' }],
+        ['R3', { type: 'シボ＆碁石', start: '2021.9.2' }],
+        ['R4', { type: 'シボ＆ノーマル', start: '2024.10.2' }]
+    ]);
+    machineListEl.innerHTML = machines.map(m => {
+        const detail = machineDetails.get(m);
+        return `
         <div class="monthly-machine-item">
             <span class="machine-badge${getMachineBadgeClass(m)}">${SharedSync.escapeHtml(m)}</span>
+            ${detail ? `
+                <div class="monthly-machine-details">
+                    <div class="monthly-machine-type">type ${SharedSync.escapeHtml(detail.type)}</div>
+                    <div class="monthly-machine-start">${SharedSync.escapeHtml(detail.start)}~稼働</div>
+                </div>
+            ` : ''}
             <div class="stats-data">
                 <div class="total-val">${machineData[m].total.toLocaleString()}</div>
                 <div class="avg-val">${machineData[m].days}日 / 平均 ${machineData[m].days > 0 ? Math.round(machineData[m].total / machineData[m].days).toLocaleString() : 0}</div>
@@ -433,7 +447,8 @@ function renderMonthlyRecords() {
                 ` : ''}
             </div>
         </div>
-    `).join('');
+    `;
+    }).join('');
 
     // Stats overview
     const statsOverviewEl = document.getElementById('monthly-stats-overview-1f');
@@ -567,6 +582,23 @@ function isJapaneseHoliday(dateStr) {
     return false;
 }
 
+function getPreviousStartTime(machine, date) {
+    let previousRecord = null;
+    let startTime = '08:45';
+    records.forEach(record => {
+        if (record.machine !== machine || typeof record.date !== 'string' || !record.date || record.date >= date
+            || typeof record.startTime !== 'string') return;
+        const time = normalizeTime(record.startTime);
+        if (!/^(?:[01]?\d|2[0-3]):[0-5]\d$/.test(time)) return;
+        if (!previousRecord || record.date > previousRecord.date
+            || (record.date === previousRecord.date && get1fRecordUpdatedAt(record) > get1fRecordUpdatedAt(previousRecord))) {
+            previousRecord = record;
+            startTime = time.padStart(5, '0');
+        }
+    });
+    return startTime;
+}
+
 // Ensure machines R1-R4 exist for a specific date
 function ensureDayRecords(date) {
     if (database && (!recordsSync || !recordsSync.isReady())) return;
@@ -590,7 +622,7 @@ function ensureDayRecords(date) {
                 id: Date.now() + Math.random(),
                 date: date,
                 machine: m,
-                startTime: '08:45',
+                startTime: getPreviousStartTime(m, date),
                 endTime: '17:00',
                 count: 0,
                 notes: '',

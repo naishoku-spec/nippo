@@ -68,6 +68,10 @@ function fixture(file, startMarker, endMarker, options = {}) {
         if (helperStart >= 0) {
             vm.runInContext(section(file, 'function getMachineBadgeClass(', '// Monthly Records'), context);
         }
+    } else if (file === 'app.js') {
+        vm.runInContext(section(file, 'function normalizeTime(', '// Initialize'), context);
+        vm.runInContext(section(file, 'function getDailyRecordUpdatedAt(', 'function normalizeDailyRecords('), context);
+        vm.runInContext(section(file, 'function getPreviousStartTime(', '// Ensure machines A-J'), context);
     }
     vm.runInContext(section(file, startMarker, endMarker), context, { filename: file });
     return { context, document, elements };
@@ -214,7 +218,7 @@ for (const time of ['07:00', '08:30']) {
         assert.equal(f.getRenders(), 1);
         f.saved[0].forEach((item, index) => {
             if (index < 10 && ['A', 'C', 'E'].includes(item.machine)) {
-                assert.deepEqual(item, { ...data[index], startTime: time, _syncUpdatedAt: item._syncUpdatedAt });
+                assert.deepEqual(item, { ...data[index], startTime: time, _startTimeMode: 'manual', _inheritedStartTime: '', _syncUpdatedAt: item._syncUpdatedAt });
                 assert.ok(item._syncUpdatedAt > 100);
             } else {
                 assert.deepEqual(item, data[index]);
@@ -229,7 +233,7 @@ for (const time of ['07:00', '08:30']) {
 
 test('2F presets keep unchanged timestamps and update every existing row of a selected machine', () => {
     const f = productionStartTimeFixture([
-        { ...record, machine: 'A', startTime: '07:00', _syncUpdatedAt: 123 },
+        { ...record, machine: 'A', startTime: '07:00', _startTimeMode: 'manual', _inheritedStartTime: '', _syncUpdatedAt: 123 },
         { ...record, id: 2, machine: 'A', _syncUpdatedAt: 456 },
         { ...record, id: 3, machine: 'B', _syncUpdatedAt: 789 }
     ], ['A']);
@@ -633,6 +637,32 @@ test('press monthly totals include default and free machine names without collis
     assert.ok(f.document.getElementById('monthly-stats-overview-1f').innerHTML.includes('>70</div>'));
     assert.ok(f.document.getElementById('monthly-daily-list-1f').innerHTML.includes(`>${encoded}</span>`));
     assert.ok(!machines.includes('machine-badge-a"'));
+});
+
+test('press monthly view displays the specified type and start date only for R1-R4', () => {
+    const data = [
+        { ...record, machine: 'R1', count: 10 },
+        { ...record, machine: 'R5', count: 20 },
+        { ...record, machine: '__proto__', count: 4 }
+    ];
+    const before = structuredClone(data);
+    const f = fixture('1f-app.js', 'function renderMonthlyRecords()', '// Add record', {
+        records: data, saveRecords() { assert.fail('Machine details must not save records'); }
+    });
+    f.context.renderMonthlyRecords();
+    const items = f.document.getElementById('monthly-machine-list').innerHTML.split('<div class="monthly-machine-item">').slice(1);
+    const expected = [
+        ['R1', 'シボ', '2016.10.3'], ['R2', 'シボ', '2018.11.19'],
+        ['R3', 'シボ＆碁石', '2021.9.2'], ['R4', 'シボ＆ノーマル', '2024.10.2']
+    ];
+    for (const [index, [machine, type, start]] of expected.entries()) {
+        assert.ok(items[index].includes(`>${machine}</span>`));
+        assert.ok(items[index].includes(`class="monthly-machine-type">type ${type}</div>`));
+        assert.ok(items[index].includes(`class="monthly-machine-start">${start}~稼働</div>`));
+        assert.ok(items[index].indexOf('monthly-machine-details') < items[index].indexOf('stats-data'));
+    }
+    for (const item of items.slice(4)) assert.ok(!item.includes('monthly-machine-details'));
+    assert.deepEqual(f.context.records, before);
 });
 
 test('press long-term totals cover the selected calendar year and all years for R1-R4 only', () => {
