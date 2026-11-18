@@ -20,7 +20,7 @@ function fixture({ full = false, reportedFull = false } = {}) {
     let prunes = 0;
     const context = {
         window: { FirebaseConnectionStorage: { getStatus: () => ({ storageWriteFailed: reportedFull }) } },
-        Date, JSON, HISTORY_BACKUP_PREFIX: 'nippo_history_backup_', AUTO_BACKUP_PREFIX: 'nippo_auto_backup_', LS_KEY: 'nippo_records', NOTES_LS_KEY: 'nippo_daily_notes', isProduction: true,
+        Date, JSON, BROWSER_BACKUP_ENABLED: true, HISTORY_BACKUP_PREFIX: 'nippo_history_backup_', AUTO_BACKUP_PREFIX: 'nippo_auto_backup_', LS_KEY: 'nippo_records', NOTES_LS_KEY: 'nippo_daily_notes', isProduction: true,
         console: { log: value => logs.push(value), error: value => logs.push(value) },
         getLocalBackupSnapshot: () => ({ records: '[{"count":99}]' }),
         shouldReplaceDailyBackup: () => true,
@@ -62,4 +62,55 @@ test('a failed first history write no longer deletes the third slot or continues
     assert.deepEqual([...f.entries], f.before);
     assert.equal(f.writes.length, 1);
     assert.equal(f.logs.length, 0);
+});
+
+test('legacy backups are preserved on startup, edit, and history view', () => {
+    const storage = {
+        'nippo_auto_backup_2026-08-25': '{"records":"saved daily snapshot"}',
+        'nippo_history_backup_1': '{"timestamp":"2026-08-25 12:00:00"}',
+        'nippo_records_pending_sync': '{"count":123}'
+    };
+    const before = { ...storage };
+    const panel = {};
+    const selected = [];
+    const forbidden = () => assert.fail('Disabled backups must not register a timer or modify storage');
+    const context = vm.createContext({
+        localStorage: storage,
+        safeLocalStorageGetItem: key => storage[key] ?? null,
+        safeLocalStorageSetItem: forbidden,
+        safeLocalStorageRemoveItem: forbidden,
+        setTimeout: forbidden,
+        addEventListener: forbidden,
+        document: { getElementById: () => panel, addEventListener: forbidden },
+        selectHistoryBackup: slot => selected.push(slot)
+    });
+    context.window = context;
+    const backupStart = source.indexOf('const BROWSER_BACKUP_ENABLED');
+    const lifecycle = source.indexOf("window.addEventListener('beforeunload', () => flushPendingHistoryBackup");
+    const backupEnd = source.indexOf('// -------------------------------------------------------------------', lifecycle);
+    const listStart = source.indexOf('window.renderBackupList =');
+    const listEnd = source.indexOf('window.selectHistoryBackup =', listStart);
+    vm.runInContext(source.slice(backupStart, backupEnd) + source.slice(listStart, listEnd), context);
+    context.scheduleDailyBackupRefresh();
+    context.triggerHistorySave();
+    context.flushPendingHistoryBackup(true);
+    assert.equal(context.performDailyBackup({ refreshExisting: true }), false);
+    assert.equal(context.saveHistoryBackup(), false);
+    context.renderBackupList();
+    assert.match(panel.innerHTML, /data-date="2026-08-25"/);
+    assert.deepEqual(selected, [1]);
+    assert.deepEqual(storage, before);
+});
+
+test('the legacy restore screen is reachable by URL but absent from every sidebar', () => {
+    for (const page of ['index.html', '1f.html', '1f-kenpin.html', 'saidan.html']) {
+        const sidebar = fs.readFileSync(page, 'utf8').match(/<aside[\s\S]+?<\/aside>/i)?.[0];
+        assert.ok(sidebar, page);
+        assert.doesNotMatch(sidebar, /view-backup|view=backup|switchView\('backup'\)/, page);
+    }
+    assert.match(fs.readFileSync('index.html', 'utf8'), /id="backup-view-container"/);
+    assert.match(source, /\['day',[^\n]+'backup'\]\.includes\(viewParam\)/);
+    const view = source.slice(source.indexOf('function switchView('), source.indexOf('// Toggle header selectors visibility'));
+    assert.match(view, /if \(view === 'backup'\) \{\s+renderBackupList\(\)/);
+    assert.doesNotMatch(view, /performDailyBackup\(/);
 });

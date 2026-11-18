@@ -1,8 +1,8 @@
 (function (global) {
     'use strict';
 
-    const BUILD_ID = '20261030-release-2026103005';
-    const BUILD_NUMBER = 2026103005;
+    const BUILD_ID = '20261118-release-2026111804';
+    const BUILD_NUMBER = 2026111804;
     const VERSION_PATH = new URL('app-version.json', document.currentScript?.src || document.baseURI || global.location.href).toString();
     const VERSION_CHECK_INTERVAL_MS = 30000;
     const LATEST_BUILD_KEY = 'nippo_latest_app_build_number';
@@ -1333,7 +1333,8 @@
                 return () => {
                     try {
                         capturePendingDraft();
-                        const local = pending ? rebase(pending.draftBase ?? pending.base, pending.local, latest) : latest;
+                        // The draft baseline can contain generated rows that never reached the server.
+                        const local = pending ? rebase(pending.draftBase ?? pending.base, pending.local, latest, pending.base) : latest;
                         serverSnapshot = cloneValue(latest);
                         ready = true;
                         hasDeferredRemote = false;

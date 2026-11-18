@@ -537,12 +537,16 @@ input[type="number"] {
 .daily-start-time-header .header-selectors {
     gap: 1rem;
     min-width: 0;
-    flex-shrink: 1;
+    flex: 1;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: flex-end;
 }
 
 .daily-start-time-presets {
     display: flex;
-    flex-shrink: 0;
+    align-items: flex-end;
+    max-width: 100%;
     gap: 0.5rem;
 }
 
@@ -586,6 +590,37 @@ input[type="number"] {
 .daily-start-time-btn:disabled {
     opacity: 0.45;
     cursor: default;
+}
+
+.daily-bulk-time-form {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 7rem)) auto;
+    align-items: end;
+    gap: 0.5rem;
+    min-width: 0;
+}
+
+.daily-bulk-time-field {
+    display: grid;
+    gap: 0.25rem;
+    min-width: 0;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.daily-bulk-time-field input {
+    min-width: 0;
+    height: 40px;
+    padding: 0 0.375rem;
+    font-size: 0.875rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.daily-bulk-time-apply {
+    background: var(--bg-card);
+    border-color: var(--primary);
+    color: var(--primary);
 }
 
 .daily-start-time-header .view-toggle {
@@ -678,6 +713,8 @@ input[type="number"] {
 
     .daily-start-time-header .header-selectors {
         flex-direction: column;
+        flex-wrap: nowrap;
+        justify-content: flex-start;
         align-items: stretch;
         gap: 0.75rem;
         width: 100%;
@@ -692,6 +729,16 @@ input[type="number"] {
         order: 1;
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .daily-bulk-time-form {
+        grid-column: 1 / -1;
+        grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+    }
+
+    .daily-bulk-time-field input {
+        height: 44px;
+        font-size: 1rem;
     }
 
     .daily-start-time-btn {

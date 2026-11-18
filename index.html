@@ -3,19 +3,19 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="app-build-number" content="2026103005">
+    <meta name="app-build-number" content="2026111804">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="app-build-id" content="20261030-release-2026103005">
+    <meta name="app-build-id" content="20261118-release-2026111804">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>2階製造 - 記録ツール</title>
-    <script src="local-entry.js?v=20261030-release-2026103005"></script>
+    <script src="local-entry.js?v=20261118-release-2026111804"></script>
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=20261030-release-2026103005">
+    <link rel="stylesheet" href="style.css?v=20261118-release-2026111804">
     <script>
         (function () {
             var initialView = new URLSearchParams(window.location.search).get('view');
@@ -34,10 +34,10 @@
     <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/ja.js"></script>
 
     <!-- Firebase SDK -->
-    <script src="firebase-storage.js?v=20261030-release-2026103005"></script>
+    <script src="firebase-storage.js?v=20261118-release-2026111804"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
-    <script src="shared-sync.js?v=20261030-release-2026103005"></script>
+    <script src="shared-sync.js?v=20261118-release-2026111804"></script>
 </head>
 
 <body>
@@ -119,14 +119,6 @@
                 </nav>
             </div>
 
-            <div class="sidebar-section" style="margin-top: 3rem;">
-                <nav class="sidebar-nav">
-                    <a href="javascript:void(0)" id="view-backup" class="nav-item" onclick="switchView('backup')" style="color: #64748b; font-size: 0.9rem;">
-                        <span class="nav-icon">⚙</span>
-                        バックアップ・復元
-                    </a>
-                </nav>
-            </div>
         </aside>
 
         <!-- Sidebar Overlay -->
@@ -142,11 +134,22 @@
                     </div>
                 </div>
                 <div class="header-selectors">
-                    <div id="daily-start-time-presets" class="daily-start-time-presets" role="group" aria-label="選択した機械の開始時間を一括変更" hidden>
+                    <div id="daily-start-time-presets" class="daily-start-time-presets" role="group" aria-label="選択した機械の時刻を一括変更" hidden>
+                        <form id="daily-bulk-time-form" class="daily-bulk-time-form" aria-label="開始・終了時間の一括変更">
+                            <label class="daily-bulk-time-field">
+                                <span>開始時間</span>
+                                <input type="time" name="startTime" step="60">
+                            </label>
+                            <label class="daily-bulk-time-field">
+                                <span>終了時間</span>
+                                <input type="time" name="endTime" step="60">
+                            </label>
+                            <button type="submit" name="apply" class="daily-start-time-btn daily-bulk-time-apply" disabled>一括変更</button>
+                        </form>
                         <button type="button" class="daily-start-time-btn" data-daily-start-time="07:00" title="選択した機械の開始時間を07:00に変更" disabled>7時</button>
                         <button type="button" class="daily-start-time-btn" data-daily-start-time="08:30" title="選択した機械の開始時間を08:30に変更" disabled>8時半</button>
                     </div>
-                    <!-- Day/Month Toggle (Always left-most for Production View) -->
+                    <!-- Day/Month Toggle -->
                     <div class="view-toggle" id="productionViewToggle" style="display: none;">
                         <button id="view-day-btn" class="toggle-btn active">日別</button>
                         <button id="view-month-btn" class="toggle-btn">月別集計</button>
@@ -214,7 +217,7 @@
             </header>
 
             <div id="day-view-container">
-                <div id="daily-start-time-targets" class="daily-start-time-targets" role="group" aria-label="開始時間の変更対象">
+                <div id="daily-start-time-targets" class="daily-start-time-targets" role="group" aria-label="時刻の変更対象機械">
                     <div class="daily-start-time-heading">
                         <span>対象機械</span>
                         <label class="daily-start-time-choice"><input type="checkbox" id="daily-start-time-all" disabled><span>すべて</span></label>
@@ -862,8 +865,8 @@
                 <h3 style="margin: 0; color: #1e293b;">⚙ バックアップ履歴と復元</h3>
             </div>
             <p style="color: #64748b; margin-bottom: 1.5rem; line-height: 1.6;">
-                端末内に自動保存されている過去のバックアップからデータを復元できます。<br>
-                ※復元を実行すると、サーバーのデータも選んだ項目の過去の状態に上書きされます。
+                この端末に残っている過去のバックアップを表示しています。<br>
+                ※復元を実行すると、現在のデータを残し、選んだ項目で不足している記録を追加します。
             </p>
             <p style="color: #b45309; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 1.5rem; line-height: 1.6; font-size: 0.9rem;">
                 ⚠️ <strong>注意：</strong>バックアップ機能はiPhoneではご利用いただけません。<br>PCまたはAndroid端末からご利用ください。
@@ -915,7 +918,7 @@
         </div>
     </div>
 
-    <script src="app.js?v=20261030-release-2026103005"></script>
+    <script src="app.js?v=20261118-release-2026111804"></script>
 </body>
 
 </html>

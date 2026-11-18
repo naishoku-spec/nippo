@@ -482,9 +482,8 @@ function renderMonthlyRecords() {
 
     // Daily breakdown
     const dailyListEl = document.getElementById('monthly-daily-list-1f');
-    // Keep zero-count rows visible so the monthly view shows every record,
-    // matching the 2F daily report and preventing an empty-looking summary.
     const sortedRecords = monthRecords
+        .filter(r => dailyData[r.date])
         .sort((a, b) => b.date.localeCompare(a.date) || a.machine.localeCompare(b.machine));
 
     let html = '';

@@ -116,6 +116,7 @@ function dailyLayoutFixture(mobile) {
     dateSelector.parentElement = header;
     const f = fixture('app.js', 'function updateDailyStartTimeLayout(', 'function updateDailyStartTimeControls(', {
         dayViewContainer: day,
+        dailyBulkTimeForm: null,
         saveRecords() { assert.fail('Layout changes must not save records'); }
     });
     f.elements.set('daily-start-time-targets', targets);
@@ -182,6 +183,12 @@ function productionStartTimeFixture(data, selected = ['A', 'C', 'E'], options = 
     } };
     const buttons = [{ disabled: true }, { disabled: true }];
     const all = { checked: false, disabled: true, indeterminate: false };
+    const bulkTime = {
+        startTime: { value: '', validity: { valid: true } },
+        endTime: { value: '', validity: { valid: true } },
+        apply: { disabled: true }
+    };
+    const bulkTimeForm = { elements: bulkTime, reset() { bulkTime.startTime.value = bulkTime.endTime.value = ''; } };
     const saved = [];
     let renders = 0;
     const f = fixture('app.js', 'function updateDailyStartTimeControls(', '// Update a specific field in a record', {
@@ -189,7 +196,7 @@ function productionStartTimeFixture(data, selected = ['A', 'C', 'E'], options = 
         database: {}, dailyRecordsSync: { isReady: () => true },
         dayViewContainer: { style: { display: 'block' } }, canWriteAppData: () => true,
         dailyStartTimeSelectionDate: '2026-10-19', dailyStartTimeMachineInputs: [], dailyStartTimeOptions: machineOptions,
-        dailyStartTimeButtons: buttons, dailyStartTimeAllInput: all,
+        dailyStartTimeButtons: buttons, dailyStartTimeAllInput: all, dailyBulkTimeForm: bulkTimeForm,
         markSyncUpdated(item, updatedAt) { item._syncUpdatedAt = updatedAt; },
         saveRecords() { saved.push(structuredClone(f.context.records)); },
         renderRecords() { renders++; f.context.updateDailyStartTimeControls(); },
@@ -201,7 +208,7 @@ function productionStartTimeFixture(data, selected = ['A', 'C', 'E'], options = 
     });
     f.context.updateDailyStartTimeControls();
     return { ...f, get inputs() { return Array.from(f.context.dailyStartTimeMachineInputs); },
-        machineOptions, buttons, all, saved, getRenders: () => renders };
+        machineOptions, buttons, all, bulkTime, saved, getRenders: () => renders };
 }
 
 for (const time of ['07:00', '08:30']) {
@@ -269,6 +276,8 @@ test('2F selecting a different date clears targets without editing or creating r
         { ...record, machine: 'A' }, { ...record, id: 2, machine: 'A', date: '2026-10-20' }
     ]);
     const before = JSON.stringify(f.context.records);
+    f.bulkTime.startTime.value = '09:15';
+    f.bulkTime.endTime.value = '19:45';
     f.context.currentDate = '2026-10-20';
     f.context.updateDailyStartTimeControls();
     assert.ok(f.inputs.every(input => !input.checked));
@@ -276,7 +285,63 @@ test('2F selecting a different date clears targets without editing or creating r
     assert.equal(f.inputs[0].disabled, false);
     assert.ok(f.inputs.slice(1).every(input => input.disabled));
     assert.equal(f.context.dailyStartTimeSelectionDate, '2026-10-20');
+    assert.equal(f.bulkTime.startTime.value, '');
+    assert.equal(f.bulkTime.endTime.value, '');
+    assert.equal(f.bulkTime.apply.disabled, true);
     assert.equal(JSON.stringify(f.context.records), before);
+    assert.equal(f.saved.length, 0);
+});
+
+test('2F custom times update both fields in one save and only on the chosen machines and date', () => {
+    const data = [
+        { ...record, machine: 'A' }, { ...record, id: 2, machine: 'B' },
+        { ...record, id: 3, machine: 'K' }, { ...record, id: 4, machine: 'K' },
+        { ...record, id: 5, machine: 'A', date: '2026-10-18' }
+    ];
+    const f = productionStartTimeFixture(data, ['A', 'K']);
+    assert.equal(f.context.setSelectedDayTimes({ startTime: '09:17', endTime: '18:43' }), true);
+    assert.equal(f.saved.length, 1);
+    assert.equal(f.getRenders(), 1);
+    f.saved[0].forEach((item, index) => {
+        assert.deepEqual(item, [0, 2, 3].includes(index) ? {
+            ...data[index], startTime: '09:17', endTime: '18:43', _startTimeMode: 'manual',
+            _inheritedStartTime: '', _syncUpdatedAt: item._syncUpdatedAt
+        } : data[index]);
+    });
+    assert.equal(f.context.setSelectedDayTimes({ startTime: '09:17', endTime: '18:43' }), false);
+    assert.equal(f.saved.length, 1);
+});
+
+test('2F custom apply requires a valid time and available selection', () => {
+    const f = productionStartTimeFixture([{ ...record, machine: 'A' }], ['A']);
+    assert.equal(f.bulkTime.apply.disabled, true);
+    f.bulkTime.endTime.value = '00:00';
+    f.context.updateDailyBulkTimeApply();
+    assert.equal(f.bulkTime.apply.disabled, false);
+    f.bulkTime.startTime.validity.valid = false;
+    f.context.updateDailyBulkTimeApply();
+    assert.equal(f.bulkTime.apply.disabled, true);
+    f.bulkTime.startTime.validity.valid = true;
+    f.inputs[0].checked = false;
+    f.context.updateDailyBulkTimeApply();
+    assert.equal(f.bulkTime.apply.disabled, true);
+    assert.equal(f.context.setSelectedDayTimes({ endTime: '00:00' }), false);
+    f.inputs[0].checked = true;
+    f.context.canWriteAppData = () => false;
+    f.context.updateDailyBulkTimeApply();
+    assert.equal(f.bulkTime.apply.disabled, true);
+    assert.equal(f.context.setSelectedDayTimes({ endTime: '00:00' }), false);
+    assert.equal(f.saved.length, 0);
+});
+
+test('2F invalid custom time rejects the whole batch without editing or saving', () => {
+    const f = productionStartTimeFixture([{ ...record, machine: 'A' }], ['A']);
+    const before = structuredClone(f.context.records);
+    for (const times of [{}, { startTime: '24:00', endTime: '16:30' }, { startTime: '07:15', endTime: '16:60' },
+        { startTime: '09:' }, { endTime: '09:30:05' }]) {
+        assert.equal(f.context.setSelectedDayTimes(times), false);
+    }
+    assert.deepEqual(f.context.records, before);
     assert.equal(f.saved.length, 0);
 });
 
@@ -840,6 +905,55 @@ test('2F monthly product totals and details display literal text including objec
     assert.ok(totals.includes('>__proto__</span>'));
     assert.ok(f.document.getElementById('monthly-full-detailed-list').innerHTML.includes(`>${encoded}</td>`));
 });
+
+for (const [file, endMarker, listId, machines] of [
+    ['1f-app.js', '// Add record', 'monthly-daily-list-1f', ['R1', 'R2', 'R3', 'R5']],
+    ['app.js', '// Handle Quick Entry', 'monthly-full-detailed-list', ['A', 'B', 'C', 'K']]
+]) {
+    test(`${file} monthly details hide dates with no positive count and preserve rows on counted dates`, () => {
+        const [first, second, third, extra] = machines;
+        const data = [
+            { ...record, date: '2026-11-16', machine: first, count: 0, product: 'Uncounted product' },
+            { ...record, date: '2026-11-17', machine: second, count: 0, product: 'Configured product' },
+            { ...record, date: '2026-11-17', machine: first, count: 125, product: 'No.6' },
+            { ...record, date: '2026-11-17', machine: third, count: 0, product: '' },
+            { ...record, date: '2026-11-15', machine: extra, count: 5, product: '' },
+            { ...record, date: '2026-11-14', machine: first, count: 0, product: '' },
+            { ...record, date: '2026-10-31', machine: first, count: 500, product: 'No.6' }
+        ];
+        const f = fixture(file, 'function renderMonthlyRecords()', endMarker, {
+            records: data, currentDate: '2026-11-17', saveRecords() { assert.fail('Rendering must not save records'); }
+        });
+        const render = () => {
+            const before = structuredClone(data);
+            f.context.renderMonthlyRecords();
+            assert.deepEqual(data, before, 'Rendering must not reorder or change records');
+            return f.document.getElementById(listId).innerHTML;
+        };
+        const dates = html => [...html.matchAll(/2026年 11月 (\d{2})日/g)].map(match => match[1]);
+
+        const html = render();
+        assert.deepEqual(dates(html), ['17', '15']);
+        const [, firstDay, sunday] = html.split('<tr class="date-group-divider">');
+        assert.ok(firstDay.indexOf(`>${first}</span>`) < firstDay.indexOf(`>${second}</span>`));
+        assert.ok(firstDay.includes(`>${second}</span>`), 'Keep the zero-count row on the counted date');
+        assert.equal(firstDay.includes(`>${third}</span>`), file === '1f-app.js');
+        assert.ok(sunday.includes(`>${extra}</span>`), 'Keep a Sunday with a count including additional machines');
+        assert.ok(!html.includes('10/31'));
+        if (file === 'app.js') {
+            assert.ok(f.document.getElementById('monthly-product-totals').innerHTML.includes('Uncounted product'));
+        } else {
+            assert.ok(f.document.getElementById('monthly-stats-overview-1f').innerHTML.includes('>2 日<'));
+        }
+
+        data[0].count = 1;
+        assert.deepEqual(dates(render()), ['17', '16', '15']);
+        data[0].count = data[2].count = data[4].count = 0;
+        const empty = render();
+        assert.deepEqual(dates(empty), []);
+        assert.ok(empty.includes('記録がありません'));
+    });
+}
 
 test('cutting monthly product, worker and note use text instead of injected HTML or JavaScript', () => {
     const f = fixture('saidan-app.js', 'function renderMonthlyRecords()', 'function setupMobileMenu(', {

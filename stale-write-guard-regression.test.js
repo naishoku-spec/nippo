@@ -506,6 +506,31 @@ test('concurrently generated empty report rows cannot clear another device count
     assert.deepEqual(db.value().map(row => row.count), [1, 2, 3, 4, 5, 6, 7, 8, 9, 100]);
 });
 
+test('custom refresh replay receives the server base separately from unsaved generated rows', async () => {
+    const f = fixture();
+    const base = [{ _syncKey: 'A', count: 10 }];
+    const defaults = [...base, { _syncKey: 'B', count: 0 }];
+    const latest = [{ _syncKey: 'A', count: 12 }];
+    const db = database(base);
+    let called = false;
+    const c = client(f, db, base, {
+        emptyValue: [], rebase(draftBase, local, remote, serverBase) {
+            assert.deepEqual(copy(draftBase), defaults);
+            assert.deepEqual(copy(serverBase), base);
+            assert.deepEqual(copy(remote), latest);
+            called = true;
+            return f.sync.reapplyDraft(draftBase, local, remote);
+        }
+    });
+    db.emit();
+    db.replace(latest);
+    c.save(defaults, { automatic: true });
+    c.save([base[0], { _syncKey: 'B', count: 3 }]);
+    await f.refresh();
+    assert.equal(called, true);
+    assert.deepEqual(db.value(), [...latest, { _syncKey: 'B', count: 3 }]);
+});
+
 test('an ordinary cached collection cannot silently reupload records deleted on another device', () => {
     const f = fixture();
     const cached = [{ id: 'old', count: 123 }, { id: 'keep', count: 4 }];
