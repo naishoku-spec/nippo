@@ -6,7 +6,7 @@ const vm = require('node:vm');
 const { test } = require('node:test');
 
 const sources = Object.fromEntries(
-    ['app.js', '1f-app.js', '1f-kenpin-app.js', 'saidan-app.js', 'shared-sync.js']
+    ['app.js', '1f-app.js', '1f-kenpin-app.js', 'saidan-app.js', 'shared-sync.js', 'shift-rotation.js']
         .map(file => [file, fs.readFileSync(file, 'utf8')])
 );
 
@@ -651,18 +651,26 @@ test('dropping a shift member in the same position does not save or clear overri
 
 test('applying the reordered shift rotation also keeps manual weekly fields', () => {
     const monday = new Date(2026, 9, 19);
-    const overrides = { week: { early: 'C', late: 'A', notes: text } };
+    const week = monday.toISOString().slice(0, 10);
+    const overrides = { [week]: { early: 'C', late: 'A', notes: text } };
     let saves = 0;
     const f = fixture('app.js', 'function shiftUpdateRotationOrder()', 'let shiftDraggedElement', {
+        Date: class FixtureDate extends Date {
+            constructor(...args) { super(...(args.length ? args : [+monday])); }
+        },
         shiftNames: ['B', 'C', 'A'], shiftRotationOrder: ['A', 'B', 'C'],
-        shiftOverrides: overrides, shiftBaseDate: new Date(2026, 0, 1),
-        shiftGetMondayOfCurrentWeek: () => monday,
+        shiftOverrides: overrides, shiftRotationRules: {}, shiftOffWeeks: {}, shiftBaseDate: new Date(2026, 0, 1),
+        canWriteAppData: () => true,
+        shiftDataSync: { isReady: () => true, isPaused: () => false, getPending: () => null },
         confirm: () => true, alert() {}, shiftGenerateTable() {},
         shiftSaveAllData() { saves++; }
     });
+    f.document.getElementById('shift-rotation-start').value = '2026-10-19';
+    vm.runInContext(sources['shift-rotation.js'], f.context);
     f.context.shiftUpdateRotationOrder();
     assert.equal(f.context.shiftOverrides, overrides);
-    assert.equal(JSON.stringify(f.context.shiftRotationOrder), JSON.stringify(['B', 'C', 'A']));
+    assert.equal(JSON.stringify(f.context.shiftRotationOrder), JSON.stringify(['A', 'B', 'C']));
+    assert.equal(JSON.stringify(f.context.shiftRotationRules[week].order), JSON.stringify(['B', 'C', 'A']));
     assert.equal(saves, 1);
 });
 
@@ -987,10 +995,13 @@ test('shift names, options and manual fields retain literal special characters a
     const weekId = monday.toISOString().split('T')[0];
     const f = fixture('app.js', 'function shiftGenerateTable()', '// ==========================================', {
         shiftNames: [text, 'B'], shiftRotationOrder: [text, 'B'], shiftBaseDate: monday,
-        shiftBaseEarlyIndex: 0, shiftGetMondayOfCurrentWeek: () => monday,
+        shiftRotationRules: {}, shiftOffWeeks: {},
+        shiftGetMondayOfCurrentWeek: () => monday,
         shiftFormatDate: () => '10/19', isJapaneseHoliday: () => false,
         shiftOverrides: { [weekId]: { date: text, early: text, late: 'B', normal: text, notes: text } }
     });
+    vm.runInContext(sources['shift-rotation.js'], f.context);
+    vm.runInContext(section('app.js', 'function shiftAssignments()', 'function shiftSaveRowState('), f.context);
     f.context.shiftGenerateTable();
     const html = f.document.getElementById('shift-tbody').innerHTML;
     assert.ok(html.includes(`<option value="${encoded}" selected>${encoded}</option>`));
@@ -1002,6 +1013,7 @@ test('shift member chips render user-entered names as text', () => {
     const f = fixture('app.js', 'function shiftRenderMembers()', 'function shiftSetupDragAndDrop(', {
         shiftNames: [text], shiftSetupDragAndDrop() {}, shiftGenerateTable() {}
     });
+    vm.runInContext(sources['shift-rotation.js'], f.context);
     f.context.shiftRenderMembers();
     const html = f.document.getElementById('shift-member-list').innerHTML;
     assert.ok(html.includes(encoded));

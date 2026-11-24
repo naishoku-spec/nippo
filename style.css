@@ -2033,6 +2033,30 @@ tr.weekend-holiday td:first-child .date-desktop {
     background-color: var(--row-hover, #f1f5f9);
 }
 
+.shift-week-off {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: fit-content;
+    max-width: 100%;
+    min-height: 32px;
+    padding-inline: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.4;
+    color: var(--text-muted, #64748b);
+    cursor: pointer;
+}
+
+.shift-week-off input {
+    flex: 0 0 18px;
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    accent-color: var(--primary, #4f46e5);
+    cursor: inherit;
+}
+
 .shift-badge-early {
     background-color: var(--early-bg, #fef08a);
     color: var(--early-text, #854d0e);
@@ -2057,6 +2081,12 @@ tr.weekend-holiday td:first-child .date-desktop {
     font-size: 18px;
     gap: 8px;
     box-shadow: 0 4px 10px rgba(30, 41, 59, 0.3);
+}
+
+.shift-table .shift-badge-off {
+    background-color: var(--row-hover, #f1f5f9);
+    color: var(--text-muted, #64748b);
+    box-shadow: none;
 }
 
 .shift-staff-all {
@@ -2247,6 +2277,104 @@ tr.weekend-holiday td:first-child .date-desktop {
     transform: translateY(-1px);
 }
 
+.shift-rotation-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 12px 20px;
+    margin-bottom: 16px;
+}
+
+.shift-rotation-start {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-muted, #64748b);
+}
+
+.shift-rotation-start input {
+    flex: 0 1 12rem;
+    min-width: 0;
+    max-width: 100%;
+    min-height: 44px;
+}
+
+.shift-rotation-mode {
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-muted, #64748b);
+}
+
+.shift-rotation-mode legend {
+    margin-bottom: 6px;
+    padding: 0;
+}
+
+.shift-rotation-mode-options {
+    display: inline-grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 2px;
+    max-width: 100%;
+    padding: 2px;
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 8px;
+    background: var(--row-hover, #f1f5f9);
+}
+
+.shift-rotation-mode-options label {
+    position: relative;
+    min-width: 0;
+}
+
+.shift-rotation-mode-options input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.shift-rotation-mode-options span {
+    display: grid;
+    place-items: center;
+    min-height: 38px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    text-align: center;
+}
+
+.shift-rotation-mode-options input:checked + span {
+    background: #fff;
+    box-shadow: inset 0 0 0 1px var(--border-color, #e2e8f0);
+    color: var(--primary, #4f46e5);
+}
+
+.shift-rotation-mode-options input:focus-visible + span {
+    outline: 2px solid var(--primary, #4f46e5);
+    outline-offset: -2px;
+}
+
+.flatpickr-calendar.shift-start-calendar {
+    max-width: calc(100vw - 24px);
+}
+
+.shift-start-calendar .flatpickr-rContainer,
+.shift-start-calendar .flatpickr-days,
+.shift-start-calendar .dayContainer {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+}
+
 .shift-btn-confirm {
     background: var(--accent-blue, #3b82f6) !important;
     color: #fff !important;
@@ -2360,6 +2488,10 @@ tr.weekend-holiday td:first-child .date-desktop {
         border-bottom: 1px solid var(--row-hover, #f1f5f9);
         padding-bottom: 10px;
         margin-bottom: 15px;
+    }
+
+    .shift-week-off {
+        min-height: 44px;
     }
 
     .shift-table td:nth-child(2),

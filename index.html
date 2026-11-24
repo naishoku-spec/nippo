@@ -3,19 +3,19 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="app-build-number" content="2026111804">
+    <meta name="app-build-number" content="2026112410">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="app-build-id" content="20261118-release-2026111804">
+    <meta name="app-build-id" content="20261124-release-2026112410">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>2階製造 - 記録ツール</title>
-    <script src="local-entry.js?v=20261118-release-2026111804"></script>
+    <script src="local-entry.js?v=20261124-release-2026112410"></script>
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=20261118-release-2026111804">
+    <link rel="stylesheet" href="style.css?v=20261124-release-2026112410">
     <script>
         (function () {
             var initialView = new URLSearchParams(window.location.search).get('view');
@@ -34,10 +34,11 @@
     <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/ja.js"></script>
 
     <!-- Firebase SDK -->
-    <script src="firebase-storage.js?v=20261118-release-2026111804"></script>
+    <script src="firebase-storage.js?v=20261124-release-2026112410"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
-    <script src="shared-sync.js?v=20261118-release-2026111804"></script>
+    <script src="shared-sync.js?v=20261124-release-2026112410"></script>
+    <script src="shift-rotation.js?v=20261124-release-2026112410"></script>
 </head>
 
 <body>
@@ -713,6 +714,19 @@
 
                     <!-- メンバー管理セクション -->
                     <section class="shift-member-manager">
+                        <form id="shift-rotation-form" class="shift-rotation-form" onsubmit="event.preventDefault(); shiftUpdateRotationOrder()">
+                            <div class="shift-rotation-start">
+                                <label for="shift-rotation-start">適用開始週</label>
+                                <input type="date" id="shift-rotation-start" class="shift-add-input" placeholder="日付を選ぶ" required>
+                            </div>
+                            <fieldset class="shift-rotation-mode">
+                                <legend>回し方</legend>
+                                <div class="shift-rotation-mode-options">
+                                    <label><input type="radio" name="shift-rotation-mode" value="late-to-early" checked><span>遅番 → 早番</span></label>
+                                    <label><input type="radio" name="shift-rotation-mode" value="early-to-late"><span>早番 → 遅番</span></label>
+                                </div>
+                            </fieldset>
+                        </form>
                         <h3>メンバー管理 <small style="font-weight: normal; color: #888;">（ドラッグで順番変更）</small></h3>
                         <div id="shift-member-list" class="shift-member-list">
                             <!-- JavaScriptで生成 -->
@@ -722,15 +736,15 @@
                             <button onclick="shiftAddMember()" class="shift-btn-add">追加</button>
                         </div>
                         <div style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 15px;">
-                            <button onclick="shiftUpdateRotationOrder()" class="shift-btn-confirm">
+                            <button type="submit" form="shift-rotation-form" class="shift-btn-confirm">
                                 <span style="font-size: 1.2em;">🔄</span>
-                                この順番を「自動計算ルール」として保存する
+                                この順番を適用する
                             </button>
                             <div class="shift-help-text">
-                                <strong>【自動計算の更新手順】</strong><br>
-                                1. 「メンバー管理」からメンバーを追加したり、ドラッグで順番を入れ替えます。<br>
-                                2. 上の青色のボタンをクリックすると、メンバー管理で並べた順番（左からの順番で）自動計算ルールが適用されます。<br>
-                                3. <strong>今週の月曜日</strong>を起点に設定した順で再スタートします。
+                                <strong>【全体の順番を変えるとき】</strong><br>
+                                メンバーを並べ替え(左順に並べる)。開始週を選んでから青いボタンを押します。<br><br>
+                                <strong>【その週の名前だけ変えるとき】</strong><br>
+                                表で名前を選び直します。ほかの週は変わりません。
                             </div>
                         </div>
                     </section>
@@ -918,7 +932,7 @@
         </div>
     </div>
 
-    <script src="app.js?v=20261118-release-2026111804"></script>
+    <script src="app.js?v=20261124-release-2026112410"></script>
 </body>
 
 </html>

@@ -1652,8 +1652,8 @@ const firebaseConfig = {
     measurementId: "G-SR8Y5NKQTZ"
 };
 
-const APP_BUILD_ID = '20261118-release-2026111804';
-const APP_BUILD_NUMBER = 2026111804;
+const APP_BUILD_ID = '20261124-release-2026112410';
+const APP_BUILD_NUMBER = 2026112410;
 const APP_VERSION_METADATA_PATH = 'app-version.json';
 const APP_VERSION_CHECK_INTERVAL_MS = 30000;
 const APP_LATEST_BUILD_LS_KEY = 'nippo_latest_app_build_number';
@@ -9679,10 +9679,11 @@ let shiftRotationOrder = [...SHIFT_DEFAULT_ROTATION];
 const SHIFT_DEFAULT_NAMES = ["西岡", "滝沢", "大竹", "臼井", "村田", "今枝"];
 let shiftNames = [...SHIFT_DEFAULT_NAMES];
 let shiftOverrides = {};
+let shiftRotationRules = {};
+let shiftOffWeeks = {};
 let shiftUpdatedAt = 0;
 
 let shiftBaseDate = new Date("2026-03-30");
-const shiftBaseEarlyIndex = 0;
 
 let shiftDatabaseRef = null;
 let shiftDataSync = null;
@@ -9699,18 +9700,14 @@ try {
         emptyValue: {},
         pendingStorageKey: 'shift_data_' + SHIFT_SECRET_PATH + '_pending_sync',
         serverSnapshotStorageKey: 'shift_data_' + SHIFT_SECRET_PATH + '_server_snapshot',
-        getLocal: () => ({
-            members: shiftNames,
-            rotation_order: shiftRotationOrder,
-            base_date: shiftBaseDate.toISOString().split('T')[0],
-            overrides: shiftOverrides,
-            _syncUpdatedAt: shiftUpdatedAt
-        }),
+        getLocal: shiftLocalData,
         setLocal: value => {
             if (Array.isArray(value.members)) shiftNames = value.members;
             if (Array.isArray(value.rotation_order)) shiftRotationOrder = value.rotation_order;
             if (value.base_date) shiftBaseDate = new Date(value.base_date);
+            shiftRotationRules = value.rotation_rules && typeof value.rotation_rules === 'object' ? value.rotation_rules : {};
             shiftOverrides = value.overrides && typeof value.overrides === 'object' ? value.overrides : {};
+            shiftOffWeeks = value.off_weeks && typeof value.off_weeks === 'object' ? value.off_weeks : {};
             shiftUpdatedAt = Number(value._syncUpdatedAt) || 0;
         },
         onRemote: (value, meta) => {
@@ -9722,34 +9719,72 @@ try {
     console.error('Shift Firebase initialization failed.', e);
 }
 
-function shiftSaveAllData() {
-    if (!canWriteAppData()) return false;
-    shiftUpdatedAt = Date.now();
-    const value = {
+function shiftLocalData() {
+    return {
         members: shiftNames,
         rotation_order: shiftRotationOrder,
         base_date: shiftBaseDate.toISOString().split('T')[0],
+        rotation_rules: shiftRotationRules,
         overrides: shiftOverrides,
+        ...(Object.keys(shiftOffWeeks).length ? { off_weeks: shiftOffWeeks } : {}),
         _syncUpdatedAt: shiftUpdatedAt
     };
-    if (shiftDataSync) return shiftDataSync.save(value);
-    return false;
+}
+
+function shiftSaveAllData() {
+    if (!canWriteAppData() || !shiftDataSync) return false;
+    shiftUpdatedAt = Date.now();
+    return shiftDataSync.save(shiftLocalData());
 }
 
 function shiftUpdateRotationOrder() {
-    if (confirm("現在の「メンバー管理」の並び順を、今週からのシフト自動計算のループとして確定しますか？")) {
-        const today = new Date();
-        const monday = shiftGetMondayOfCurrentWeek(today);
-
-        shiftBaseDate = monday;
-        shiftRotationOrder = [...shiftNames];
-
-        shiftSaveAllData();
-        alert("回転順を今週（" + shiftBaseDate.toLocaleDateString() + "の週）から確定しました。");
-        shiftGenerateTable();
+    if (!canWriteAppData()) return;
+    if (!shiftDataSync?.isReady() || shiftDataSync.isPaused() || shiftDataSync.getPending()) {
+        alert('シフト表の読み込み・保存が終わってから、もう一度お試しください。');
+        return;
     }
+    const input = document.getElementById('shift-rotation-start');
+    const start = ShiftRotation.selectStartWeek(input?.value);
+    if (!start) {
+        const picker = ShiftRotation.setupStartCalendar(input);
+        alert('カレンダーから適用開始週の日付を選んでください。');
+        if (picker) picker.open();
+        else input?.focus();
+        return;
+    }
+    const plan = ShiftRotation.planOrderChange({
+        weekId: start.weekId, members: shiftNames, rotationRules: shiftRotationRules,
+        mode: input.form?.elements.namedItem('shift-rotation-mode')?.value
+    });
+    if (!plan) {
+        alert('ローテーションには2人以上のメンバーが必要です。');
+        return;
+    }
+    const firstDutyWeek = ShiftRotation.isWeekOff(shiftOffWeeks, start.weekId) ? '次の当番週' : 'その週';
+    const modeLabel = plan.mode === 'early-to-late' ? '早番 → 遅番' : '遅番 → 早番';
+    if (!confirm(`${start.date}の週から順番を変えますか？\n回し方：${modeLabel}\n${firstDutyWeek}の早番：${plan.first.early}／遅番：${plan.first.late}\n\n選んだ週から先は、すでに決めた早番・遅番も変わります。日付・通常シフト・備考はそのままです。`)) return;
+    shiftRotationRules = plan.rules;
+    if (input.form) delete input.form.dataset.rotationModeChanged;
+    shiftSaveAllData();
+    shiftGenerateTable();
 }
 window.shiftUpdateRotationOrder = shiftUpdateRotationOrder;
+
+function shiftSetWeekOff(weekId, input) {
+    if (!canWriteAppData() || !shiftDataSync?.isReady() || shiftDataSync.isPaused()) {
+        input.checked = !input.checked;
+        alert('シフト表の読み込み・保存が終わってから、もう一度お試しください。');
+        return;
+    }
+    const next = ShiftRotation.planWeekOffChange(shiftOffWeeks, weekId, input.checked);
+    if (!next) return;
+    const restoreFocus = input.matches(':focus-visible');
+    shiftOffWeeks = next;
+    shiftSaveAllData();
+    shiftGenerateTable();
+    if (restoreFocus) document.getElementById(`shift-week-off-${weekId}`)?.focus({ preventScroll: true });
+}
+window.shiftSetWeekOff = shiftSetWeekOff;
 
 let shiftDraggedElement = null;
 let shiftDraggedIndex = null;
@@ -9757,6 +9792,9 @@ let shiftDraggedIndex = null;
 function shiftRenderMembers() {
     const list = document.getElementById('shift-member-list');
     if (!list) return;
+    const input = document.getElementById('shift-rotation-start');
+    ShiftRotation.setupStartCalendar(input);
+    ShiftRotation.setupModePicker(input, () => shiftRotationRules);
     list.innerHTML = shiftNames.map((name, index) => `
         <div class="shift-member-chip" draggable="true" data-index="${index}">
             <span class="shift-drag-handle">☰</span>
@@ -9853,17 +9891,22 @@ function shiftDeleteMember(index) {
 }
 window.shiftDeleteMember = shiftDeleteMember;
 
-function shiftSaveRowState(weekId) {
-    const row = document.querySelector(`tr[data-week-id="${weekId}"]`);
-    if (!row) return;
+function shiftAssignments() {
+    return ShiftRotation.create({
+        members: shiftNames, rotationOrder: shiftRotationOrder,
+        baseDate: shiftBaseDate, overrides: shiftOverrides, rotationRules: shiftRotationRules, offWeeks: shiftOffWeeks
+    });
+}
 
-    shiftOverrides[weekId] = {
-        date: row.querySelector('.shift-editable-date').value,
-        early: row.querySelectorAll('.shift-name-select')[0].value,
-        late: row.querySelectorAll('.shift-name-select')[1].value,
-        normal: row.querySelectorAll('.shift-staff-all-input')[0].value,
-        notes: row.querySelectorAll('.shift-staff-all-input')[1].value
-    };
+function shiftSaveRowState(weekId, field) {
+    if (!canWriteAppData()) return;
+    const tbody = document.getElementById('shift-tbody');
+    const row = tbody?.querySelector(`tr[data-week-id="${weekId}"]`);
+    if (!row) return;
+    const ruleId = field === 'early' || field === 'late' ? shiftAssignments()(weekId).ruleId : null;
+    const updated = ShiftRotation.readEdit(row, shiftOverrides[weekId], field, ruleId);
+    if (!updated) return;
+    shiftOverrides[weekId] = updated;
     shiftSaveAllData();
 }
 window.shiftSaveRowState = shiftSaveRowState;
@@ -9951,16 +9994,15 @@ function shiftGenerateTable() {
     
     const today = new Date();
     const currentMonday = shiftGetMondayOfCurrentWeek(today);
-
-    const diffTime = currentMonday.getTime() - shiftBaseDate.getTime();
-    const diffWeeks = Math.round(diffTime / (7 * 24 * 60 * 60 * 1000));
+    const assignmentsFor = shiftAssignments();
 
     let tableHTML = '';
     let startMonth = "";
     let endMonth = "";
 
     const nameOptions = (selectedName) => {
-        return shiftNames.map((name) =>
+        const choices = selectedName && !shiftNames.includes(selectedName) ? [...shiftNames, selectedName] : shiftNames;
+        return choices.map((name) =>
             `<option value="${SharedSync.escapeHtml(name)}" ${name === selectedName ? 'selected' : ''}>${SharedSync.escapeHtml(name)}</option>`
         ).join('');
     };
@@ -9976,16 +10018,12 @@ function shiftGenerateTable() {
             displayWeekDate.setDate(displayWeekDate.getDate() + 1);
         }
 
-        const totalRotation = shiftRotationOrder.length;
-        const earlyIdx = (((shiftBaseEarlyIndex + diffWeeks + i) % totalRotation) + totalRotation) % totalRotation;
-        const lateIdx = (earlyIdx + 1) % totalRotation;
-
-        const rowData = shiftOverrides[weekId] || {
+        const rowData = {
             date: shiftFormatDate(displayWeekDate, i === 0) + " 〜",
-            early: shiftRotationOrder[earlyIdx],
-            late: shiftRotationOrder[lateIdx],
             normal: "すべて全員",
-            notes: ""
+            notes: "",
+            ...shiftOverrides[weekId],
+            ...assignmentsFor(weekId)
         };
 
         if (i === 0) startMonth = (displayWeekDate.getMonth() + 1) + "月";
@@ -9994,31 +10032,35 @@ function shiftGenerateTable() {
         tableHTML += `
             <tr data-week-id="${weekId}">
                 <td>
-                    <input type="text" class="shift-editable-date" value="${SharedSync.escapeHtml(rowData.date)}" oninput="shiftSaveRowState('${weekId}')">
+                    <input type="text" class="shift-editable-date" data-shift-field="date" value="${SharedSync.escapeHtml(rowData.date)}" oninput="shiftSaveRowState('${weekId}', 'date')">
+                    <label class="shift-week-off">
+                        <input type="checkbox" id="shift-week-off-${weekId}" ${rowData.off ? 'checked' : ''} onchange="shiftSetWeekOff('${weekId}', this)">
+                        <span>早番・遅番なし</span>
+                    </label>
                 </td>
                 <td>
-                    <span class="shift-badge-early">
+                    <span class="shift-badge-early${rowData.off ? ' shift-badge-off' : ''}">
                         <span class="icon">◆</span>
-                        <select class="shift-name-select" onchange="shiftSaveRowState('${weekId}')">
+                        ${rowData.off ? '<span>なし</span>' : `<select class="shift-name-select" data-shift-field="early" onchange="shiftSaveRowState('${weekId}', 'early')">
                             ${nameOptions(rowData.early)}
-                        </select>
+                        </select>`}
                     </span>
                 </td>
                 <td>
-                    <span class="shift-badge-late">
+                    <span class="shift-badge-late${rowData.off ? ' shift-badge-off' : ''}">
                         <span class="icon">♣</span>
-                        <select class="shift-name-select" onchange="shiftSaveRowState('${weekId}')">
+                        ${rowData.off ? '<span>なし</span>' : `<select class="shift-name-select" data-shift-field="late" onchange="shiftSaveRowState('${weekId}', 'late')">
                             ${nameOptions(rowData.late)}
-                        </select>
+                        </select>`}
                     </span>
                 </td>
                 <td>
                     <div class="shift-staff-all">
-                        <input type="text" class="shift-staff-all-input" value="${SharedSync.escapeHtml(rowData.normal)}" oninput="shiftSaveRowState('${weekId}')">
+                        <input type="text" class="shift-staff-all-input" data-shift-field="normal" value="${SharedSync.escapeHtml(rowData.normal)}" oninput="shiftSaveRowState('${weekId}', 'normal')">
                     </div>
                 </td>
                 <td>
-                    <input type="text" class="shift-staff-all-input" placeholder="備考を入力..." value="${SharedSync.escapeHtml(rowData.notes)}" oninput="shiftSaveRowState('${weekId}')">
+                    <input type="text" class="shift-staff-all-input" data-shift-field="notes" placeholder="備考を入力..." value="${SharedSync.escapeHtml(rowData.notes)}" oninput="shiftSaveRowState('${weekId}', 'notes')">
                 </td>
             </tr>
         `;

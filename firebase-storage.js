@@ -2,8 +2,8 @@
     'use strict';
 
     if (global.FirebaseConnectionStorage) return;
-    const BUILD_ID = '20261118-release-2026111804';
-    const BUILD_NUMBER = 2026111804;
+    const BUILD_ID = '20261124-release-2026112410';
+    const BUILD_NUMBER = 2026112410;
     const hosts = new Set();
     const connectionValues = new Map();
     let installed = false;
