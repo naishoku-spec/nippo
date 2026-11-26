@@ -120,6 +120,37 @@ test('either mode can take over from a selected week without counting off weeks 
     assert.deepEqual(resolve('2027-01-31'), { early: 'B', late: 'C', ruleId: backToEarly.rules[w18].id });
 });
 
+test('the preview shows one full rotation, including off weeks and existing manual settings', () => {
+    const members = ['B', 'C', 'D', 'E', 'F', 'A'];
+    const start = ShiftRotation.selectStartWeek('2026-12-28', new Date(2026, 11, 22));
+    const key = (month, day) => new Date(2027, month - 1, day).toISOString().slice(0, 10);
+    const prior = Object.freeze({ id: 'prior', order });
+    const current = Object.freeze({
+        members, rotationOrder: order, baseDate, rotationRules: Object.freeze({ [w21]: prior }),
+        offWeeks: Object.freeze({ '2026-12-28': true, '2027-01-18': true }),
+        overrides: Object.freeze({
+            [key(1, 4)]: Object.freeze({ early: 'E', late: 'F', rotation_rule_id: 'prior' }),
+            [key(1, 11)]: Object.freeze({ early: 'B', late: 'E', rotation_rule_id: 'older' }),
+            [key(2, 22)]: Object.freeze({ early: 'C', late: 'D', rotation_rule_id: 'prior' }),
+            [key(3, 1)]: Object.freeze({ early: 'A', late: 'B', auto_assignment: true })
+        })
+    });
+    const snapshot = JSON.stringify(current);
+    const plan = ShiftRotation.planOrderChange({ weekId: start.weekId, members, rotationRules: current.rotationRules, mode: 'early-to-late' });
+    const preview = ShiftRotation.buildOrderPreview(start, plan, current);
+    assert.equal(preview.dutyWeeks, 6);
+    assert.equal(preview.laterManualCount, 1);
+    assert.deepEqual(preview.rows.map(({date, early, late, off}) => [date, early, late, off]), [
+        ['2026-12-28', '', '', true], ['2027-01-04', 'B', 'A', false],
+        ['2027-01-11', 'C', 'B', false], ['2027-01-18', '', '', true],
+        ['2027-01-25', 'D', 'C', false], ['2027-02-01', 'E', 'D', false],
+        ['2027-02-08', 'F', 'E', false], ['2027-02-15', 'A', 'F', false]
+    ]);
+    assert.deepEqual(preview.rows[1].manual, { early: 'E', late: 'F' });
+    assert.equal(preview.rows[2].manual, null);
+    assert.equal(JSON.stringify(current), snapshot);
+});
+
 test('off weeks do not consume a turn, including consecutive weeks across the year boundary', () => {
     const normal = schedule({});
     const off = schedule({}, { offWeeks: { '2026-12-28': true } });
@@ -392,6 +423,52 @@ function extract(source, start, end) {
     return source.slice(left, right);
 }
 
+function previewDocument(input, tbody) {
+    const document = {
+        dialog: null,
+        getElementById(id) {
+            if (id === 'shift-order-preview') return this.dialog;
+            if (id === 'shift-rotation-start') return input;
+            return id === 'shift-tbody' ? tbody : {};
+        },
+        body: { appendChild(dialog) { document.dialog = dialog; } },
+        createElement(tag) {
+            if (tag !== 'dialog') return {};
+            const rows = [];
+            const table = {
+                insertRow() {
+                    const row = [];
+                    rows.push(row);
+                    return { insertCell() {
+                        const cell = { textContent: '', appendChild(child) { this.child = child; } };
+                        row.push(cell);
+                        return cell;
+                    } };
+                }
+            };
+            const summary = {};
+            const later = {};
+            const elements = { tbody: table, '.shift-preview-summary': summary, '.shift-preview-later': later };
+            let onClose;
+            return {
+                rows, summary, later,
+                setAttribute() {},
+                querySelector: selector => elements[selector],
+                addEventListener(name, handler) { if (name === 'close') onClose = handler; },
+                showModal() { this.open = true; },
+                close(result = '') {
+                    if (!this.open) return;
+                    this.open = false;
+                    this.returnValue = result;
+                    onClose();
+                },
+                remove() { document.dialog = null; }
+            };
+        }
+    };
+    return document;
+}
+
 test('reordering standalone shift members does not clear weekly records or off flags', () => {
     const overrides = Object.freeze({ [w28]: { early: 'B', late: 'C', notes: 'kept' } });
     const offWeeks = Object.freeze({ '2026-12-28': true });
@@ -410,7 +487,22 @@ test('reordering standalone shift members does not clear weekly records or off f
 });
 
 for (const variant of variants) {
-    test(variant.name + ' loads and saves rotation modes and off-week flags separately from existing records', () => {
+    test(variant.name + ' shift layout stacks matching hour sections and reserves both former columns for notes', () => {
+        const table = extract(variant.html, '<table class="shift-table">', '</table>');
+        const headings = [...table.matchAll(/<th scope="col" style="width: (\d+)%">([^<]+)<\/th>/g)]
+            .map(match => [Number(match[1]), match[2]]);
+        assert.deepEqual(headings, [
+            [20, '\u65e5\u4ed8'], [20, '\u65e9\u756a'], [20, '\u9045\u756a'], [40, '\u5099\u8003']
+        ]);
+        assert.match(variant.html, /class="shift-hours-sections">\s*<section class="shift-hours-section"[^>]+>[\s\S]*?id="shift-work-hours" class="shift-hours"[\s\S]*?<\/section>\s*<section class="shift-hours-section"[^>]+>[\s\S]*?id="shift-break-hours" class="shift-hours"/);
+        assert.doesNotMatch(variant.html, /Team Schedule Management System/);
+    });
+
+    test(variant.name + ' loads and saves shift settings separately from existing records', () => {
+        assert.match(variant.html, /<script src="(?:\.\.\/)?shift-hours\.js(?:\?[^"]+)?"\s*><\/script>/);
+        assert.match(variant.html, /<link rel="stylesheet" href="(?:\.\.\/)?shift-hours\.css(?:\?[^"]+)?">/);
+        assert.match(variant.html, /id="shift-work-hours"/);
+        assert.match(variant.html, /id="shift-break-hours"/);
         let options;
         let saved;
         const database = {};
@@ -428,41 +520,49 @@ for (const variant of variants) {
         context.window = context;
         vm.runInContext(extract(variant.source, variant.syncStart, 'function ' + variant.apply + '()'), context);
         assert.equal(options.getLocal().off_weeks, undefined);
+        assert.equal(options.getLocal().shift_hours, undefined);
         const records = { [w04]: { early: 'E', late: 'B', normal: 'regular', notes: 'keep' } };
         const offWeeks = { '2026-12-28': false, '2027-01-04': true };
         const rules = { [w04]: { id: 'new', order, mode: 'early-to-late' } };
-        options.setLocal({ overrides: records, off_weeks: offWeeks, rotation_rules: rules });
+        const hours = { work: { early: { end: '16:15' } }, break: { late: { start: '13:30', end: '14:30' } } };
+        options.setLocal({ overrides: records, off_weeks: offWeeks, rotation_rules: rules, shift_hours: hours });
         assert.equal(options.getLocal().off_weeks, offWeeks);
         assert.equal(options.getLocal().rotation_rules, rules);
+        assert.equal(options.getLocal().shift_hours, hours);
         assert.equal(context[variant.saveAll](), true);
         assert.equal(saved.off_weeks, offWeeks);
         assert.equal(saved.rotation_rules, rules);
+        assert.equal(saved.shift_hours, hours);
         assert.equal(saved.overrides, records);
         options.setLocal({ overrides: records });
         assert.equal(options.getLocal().off_weeks, undefined);
+        assert.equal(options.getLocal().shift_hours, undefined);
     });
 
-    test(variant.name + ' preserves overrides when applying a roster and when toggling off weeks', () => {
+    test(variant.name + ' previews the rotation before saving and preserves independent fields', () => {
         assert.match(variant.html, /<script src="(?:\.\.\/)?shift-rotation\.js(?:\?[^"]+)?"\s*><\/script>/);
+        assert.match(variant.html, /<link rel="stylesheet" href="(?:\.\.\/)?shift-preview\.css(?:\?[^"]+)?">/);
         assert.match(variant.html, /<script src="https:\/\/cdn\.jsdelivr\.net\/npm\/flatpickr"><\/script>/);
         const dateInput = /<input type="date" id="shift-rotation-start"[^>]*>/.exec(variant.html)?.[0];
         assert.match(dateInput, /\brequired\b/);
         assert.doesNotMatch(dateInput, /\bstep=/);
         assert.match(variant.html, /<form id="shift-rotation-form"[^>]*>[\s\S]*?<input type="date" id="shift-rotation-start"[\s\S]*?<\/form>\s*<h3>/);
-        assert.match(variant.html, /<input type="radio" name="shift-rotation-mode" value="late-to-early" checked>/);
-        assert.match(variant.html, /<input type="radio" name="shift-rotation-mode" value="early-to-late">/);
+        const rotationOptions = [...variant.html.matchAll(/<input type="radio" name="shift-rotation-mode" value="([^"]+)"( checked)?>/g)]
+            .map(match => [match[1], Boolean(match[2])]);
+        assert.deepEqual(rotationOptions, [['early-to-late', false], ['late-to-early', true]]);
         assert.match(variant.html, /<button type="submit" form="shift-rotation-form"/);
         assert.ok(variant.html.includes('onsubmit="event.preventDefault(); ' + variant.apply + '()"'));
         const saved = {
             [w21]: { early: 'A', late: 'F', notes: 'anchor note', date: 'anchor date' },
+            [w28]: { normal: 'hidden regular shift' },
             [w04]: { early: 'E', late: 'C', notes: 'saved future' }
         };
         const futureSaved = { ...saved[w04] };
         const rows = new Map([
-            [w21, row(w21, { date: 'anchor date', early: 'A', late: 'F', normal: 'regular', notes: 'anchor note' })],
-            [w28, row(w28, { date: 'next date', early: 'A', late: 'B', normal: 'regular', notes: 'in-progress note' })],
-            [w04, row(w04, { date: 'future date', early: 'E', late: 'C', normal: 'regular', notes: 'saved future' })],
-            [w11, row(w11, { date: 'later date', early: 'F', late: 'D', normal: 'regular', notes: '' })]
+            [w21, row(w21, { date: 'anchor date', early: 'A', late: 'F', notes: 'anchor note' })],
+            [w28, row(w28, { date: 'next date', early: 'A', late: 'B', notes: 'in-progress note' })],
+            [w04, row(w04, { date: 'future date', early: 'E', late: 'C', notes: 'saved future' })],
+            [w11, row(w11, { date: 'later date', early: 'F', late: 'D', notes: '' })]
         ]);
         const tbody = {
             innerHTML: '',
@@ -472,15 +572,19 @@ for (const variant of variants) {
         const radios = { value: 'late-to-early' };
         const form = { dataset: {}, elements: { namedItem: name => name === 'shift-rotation-mode' ? radios : null } };
         const input = { value: '2026-12-30', form };
+        const document = previewDocument(input, tbody);
         const writes = [];
-        const prompts = [];
-        let accepted = false;
+        const alerts = [];
         let pending = null;
         let paused = false;
         const sync = { isReady: () => true, isPaused: () => paused, getPending: () => pending };
         const monday = () => new Date(w21 + 'T15:00:00Z');
         const fakeDateText = () => 'display date';
         const roster = ['D', 'C', 'B', 'A', 'F', 'E'];
+        const data = () => ({
+            members: roster, rotation_order: order, base_date: baseDate.toISOString().slice(0, 10),
+            rotation_rules: context[variant.rules], overrides: saved, off_weeks: context[variant.offWeeks]
+        });
         const save = () => writes.push(JSON.parse(JSON.stringify({
             overrides: saved, rules: context[variant.rules], offWeeks: context[variant.offWeeks]
         })));
@@ -488,15 +592,18 @@ for (const variant of variants) {
             Date: class FixtureDate extends Date {
                 constructor(...args) { super(...(args.length ? args : [2026, 11, 22, 11])); }
             },
-            document: { getElementById: id => id === 'shift-tbody' ? tbody : id === 'shift-rotation-start' ? input : {} },
-            SharedSync: { escapeHtml: value => String(value), canWrite: () => true },
-            alert() {},
-            confirm(message) { prompts.push(message); return accepted; },
+            document,
+            SharedSync: {
+                escapeHtml: value => String(value), canWrite: () => true,
+                cloneValue: value => JSON.parse(JSON.stringify(value)),
+                valuesEqual: (left, right) => JSON.stringify(left) === JSON.stringify(right)
+            },
+            alert(message) { alerts.push(message); },
             isJapaneseHoliday: () => false,
             names: roster, rotationOrder: order, baseDate, overrides: saved, rotationRules: {}, offWeeks: {}, dataSync: sync,
             shiftNames: roster, shiftRotationOrder: order, shiftBaseDate: baseDate, shiftOverrides: saved,
             shiftRotationRules: {}, shiftOffWeeks: {}, shiftDataSync: sync,
-            canWriteAppData: () => true, shiftSaveAllData: save, saveAllData: save,
+            canWriteAppData: () => true, shiftSaveAllData: save, saveAllData: save, shiftLocalData: data, localData: data,
             shiftGetMondayOfCurrentWeek: monday, getMondayOfCurrentWeek: monday,
             shiftFormatDate: fakeDateText, formatDate: fakeDateText
         });
@@ -508,12 +615,16 @@ for (const variant of variants) {
         vm.runInContext(extract(variant.source, 'function ' + variant.setOff + '(', variant.setOffEnd), context);
         context[variant.render]();
         const displayed = /<tr data-week-id="2026-12-27">([\s\S]*?)<\/tr>/.exec(tbody.innerHTML)?.[1];
+        assert.equal([...displayed.matchAll(/<td\b/g)].length, 4);
+        assert.doesNotMatch(tbody.innerHTML, /\u25c6|\u2663|\u2666|\u2667|data-shift-field="normal"|hidden regular shift/);
+        assert.match(displayed, /class="shift-notes-input" data-shift-field="notes"/);
         assert.match(displayed, /<option value="B" selected>B<\/option>/);
         assert.match(displayed, /<option value="A" selected>A<\/option>/);
         assert.equal(writes.length, 0);
 
         context[variant.save](w28, 'notes');
         assert.equal(saved[w28].notes, 'in-progress note');
+        assert.equal(saved[w28].normal, 'hidden regular shift');
         assert.equal(saved[w28].auto_assignment, true);
         const htmlBeforeEdit = tbody.innerHTML;
         rows.get(w21).inputs.early.value = 'C';
@@ -532,15 +643,22 @@ for (const variant of variants) {
 
         pending = { local: 'not yet saved' };
         context[variant.apply]();
-        assert.equal(prompts.length, 0);
+        assert.equal(document.dialog, null);
+        assert.equal(alerts.length, 1);
         pending = null;
         context[variant.apply]();
         assert.equal(input.value, '2026-12-30');
-        assert.match(prompts[0], /2026-12-28/);
+        assert.match(document.dialog.summary.textContent, /2026-12-28/);
+        assert.equal(document.dialog.rows.length, roster.length);
+        assert.deepEqual(document.dialog.rows[0].map(cell => cell.textContent), ['2026-12-28', 'D', 'C']);
+        assert.match(document.dialog.rows[1][0].child.textContent, /E\uff0fC/);
         assert.equal(writes.length, 2);
         assert.deepEqual(context[variant.rules], {});
-        accepted = true;
+        document.dialog.close('cancel');
+        assert.equal(document.dialog, null);
+        assert.equal(writes.length, 2);
         context[variant.apply]();
+        document.dialog.close('apply');
         const appliedKey = new Date(2026, 11, 28).toISOString().slice(0, 10);
         assert.deepEqual(writes[2].rules[appliedKey].order, roster);
         assert.equal(writes[2].rules[appliedKey].mode, 'late-to-early');
@@ -565,9 +683,11 @@ for (const variant of variants) {
         assert.match(carriedRow, /data-shift-field="late"[\s\S]*?<option value="C" selected>C<\/option>/);
         assert.match(carriedRow, /saved future/);
 
-        accepted = false;
         context[variant.apply]();
-        assert.match(prompts[2], /\u6b21\u306e\u5f53\u756a\u9031/);
+        assert.equal(document.dialog.rows.length, roster.length + 1);
+        assert.equal(document.dialog.rows[0][1].colSpan, 2);
+        assert.deepEqual(document.dialog.rows[1].map(cell => cell.textContent), ['2027-01-04', 'D', 'C']);
+        document.dialog.close();
         assert.equal(writes.length, 4);
         paused = true;
         checkbox.checked = false;
@@ -589,9 +709,21 @@ for (const variant of variants) {
         context[variant.apply]();
         assert.equal(writes.length, 5);
         assert.equal(form.dataset.rotationModeChanged, 'true');
-        assert.match(prompts[3], /\u65e9\u756a\uff1aD\uff0f\u9045\u756a\uff1aE/);
-        accepted = true;
+        assert.deepEqual(document.dialog.rows[0].map(cell => cell.textContent), ['2027-01-04', 'D', 'E']);
+        const remoteRule = { id: 'remote', order, mode: 'late-to-early' };
+        context[variant.rules] = { ...context[variant.rules], [w11]: remoteRule };
+        document.dialog.close('apply');
+        assert.equal(writes.length, 5);
+        assert.equal(form.dataset.rotationModeChanged, 'true');
+        assert.equal(context[variant.rules][w11], remoteRule);
+        assert.equal(alerts.length, 3);
         context[variant.apply]();
+        paused = true;
+        document.dialog.close('apply');
+        assert.equal(writes.length, 5);
+        paused = false;
+        context[variant.apply]();
+        document.dialog.close('apply');
         assert.equal(form.dataset.rotationModeChanged, undefined);
         assert.equal(writes[5].rules[w04].mode, 'early-to-late');
         assert.deepEqual(writes[5].rules[appliedKey], writes[2].rules[appliedKey]);

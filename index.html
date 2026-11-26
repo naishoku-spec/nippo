@@ -3,19 +3,21 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="app-build-number" content="2026112410">
+    <meta name="app-build-number" content="2026112602">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="app-build-id" content="20261124-release-2026112410">
+    <meta name="app-build-id" content="20261126-release-2026112602">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>2階製造 - 記録ツール</title>
-    <script src="local-entry.js?v=20261124-release-2026112410"></script>
+    <script src="local-entry.js?v=20261126-release-2026112602"></script>
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=20261124-release-2026112410">
+    <link rel="stylesheet" href="style.css?v=20261126-release-2026112602">
+    <link rel="stylesheet" href="shift-preview.css?v=20261126-release-2026112602">
+    <link rel="stylesheet" href="shift-hours.css?v=20261126-release-2026112602">
     <script>
         (function () {
             var initialView = new URLSearchParams(window.location.search).get('view');
@@ -34,11 +36,12 @@
     <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/ja.js"></script>
 
     <!-- Firebase SDK -->
-    <script src="firebase-storage.js?v=20261124-release-2026112410"></script>
+    <script src="firebase-storage.js?v=20261126-release-2026112602"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
-    <script src="shared-sync.js?v=20261124-release-2026112410"></script>
-    <script src="shift-rotation.js?v=20261124-release-2026112410"></script>
+    <script src="shared-sync.js?v=20261126-release-2026112602"></script>
+    <script src="shift-rotation.js?v=20261126-release-2026112602"></script>
+    <script src="shift-hours.js?v=20261126-release-2026112602"></script>
 </head>
 
 <body>
@@ -685,12 +688,6 @@
                     <div class="shift-header-section">
                         <div class="shift-title-group">
                             <h2 id="shift-main-title" class="shift-title">シフト表</h2>
-                            <p class="shift-subtitle">Team Schedule Management System</p>
-                        </div>
-                        <div class="shift-work-time-card">
-                            <h3>就業時間</h3>
-                            <div class="shift-time-row"><span>早番</span> 07:00 〜 17:30</div>
-                            <div class="shift-time-row"><span>中番</span> 08:30 〜 17:30</div>
                         </div>
                     </div>
 
@@ -699,11 +696,10 @@
                         <table class="shift-table">
                             <thead>
                                 <tr>
-                                    <th width="20%">日付</th>
-                                    <th width="20%">◆ 昼(早番)</th>
-                                    <th width="20%">♣ 昼(遅)</th>
-                                    <th width="20%">通常シフト</th>
-                                    <th width="20%">備考</th>
+                                    <th scope="col" style="width: 20%">日付</th>
+                                    <th scope="col" style="width: 20%">早番</th>
+                                    <th scope="col" style="width: 20%">遅番</th>
+                                    <th scope="col" style="width: 40%">備考</th>
                                 </tr>
                             </thead>
                             <tbody id="shift-tbody">
@@ -722,8 +718,8 @@
                             <fieldset class="shift-rotation-mode">
                                 <legend>回し方</legend>
                                 <div class="shift-rotation-mode-options">
-                                    <label><input type="radio" name="shift-rotation-mode" value="late-to-early" checked><span>遅番 → 早番</span></label>
                                     <label><input type="radio" name="shift-rotation-mode" value="early-to-late"><span>早番 → 遅番</span></label>
+                                    <label><input type="radio" name="shift-rotation-mode" value="late-to-early" checked><span>遅番 → 早番</span></label>
                                 </div>
                             </fieldset>
                         </form>
@@ -738,7 +734,7 @@
                         <div style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 15px;">
                             <button type="submit" form="shift-rotation-form" class="shift-btn-confirm">
                                 <span style="font-size: 1.2em;">🔄</span>
-                                この順番を適用する
+                                変更後の順番を確認
                             </button>
                             <div class="shift-help-text">
                                 <strong>【全体の順番を変えるとき】</strong><br>
@@ -749,18 +745,16 @@
                         </div>
                     </section>
 
-                    <!-- フッターセクション -->
-                    <div class="shift-footer-info">
-                        <div class="shift-break-legend">
-                            <div class="shift-legend-item">
-                                <div class="shift-mini-badge shift-badge-early">◆</div>
-                                <div><strong>時間差昼休憩:</strong> 11:30 〜 12:30</div>
-                            </div>
-                            <div class="shift-legend-item">
-                                <div class="shift-mini-badge shift-badge-late">♣</div>
-                                <div><strong>時間差昼休憩:</strong> 12:30 〜 13:30</div>
-                            </div>
-                        </div>
+                    <!-- 就業時間・昼休憩 -->
+                    <div class="shift-hours-sections">
+                        <section class="shift-hours-section" aria-labelledby="shift-work-hours-title">
+                            <h3 id="shift-work-hours-title">就業時間</h3>
+                            <div id="shift-work-hours" class="shift-hours"></div>
+                        </section>
+                        <section class="shift-hours-section" aria-labelledby="shift-break-hours-title">
+                            <h3 id="shift-break-hours-title">時間差昼休憩</h3>
+                            <div id="shift-break-hours" class="shift-hours"></div>
+                        </section>
                     </div>
                 </div>
             </div>
@@ -932,7 +926,7 @@
         </div>
     </div>
 
-    <script src="app.js?v=20261124-release-2026112410"></script>
+    <script src="app.js?v=20261126-release-2026112602"></script>
 </body>
 
 </html>

@@ -9,6 +9,7 @@
     const fields = ['date', 'early', 'late', 'normal', 'notes'];
     const hasName = value => typeof value === 'string' && value.trim() !== '';
     const isManual = row => row?.auto_assignment !== true && hasName(row?.early) && hasName(row?.late);
+    const usesManual = (row, ruleId) => isManual(row) && (!ruleId || row.rotation_rule_id === ruleId);
     const normalizeMode = mode => mode === EARLY_TO_LATE ? EARLY_TO_LATE : LATE_TO_EARLY;
 
     function weekTime(weekId) {
@@ -81,7 +82,7 @@
             if (skipped.has(week)) return { early: '', late: '', ruleId, off: true };
             const saved = overrides[weekId];
             // A newly applied order supersedes old assignments in its range without deleting them.
-            if (isManual(saved) && (!rule || saved.rotation_rule_id === ruleId)) {
+            if (usesManual(saved, ruleId)) {
                 return { early: saved.early, late: saved.late, ruleId };
             }
 
@@ -187,6 +188,138 @@
         return { rules, mode, first: namesAt(order, 0, mode) };
     }
 
+    function buildOrderPreview(start, plan, current) {
+        const before = create(current);
+        const after = create({ ...current, rotationRules: plan.rules });
+        const manualAt = weekId => {
+            const row = current.overrides?.[weekId];
+            return isManual(row) && usesManual(row, before(weekId).ruleId) ? { early: row.early, late: row.late } : null;
+        };
+        const dutyWeeks = plan.rules[start.weekId].order.length;
+        const rows = [];
+        const date = new Date(start.date + 'T00:00:00');
+        let lastWeek;
+        for (let count = 0; count < dutyWeeks; date.setDate(date.getDate() + 7)) {
+            const weekId = date.toISOString().slice(0, 10);
+            const { early, late, off = false } = after(weekId);
+            rows.push({ date: localDate(date), early, late, off, manual: manualAt(weekId) });
+            lastWeek = weekNumber(weekId);
+            if (!off) count++;
+        }
+        const laterManualCount = Object.keys(current.overrides ?? {}).filter(weekId =>
+            weekNumber(weekId) > lastWeek && manualAt(weekId)).length;
+        return { rows, dutyWeeks, laterManualCount };
+    }
+
+    function showOrderPreview(document, start, plan, preview, onConfirm) {
+        const dialog = document.createElement('dialog');
+        if (typeof dialog.showModal !== 'function') {
+            global.alert('このブラウザではプレビューを表示できません。別のブラウザでお試しください。');
+            return;
+        }
+        dialog.id = 'shift-order-preview';
+        dialog.className = 'shift-order-preview';
+        dialog.setAttribute('aria-labelledby', 'shift-preview-title');
+        dialog.innerHTML = `
+            <header class="shift-preview-header">
+                <h2 id="shift-preview-title">適用前のプレビュー</h2>
+                <p class="shift-preview-summary"></p>
+                <p class="shift-preview-impact">確定すると、開始週以降の担当が切り替わります。日付と備考は変わりません。</p>
+                <p class="shift-preview-later" hidden></p>
+            </header>
+            <div class="shift-preview-content" tabindex="0" role="region" aria-label="一巡分のシフト">
+                <table class="shift-preview-table">
+                    <thead><tr><th scope="col">週（月曜）</th><th scope="col">早番</th><th scope="col">遅番</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            <form method="dialog" class="shift-preview-actions">
+                <button type="submit" value="cancel" autofocus>戻る</button>
+                <button type="submit" value="apply">確定</button>
+            </form>`;
+        const modeLabel = plan.mode === EARLY_TO_LATE ? '早番 → 遅番' : '遅番 → 早番';
+        dialog.querySelector('.shift-preview-summary').textContent = `${start.date}開始 ・ ${modeLabel} ・ 当番${preview.dutyWeeks}週`;
+        const body = dialog.querySelector('tbody');
+        for (const entry of preview.rows) {
+            const row = body.insertRow();
+            const dateCell = row.insertCell();
+            dateCell.textContent = entry.date;
+            if (entry.manual) {
+                const manual = document.createElement('span');
+                manual.className = 'shift-preview-manual';
+                manual.textContent = `保存済みの手動：${entry.manual.early}／${entry.manual.late}`;
+                dateCell.appendChild(manual);
+            }
+            if (entry.off) {
+                const off = row.insertCell();
+                off.colSpan = 2;
+                off.className = 'shift-preview-off';
+                off.textContent = '早番・遅番なし';
+            } else {
+                row.insertCell().textContent = entry.early;
+                row.insertCell().textContent = entry.late;
+            }
+        }
+        if (preview.laterManualCount) {
+            const later = dialog.querySelector('.shift-preview-later');
+            later.textContent = `表示期間より先にも、自動に切り替わる手動設定が${preview.laterManualCount}週あります。`;
+            later.hidden = false;
+        }
+        dialog.addEventListener('close', () => {
+            const confirmed = dialog.returnValue === 'apply';
+            dialog.remove();
+            if (confirmed) onConfirm();
+        }, { once: true });
+        document.body.appendChild(dialog);
+        dialog.showModal();
+    }
+
+    function openOrderPreview({ getLocal, sync, canWrite, onApply }) {
+        const document = global.document;
+        const shared = global.SharedSync;
+        const ready = () => sync?.isReady() && !sync.isPaused() && !sync.getPending();
+        const waitMessage = 'シフト表の読み込み・保存が終わってから、もう一度お試しください。';
+        if (!canWrite() || document.getElementById('shift-order-preview')) return;
+        if (!ready()) {
+            global.alert(waitMessage);
+            return;
+        }
+        const input = document.getElementById('shift-rotation-start');
+        const start = selectStartWeek(input?.value);
+        if (!start) {
+            const picker = setupStartCalendar(input);
+            global.alert('カレンダーから適用開始週の日付を選んでください。');
+            if (picker) picker.open();
+            else input?.focus();
+            return;
+        }
+        const mode = () => normalizeMode(input.form?.elements.namedItem('shift-rotation-mode')?.value);
+        const state = shared.cloneValue(getLocal());
+        const current = {
+            members: state.members, rotationOrder: state.rotation_order, baseDate: new Date(state.base_date),
+            rotationRules: state.rotation_rules, overrides: state.overrides, offWeeks: state.off_weeks
+        };
+        const plan = planOrderChange({ weekId: start.weekId, members: current.members, rotationRules: current.rotationRules, mode: mode() });
+        if (!plan) {
+            global.alert('ローテーションには2人以上のメンバーが必要です。');
+            return;
+        }
+        showOrderPreview(document, start, plan, buildOrderPreview(start, plan, current), () => {
+            if (!canWrite()) return;
+            if (!ready()) {
+                global.alert(waitMessage);
+                return;
+            }
+            // A different schedule must be reviewed before the plan can replace its future rules.
+            if (!shared.valuesEqual(state, getLocal()) || selectStartWeek(input.value)?.weekId !== start.weekId || mode() !== plan.mode) {
+                global.alert('設定が変わったため、適用していません。もう一度プレビューを開いてください。');
+                return;
+            }
+            if (input.form) delete input.form.dataset.rotationModeChanged;
+            onApply(plan.rules);
+        });
+    }
+
     function readEdit(row, previous, field, ruleId = null) {
         if (!fields.includes(field)) return null;
         const values = Object.fromEntries(Array.from(row.querySelectorAll('[data-shift-field]'),
@@ -207,7 +340,10 @@
         return next;
     }
 
-    const api = { create, setupStartCalendar, selectStartWeek, setupModePicker, planOrderChange, isWeekOff, planWeekOffChange, readEdit };
+    const api = {
+        create, setupStartCalendar, selectStartWeek, setupModePicker, planOrderChange, buildOrderPreview,
+        openOrderPreview, isWeekOff, planWeekOffChange, readEdit
+    };
     if (typeof module === 'object' && module.exports) module.exports = api;
     else global.ShiftRotation = api;
 })(globalThis);

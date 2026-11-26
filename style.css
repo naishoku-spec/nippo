@@ -1945,52 +1945,17 @@ tr.weekend-holiday td:first-child .date-desktop {
     display: flex;
     justify-content: space-between;
     align-items: flex-end;
-    margin-bottom: 30px;
-    border-bottom: 2px solid var(--border-color, #e2e8f0);
-    padding-bottom: 20px;
+    margin-bottom: 16px;
 }
 
 .shift-title-group h2 {
-    font-size: 36px;
+    font-size: 31px;
     font-weight: 700;
     background: linear-gradient(to right, var(--primary), var(--accent-blue, #3b82f6));
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
-    margin-bottom: 8px;
-    letter-spacing: -0.01em;
-}
-
-.shift-title-group p {
-    color: var(--text-muted);
-    font-size: 16px;
-}
-
-.shift-work-time-card {
-    background: #fff;
-    padding: 15px 20px;
-    border-radius: 16px;
-    border: 1px solid var(--border-color, #e2e8f0);
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-}
-
-.shift-work-time-card h3 {
-    font-size: 14px;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--text-muted);
-    margin-bottom: 8px;
-}
-
-.shift-time-row {
-    font-size: 15px;
-    font-weight: 600;
-    margin-bottom: 4px;
-}
-
-.shift-time-row span {
-    color: var(--primary);
-    margin-right: 8px;
+    letter-spacing: 0;
 }
 
 .shift-table-wrapper {
@@ -2002,6 +1967,7 @@ tr.weekend-holiday td:first-child .date-desktop {
 
 .shift-table {
     width: 100%;
+    table-layout: fixed;
     border-collapse: collapse;
     background: #fff;
 }
@@ -2009,12 +1975,12 @@ tr.weekend-holiday td:first-child .date-desktop {
 .shift-table th {
     background: #f8fafc;
     padding: 18px;
-    text-align: left;
+    text-align: center;
     font-size: 14px;
     font-weight: 600;
     color: var(--text-muted);
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0;
     border-bottom: 1px solid var(--border-color, #e2e8f0);
 }
 
@@ -2023,6 +1989,10 @@ tr.weekend-holiday td:first-child .date-desktop {
     border-bottom: 1px solid var(--border-color, #e2e8f0);
     font-size: 16px;
     transition: all 0.2s ease;
+}
+
+.shift-table .shift-assignment {
+    text-align: center;
 }
 
 .shift-table tr:last-child td {
@@ -2039,6 +2009,7 @@ tr.weekend-holiday td:first-child .date-desktop {
     gap: 6px;
     width: fit-content;
     max-width: 100%;
+    margin-inline: auto;
     min-height: 32px;
     padding-inline: 8px;
     font-size: 13px;
@@ -2057,29 +2028,27 @@ tr.weekend-holiday td:first-child .date-desktop {
     cursor: inherit;
 }
 
-.shift-badge-early {
-    background-color: var(--early-bg, #fef08a);
-    color: var(--early-text, #854d0e);
+.shift-badge-early, .shift-badge-late {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
+    min-width: min(5rem, 100%);
+    max-width: 100%;
     padding: 8px 16px;
     border-radius: 12px;
     font-weight: 700;
     font-size: 18px;
-    gap: 8px;
+}
+
+.shift-badge-early {
+    background-color: var(--early-bg, #fef08a);
+    color: var(--early-text, #854d0e);
     box-shadow: 0 4px 10px rgba(254, 240, 138, 0.4);
 }
 
 .shift-badge-late {
     background-color: var(--late-bg, #1e293b);
     color: var(--late-text, #f8fafc);
-    display: inline-flex;
-    align-items: center;
-    padding: 8px 16px;
-    border-radius: 12px;
-    font-weight: 700;
-    font-size: 18px;
-    gap: 8px;
     box-shadow: 0 4px 10px rgba(30, 41, 59, 0.3);
 }
 
@@ -2089,19 +2058,6 @@ tr.weekend-holiday td:first-child .date-desktop {
     box-shadow: none;
 }
 
-.shift-staff-all {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-.shift-staff-all::before {
-    content: '';
-    width: 8px;
-    height: 8px;
-    background: var(--accent-blue, #3b82f6);
-    border-radius: 50%;
-}
-
 .shift-editable-date {
     background: transparent;
     border: 1px solid transparent;
@@ -2109,6 +2065,7 @@ tr.weekend-holiday td:first-child .date-desktop {
     font-size: 16px;
     font-weight: 600;
     color: var(--text-main);
+    text-align: center;
     padding: 4px 8px;
     border-radius: 8px;
     cursor: pointer;
@@ -2139,6 +2096,7 @@ tr.weekend-holiday td:first-child .date-desktop {
     margin: 0;
     color: inherit;
     width: 100%;
+    min-width: 0;
     text-align: center;
 }
 .shift-name-select:focus {
@@ -2150,7 +2108,7 @@ tr.weekend-holiday td:first-child .date-desktop {
     font-weight: normal;
 }
 
-.shift-staff-all-input {
+.shift-notes-input {
     border: none;
     background: transparent;
     font-family: inherit;
@@ -2160,9 +2118,9 @@ tr.weekend-holiday td:first-child .date-desktop {
     width: 100%;
     padding: 4px;
 }
-.shift-staff-all-input:focus {
+.shift-notes-input:focus {
     outline: none;
-    border-bottom: 2px solid var(--accent-blue, #3b82f6);
+    box-shadow: inset 0 -2px var(--accent-blue, #3b82f6);
 }
 
 .shift-member-manager {
@@ -2410,48 +2368,13 @@ tr.weekend-holiday td:first-child .date-desktop {
     border: 1px solid #e2e8f0;
 }
 
-.shift-footer-info {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding-top: 20px;
-}
-
-.shift-break-legend {
-    display: flex;
-    gap: 24px;
-}
-
-.shift-legend-item {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    font-size: 14px;
-    color: var(--text-muted);
-}
-
-.shift-mini-badge {
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: bold;
-}
-
 @media (max-width: 768px) {
     .shift-header-section {
         flex-direction: column;
         align-items: flex-start;
         gap: 15px;
-        margin-bottom: 25px;
     }
     
-    .shift-work-time-card {
-        width: 100%;
-    }
-
     .shift-table-wrapper {
         border: none;
         overflow: visible;
@@ -2467,6 +2390,9 @@ tr.weekend-holiday td:first-child .date-desktop {
     }
 
     .shift-table tr {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0 8px;
         margin-bottom: 16px;
         border: 1px solid var(--border-color, #e2e8f0);
         border-radius: 16px;
@@ -2476,12 +2402,14 @@ tr.weekend-holiday td:first-child .date-desktop {
     }
 
     .shift-table td {
+        min-width: 0;
         padding: 0;
         border: none;
         margin-bottom: 12px;
     }
 
     .shift-table td:nth-child(1) {
+        grid-column: 1 / -1;
         font-size: 16px;
         font-weight: 700;
         color: var(--text-main);
@@ -2494,15 +2422,13 @@ tr.weekend-holiday td:first-child .date-desktop {
         min-height: 44px;
     }
 
-    .shift-table td:nth-child(2),
-    .shift-table td:nth-child(3) {
-        display: inline-block;
-        width: calc(50% - 6px);
-        margin-bottom: 10px;
-    }
-
-    .shift-table td:nth-child(3) {
-        margin-left: 8px;
+    .shift-assignment::before {
+        content: attr(data-shift-label);
+        display: block;
+        margin-bottom: 4px;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text-muted, #64748b);
     }
 
     .shift-badge-early, .shift-badge-late {
@@ -2517,8 +2443,8 @@ tr.weekend-holiday td:first-child .date-desktop {
         font-size: 15px;
     }
 
-    .shift-table td:nth-child(4),
-    .shift-table td:nth-child(5) {
+    .shift-table .shift-notes {
+        grid-column: 1 / -1;
         font-size: 13px;
         color: var(--text-muted);
         background: var(--row-hover, #f1f5f9);
@@ -2527,20 +2453,11 @@ tr.weekend-holiday td:first-child .date-desktop {
         margin-bottom: 6px;
     }
 
-    .shift-table td:nth-child(5)::before {
-        content: "備考: ";
+    .shift-notes::before {
+        content: "備考";
+        display: block;
+        margin-bottom: 4px;
         font-weight: 600;
-    }
-
-    .shift-footer-info {
-        flex-direction: column;
-        gap: 20px;
-        align-items: flex-start;
-    }
-
-    .shift-break-legend {
-        flex-direction: column;
-        gap: 10px;
     }
 
     .shift-member-manager, .shift-add-member-form {

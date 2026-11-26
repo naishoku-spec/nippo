@@ -1652,8 +1652,8 @@ const firebaseConfig = {
     measurementId: "G-SR8Y5NKQTZ"
 };
 
-const APP_BUILD_ID = '20261124-release-2026112410';
-const APP_BUILD_NUMBER = 2026112410;
+const APP_BUILD_ID = '20261126-release-2026112602';
+const APP_BUILD_NUMBER = 2026112602;
 const APP_VERSION_METADATA_PATH = 'app-version.json';
 const APP_VERSION_CHECK_INTERVAL_MS = 30000;
 const APP_LATEST_BUILD_LS_KEY = 'nippo_latest_app_build_number';
@@ -9681,6 +9681,7 @@ let shiftNames = [...SHIFT_DEFAULT_NAMES];
 let shiftOverrides = {};
 let shiftRotationRules = {};
 let shiftOffWeeks = {};
+let shiftHourSettings = {};
 let shiftUpdatedAt = 0;
 
 let shiftBaseDate = new Date("2026-03-30");
@@ -9708,6 +9709,8 @@ try {
             shiftRotationRules = value.rotation_rules && typeof value.rotation_rules === 'object' ? value.rotation_rules : {};
             shiftOverrides = value.overrides && typeof value.overrides === 'object' ? value.overrides : {};
             shiftOffWeeks = value.off_weeks && typeof value.off_weeks === 'object' ? value.off_weeks : {};
+            const hours = value.shift_hours;
+            shiftHourSettings = hours && typeof hours === 'object' && !Array.isArray(hours) ? hours : {};
             shiftUpdatedAt = Number(value._syncUpdatedAt) || 0;
         },
         onRemote: (value, meta) => {
@@ -9727,6 +9730,7 @@ function shiftLocalData() {
         rotation_rules: shiftRotationRules,
         overrides: shiftOverrides,
         ...(Object.keys(shiftOffWeeks).length ? { off_weeks: shiftOffWeeks } : {}),
+        ...(Object.keys(shiftHourSettings).length ? { shift_hours: shiftHourSettings } : {}),
         _syncUpdatedAt: shiftUpdatedAt
     };
 }
@@ -9738,35 +9742,14 @@ function shiftSaveAllData() {
 }
 
 function shiftUpdateRotationOrder() {
-    if (!canWriteAppData()) return;
-    if (!shiftDataSync?.isReady() || shiftDataSync.isPaused() || shiftDataSync.getPending()) {
-        alert('シフト表の読み込み・保存が終わってから、もう一度お試しください。');
-        return;
-    }
-    const input = document.getElementById('shift-rotation-start');
-    const start = ShiftRotation.selectStartWeek(input?.value);
-    if (!start) {
-        const picker = ShiftRotation.setupStartCalendar(input);
-        alert('カレンダーから適用開始週の日付を選んでください。');
-        if (picker) picker.open();
-        else input?.focus();
-        return;
-    }
-    const plan = ShiftRotation.planOrderChange({
-        weekId: start.weekId, members: shiftNames, rotationRules: shiftRotationRules,
-        mode: input.form?.elements.namedItem('shift-rotation-mode')?.value
+    ShiftRotation.openOrderPreview({
+        getLocal: shiftLocalData, sync: shiftDataSync, canWrite: canWriteAppData,
+        onApply: rules => {
+            shiftRotationRules = rules;
+            shiftSaveAllData();
+            shiftGenerateTable();
+        }
     });
-    if (!plan) {
-        alert('ローテーションには2人以上のメンバーが必要です。');
-        return;
-    }
-    const firstDutyWeek = ShiftRotation.isWeekOff(shiftOffWeeks, start.weekId) ? '次の当番週' : 'その週';
-    const modeLabel = plan.mode === 'early-to-late' ? '早番 → 遅番' : '遅番 → 早番';
-    if (!confirm(`${start.date}の週から順番を変えますか？\n回し方：${modeLabel}\n${firstDutyWeek}の早番：${plan.first.early}／遅番：${plan.first.late}\n\n選んだ週から先は、すでに決めた早番・遅番も変わります。日付・通常シフト・備考はそのままです。`)) return;
-    shiftRotationRules = plan.rules;
-    if (input.form) delete input.form.dataset.rotationModeChanged;
-    shiftSaveAllData();
-    shiftGenerateTable();
 }
 window.shiftUpdateRotationOrder = shiftUpdateRotationOrder;
 
@@ -9792,6 +9775,14 @@ let shiftDraggedIndex = null;
 function shiftRenderMembers() {
     const list = document.getElementById('shift-member-list');
     if (!list) return;
+    ShiftHours.renderEditors({
+        getSettings: () => shiftHourSettings,
+        canEdit: () => canWriteAppData() && shiftDataSync?.isReady() && !shiftDataSync.isPaused(),
+        onChange: next => {
+            shiftHourSettings = next;
+            shiftSaveAllData();
+        }
+    });
     const input = document.getElementById('shift-rotation-start');
     ShiftRotation.setupStartCalendar(input);
     ShiftRotation.setupModePicker(input, () => shiftRotationRules);
@@ -10020,7 +10011,6 @@ function shiftGenerateTable() {
 
         const rowData = {
             date: shiftFormatDate(displayWeekDate, i === 0) + " 〜",
-            normal: "すべて全員",
             notes: "",
             ...shiftOverrides[weekId],
             ...assignmentsFor(weekId)
@@ -10038,29 +10028,22 @@ function shiftGenerateTable() {
                         <span>早番・遅番なし</span>
                     </label>
                 </td>
-                <td>
+                <td class="shift-assignment" data-shift-label="早番">
                     <span class="shift-badge-early${rowData.off ? ' shift-badge-off' : ''}">
-                        <span class="icon">◆</span>
-                        ${rowData.off ? '<span>なし</span>' : `<select class="shift-name-select" data-shift-field="early" onchange="shiftSaveRowState('${weekId}', 'early')">
+                        ${rowData.off ? '<span>なし</span>' : `<select class="shift-name-select" data-shift-field="early" aria-label="早番" onchange="shiftSaveRowState('${weekId}', 'early')">
                             ${nameOptions(rowData.early)}
                         </select>`}
                     </span>
                 </td>
-                <td>
+                <td class="shift-assignment" data-shift-label="遅番">
                     <span class="shift-badge-late${rowData.off ? ' shift-badge-off' : ''}">
-                        <span class="icon">♣</span>
-                        ${rowData.off ? '<span>なし</span>' : `<select class="shift-name-select" data-shift-field="late" onchange="shiftSaveRowState('${weekId}', 'late')">
+                        ${rowData.off ? '<span>なし</span>' : `<select class="shift-name-select" data-shift-field="late" aria-label="遅番" onchange="shiftSaveRowState('${weekId}', 'late')">
                             ${nameOptions(rowData.late)}
                         </select>`}
                     </span>
                 </td>
-                <td>
-                    <div class="shift-staff-all">
-                        <input type="text" class="shift-staff-all-input" data-shift-field="normal" value="${SharedSync.escapeHtml(rowData.normal)}" oninput="shiftSaveRowState('${weekId}', 'normal')">
-                    </div>
-                </td>
-                <td>
-                    <input type="text" class="shift-staff-all-input" data-shift-field="notes" placeholder="備考を入力..." value="${SharedSync.escapeHtml(rowData.notes)}" oninput="shiftSaveRowState('${weekId}', 'notes')">
+                <td class="shift-notes">
+                    <input type="text" class="shift-notes-input" data-shift-field="notes" aria-label="備考" placeholder="備考を入力..." value="${SharedSync.escapeHtml(rowData.notes)}" oninput="shiftSaveRowState('${weekId}', 'notes')">
                 </td>
             </tr>
         `;

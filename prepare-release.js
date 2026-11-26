@@ -8,7 +8,8 @@ const PAGE_FILES = ['index.html', '1f.html', '1f-kenpin.html', 'saidan.html', '\
 const SOURCE_FILES = [
     ...PAGE_FILES,
     'app.js', 'shared-sync.js', 'firebase-storage.js', '1f-app.js', '1f-kenpin-app.js', 'saidan-app.js', 'local-entry.js',
-    'style.css', '1f-style.css', 'shift-rotation.js', '\u30b7\u30d5\u30c8\u8868 - \u30b3\u30d4\u30fc/styles.css'
+    'style.css', '1f-style.css', 'shift-rotation.js', 'shift-preview.css', 'shift-hours.js', 'shift-hours.css',
+    '\u30b7\u30d5\u30c8\u8868 - \u30b3\u30d4\u30fc/styles.css'
 ];
 
 function renderBuild(fileName, source, buildId, buildNumber) {

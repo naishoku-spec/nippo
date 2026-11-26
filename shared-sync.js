@@ -1,8 +1,8 @@
 (function (global) {
     'use strict';
 
-    const BUILD_ID = '20261124-release-2026112410';
-    const BUILD_NUMBER = 2026112410;
+    const BUILD_ID = '20261126-release-2026112602';
+    const BUILD_NUMBER = 2026112602;
     const VERSION_PATH = new URL('app-version.json', document.currentScript?.src || document.baseURI || global.location.href).toString();
     const VERSION_CHECK_INTERVAL_MS = 30000;
     const LATEST_BUILD_KEY = 'nippo_latest_app_build_number';

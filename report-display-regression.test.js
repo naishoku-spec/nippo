@@ -654,20 +654,17 @@ test('applying the reordered shift rotation also keeps manual weekly fields', ()
     const week = monday.toISOString().slice(0, 10);
     const overrides = { [week]: { early: 'C', late: 'A', notes: text } };
     let saves = 0;
+    let apply;
     const f = fixture('app.js', 'function shiftUpdateRotationOrder()', 'let shiftDraggedElement', {
-        Date: class FixtureDate extends Date {
-            constructor(...args) { super(...(args.length ? args : [+monday])); }
-        },
-        shiftNames: ['B', 'C', 'A'], shiftRotationOrder: ['A', 'B', 'C'],
-        shiftOverrides: overrides, shiftRotationRules: {}, shiftOffWeeks: {}, shiftBaseDate: new Date(2026, 0, 1),
+        ShiftRotation: { openOrderPreview({ onApply }) { apply = onApply; } },
+        shiftRotationOrder: ['A', 'B', 'C'], shiftOverrides: overrides, shiftRotationRules: {},
         canWriteAppData: () => true,
-        shiftDataSync: { isReady: () => true, isPaused: () => false, getPending: () => null },
-        confirm: () => true, alert() {}, shiftGenerateTable() {},
+        shiftDataSync: {}, shiftLocalData() {}, shiftGenerateTable() {},
         shiftSaveAllData() { saves++; }
     });
-    f.document.getElementById('shift-rotation-start').value = '2026-10-19';
-    vm.runInContext(sources['shift-rotation.js'], f.context);
     f.context.shiftUpdateRotationOrder();
+    assert.equal(saves, 0);
+    apply({ [week]: { id: 'reviewed', order: ['B', 'C', 'A'] } });
     assert.equal(f.context.shiftOverrides, overrides);
     assert.equal(JSON.stringify(f.context.shiftRotationOrder), JSON.stringify(['A', 'B', 'C']));
     assert.equal(JSON.stringify(f.context.shiftRotationRules[week].order), JSON.stringify(['B', 'C', 'A']));
@@ -1011,7 +1008,8 @@ test('shift names, options and manual fields retain literal special characters a
 
 test('shift member chips render user-entered names as text', () => {
     const f = fixture('app.js', 'function shiftRenderMembers()', 'function shiftSetupDragAndDrop(', {
-        shiftNames: [text], shiftSetupDragAndDrop() {}, shiftGenerateTable() {}
+        shiftNames: [text], shiftSetupDragAndDrop() {}, shiftGenerateTable() {},
+        ShiftHours: { renderEditors() {} }
     });
     vm.runInContext(sources['shift-rotation.js'], f.context);
     f.context.shiftRenderMembers();

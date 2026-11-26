@@ -52,6 +52,12 @@ Firebase SDKの前に `firebase-storage.js` を読み込み、SDKの保存可否
 
 新しい順番は、開始週以降の確定済みの早番・遅番や、先に設定した開始週のルールにも優先します。それより前の週と、日付・通常シフト・備考は変更しません。確定後に表で担当を変えた場合は、その週だけに反映します。
 
+青い「変更後の順番を確認」ボタンは、休みの週を含め、全員が1度ずつ早番になるまでの予定と、切り替え対象の手動設定を表示します。プレビューの「確定」を押すまでは順番を保存しません。表示中に共有の設定が変わった場合は、最新の内容でプレビューを開き直してください。
+
+表の下では、就業時間、時間差昼休憩の順に、早番・中番・遅番の開始と終了を編集できます。変更した時刻だけがシフト表の共有設定に保存され、当番や日報の時刻は変更されません。遅番の昼休憩は初期状態では未設定です。
+
+通常シフトの欄は表示せず、その幅を備考欄に充てています。保存済みの通常シフトの値は保持し、備考などの編集でも上書きしません。
+
 ## バックアップ
 
 ブラウザ内の日付別バックアップと直近3件の履歴は新規作成・更新しません。すでに残っている控えは、保存した端末・ブラウザで同じサイトの `index.html?view=backup` を開くと確認できます。メニューからは非表示です。
@@ -71,4 +77,4 @@ PCのバックアップは、Windowsタスク スケジューラの `Nippo-Weekd
 - `1f-kenpin.html` + `1f-kenpin-app.js`
 - `saidan.html` + `saidan-app.js`
 
-共通で`style.css`、`1f-style.css`、`shared-sync.js`、`firebase-storage.js`、`app-version.json`、`local-entry.js`を使用します。シフト表には`shift-rotation.js`も必要です。`local-server.js`と`start-local.cmd`はローカル起動用で、公開ページの動作やFirebaseのデータには影響しません。
+共通で`style.css`、`1f-style.css`、`shared-sync.js`、`firebase-storage.js`、`app-version.json`、`local-entry.js`を使用します。シフト表には`shift-rotation.js`、`shift-preview.css`、`shift-hours.js`、`shift-hours.css`も必要です。`local-server.js`と`start-local.cmd`はローカル起動用で、公開ページの動作やFirebaseのデータには影響しません。
